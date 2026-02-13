@@ -1,0 +1,31 @@
+[Unit]
+Description=AI Terminal - Web-based Copilot Agent + Terminal
+After=network.target
+
+[Service]
+Type=simple
+User=ai-terminal
+Group=ai-terminal
+WorkingDirectory=/opt/ai-terminal
+EnvironmentFile=/opt/ai-terminal/.env
+Environment=NODE_ENV=production
+
+ExecStart=/usr/bin/node backend/dist/index.js
+
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=3
+StartLimitIntervalSec=60
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ai-terminal
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/ai-terminal/data
+
+[Install]
+WantedBy=multi-user.target

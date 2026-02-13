@@ -1,0 +1,96 @@
+import { createServer } from 'node:http';
+import path from 'node:path';
+import express from 'express';
+import bcrypt from 'bcrypt';
+import { loadConfig } from './config.js';
+import { createLogger } from './utils/logger.js';
+import { initDb } from './conversation/db.js';
+import { ConversationRepository } from './conversation/repository.js';
+import { SessionStore } from './auth/session.js';
+import { createAuthRoutes } from './auth/routes.js';
+import { createAuthMiddleware } from './auth/middleware.js';
+import { createConversationRoutes } from './conversation/routes.js';
+import { ClientManager } from './copilot/client-manager.js';
+import { SessionManager } from './copilot/session-manager.js';
+import { createModelsRoute } from './copilot/models-route.js';
+import { createWsServer } from './ws/server.js';
+import { registerHandler } from './ws/router.js';
+import { createCopilotHandler } from './ws/handlers/copilot.js';
+import { createTerminalHandler } from './ws/handlers/terminal.js';
+import { createCwdHandler } from './ws/handlers/cwd.js';
+import { setupGracefulShutdown } from './utils/graceful-shutdown.js';
+
+const log = createLogger('main');
+
+export function createApp() {
+  const config = loadConfig();
+
+  // Database
+  const db = initDb(config.dbPath);
+  const repo = new ConversationRepository(db);
+
+  // Auth
+  const sessionStore = new SessionStore();
+  const passwordHash = bcrypt.hashSync(config.webPassword, 10);
+  const authMiddleware = createAuthMiddleware(sessionStore);
+
+  // Copilot SDK
+  const clientManager = new ClientManager();
+  const sessionManager = new SessionManager(clientManager);
+
+  // Express app
+  const app = express();
+  app.use(express.json());
+
+  // Auth routes (no auth required)
+  app.use('/api/auth', createAuthRoutes(sessionStore, passwordHash));
+
+  // Protected routes
+  app.use('/api/conversations', authMiddleware, createConversationRoutes(repo));
+  app.use('/api/copilot', authMiddleware, createModelsRoute(clientManager));
+
+  // Serve static files in production
+  if (config.nodeEnv === 'production') {
+    const staticDir = path.resolve(import.meta.dirname, '../../frontend/dist');
+    app.use(express.static(staticDir));
+    // SPA fallback
+    app.get('*', (_req, res) => {
+      res.sendFile(path.join(staticDir, 'index.html'));
+    });
+  }
+
+  // HTTP + WebSocket server
+  const httpServer = createServer(app);
+  const wss = createWsServer(httpServer, sessionStore);
+
+  // Register WS handlers
+  registerHandler('copilot', createCopilotHandler(sessionManager, repo));
+  registerHandler('terminal', createTerminalHandler(config.defaultCwd));
+  registerHandler('cwd', createCwdHandler((newCwd) => {
+    log.info({ cwd: newCwd }, 'Working directory changed');
+  }));
+
+  // Graceful shutdown
+  setupGracefulShutdown([
+    async () => {
+      await clientManager.stop();
+    },
+    async () => {
+      db.close();
+    },
+    async () => {
+      wss.close();
+      httpServer.close();
+    },
+  ]);
+
+  return { app, httpServer, config };
+}
+
+// Only start listening when run directly (not imported by tests)
+if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'))) {
+  const { httpServer, config } = createApp();
+  httpServer.listen(config.port, () => {
+    log.info({ port: config.port, env: config.nodeEnv }, 'AI Terminal server started');
+  });
+}

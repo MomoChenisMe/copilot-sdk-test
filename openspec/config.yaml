@@ -2,40 +2,74 @@ schema: spec-driven
 
 context: |
   ## Project
-  綠地專案 — Telegram Copilot AI Agent
-  透過 Telegram Bot 操控的私人 AI Agent，使用 GitHub Copilot SDK 驅動。
+  綠地專案 — AI Terminal
+  跑在 Linux VPS 上的 Web 應用，透過手機瀏覽器操控 AI 開發工具。
+  兩個核心能力：Copilot Agent 寫程式、Terminal 操作 Shell。
+  個人工具，單人使用，GitHub Copilot 訂閱制認證。
 
   ## Mandatory Constraint: TDD
   強制 TDD（測試驅動開發）：紅燈 → 綠燈 → 重構，無例外。
   任何功能實作前必須先撰寫對應測試。
 
   ## Tech Stack
+
+  ### Backend
   - TypeScript 5.7+, Node.js v24+ (ESM modules)
-  - @github/copilot-sdk 0.1.8 (Technical Preview)
-  - grammY 1.35+ (Telegram Bot framework)
-  - @grammyjs/parse-mode (HTML parse mode plugin)
+  - @github/copilot-sdk (Technical Preview) — AI 對話、工具呼叫、串流
+  - Express 5 — HTTP server
+  - ws — WebSocket server
+  - node-pty — PTY terminal
+  - better-sqlite3 — 對話記錄儲存
+  - bcrypt — 密碼雜湊
   - zod 3.24+ (runtime validation)
   - pino 9.6+ (structured JSON logging)
-  - dotenv 16.4+ (environment variable management)
   - Build/Run: tsx (esbuild-based TypeScript execution)
   - Test: Vitest
   - Lint: ESLint + Prettier
 
-  ### Project Structure
-  - `src/bot/` — Telegram Bot 層（grammY 設定、middleware、指令、訊息路由）
-  - `src/copilot/` — Copilot SDK 整合層（Client、Session 管理、處理器、工具）
-  - `src/telegram/` — Telegram 輸出層（Markdown→HTML 格式化、分段發送）
-  - `src/utils/` — 工具模組（logger、graceful shutdown）
+  ### Frontend
+  - React 19 + Vite 6
+  - Tailwind CSS 4
+  - Zustand 5 — 狀態管理
+  - @xterm/xterm 6 + @xterm/addon-fit — Terminal 前端
+  - react-markdown + rehype-highlight — Markdown 渲染
+  - lucide-react — 圖示
+
+  ### Project Structure (npm workspaces monorepo)
+  - `backend/src/auth/` — Web 認證（密碼登入 + session cookie）
+  - `backend/src/copilot/` — Copilot SDK 整合層（Client、Session 管理、事件轉譯、權限）
+  - `backend/src/terminal/` — PTY 終端管理（node-pty）
+  - `backend/src/conversation/` — 對話管理（SQLite CRUD + REST API）
+  - `backend/src/ws/` — WebSocket server + 訊息路由
+  - `backend/src/utils/` — 工具模組（logger、graceful shutdown）
+  - `frontend/src/components/` — React UI 元件
+  - `frontend/src/hooks/` — React hooks（useWebSocket, useCopilot, useTerminal 等）
+  - `frontend/src/store/` — Zustand 狀態管理
+  - `nginx/` — Nginx 反向代理設定
   - `systemd/` — Linux 部署設定
+
+  ## Architecture
+  ```
+  手機瀏覽器 (HTTPS/WSS)
+    → Nginx (SSL + 反向代理)
+      → Node.js + Express + WebSocket
+        ├── Copilot SDK → GitHub API
+        ├── node-pty (Terminal)
+        └── SQLite (對話記錄)
+  ```
 
   ## Conventions
   - ESM modules（"type": "module"）
   - Strict TypeScript（strict: true）
-  - 分層架構：bot/ copilot/ telegram/ utils/ 各自負責獨立關注點
+  - npm workspaces monorepo（backend/ + frontend/）
+  - 分層架構：auth/ copilot/ terminal/ conversation/ ws/ utils/ 各自負責獨立關注點
   - Conventional Commits
-  - HTML parse mode for Telegram（非 MarkdownV2）
-  - Long Polling 模式（非 Webhook）
-  - 私人使用：白名單認證、權限自動批准
+  - WebSocket 即時串流（AI 回應、Terminal 輸出）
+  - REST API 管理（對話 CRUD、認證、系統狀態）
+  - 密碼登入 + HttpOnly session cookie（Web 認證）
+  - gh auth login 預認證 + 備用 Device Flow（Copilot SDK 認證）
+  - 深色主題、手機優先（Warp 終端風格）
+  - 私人使用：單人認證、AI 權限自動批准
 
 rules:
   proposal:
