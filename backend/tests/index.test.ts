@@ -23,6 +23,8 @@ vi.mock('../src/config.js', () => ({
     sessionSecret: 'test-secret',
     defaultCwd: '/tmp',
     dbPath: ':memory:',
+    githubToken: undefined,
+    githubClientId: undefined,
   })),
 }));
 
@@ -73,6 +75,9 @@ vi.mock('../src/copilot/client-manager.js', () => ({
     getClient: vi.fn(),
     stop: vi.fn(),
     listModels: vi.fn(),
+    getAuthStatus: vi.fn(),
+    setGithubToken: vi.fn(),
+    getGithubClientId: vi.fn(),
   })),
 }));
 
@@ -82,6 +87,10 @@ vi.mock('../src/copilot/session-manager.js', () => ({
 
 vi.mock('../src/copilot/models-route.js', () => ({
   createModelsRoute: vi.fn(() => vi.fn()),
+}));
+
+vi.mock('../src/copilot/auth-routes.js', () => ({
+  createCopilotAuthRoutes: vi.fn(() => vi.fn()),
 }));
 
 vi.mock('../src/ws/server.js', () => ({

@@ -12,27 +12,29 @@
   },
   "dependencies": {
     "@github/copilot-sdk": "^0.1.23",
-    "express": "^5.1.0",
-    "ws": "^8.18.0",
-    "node-pty": "^1.1.0",
+    "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.6.0",
     "cookie": "^1.0.0",
-    "uuid": "^11.1.0",
-    "bcrypt": "^6.0.0",
-    "zod": "^3.24.0",
+    "express": "^5.1.0",
+    "node-pty": "^1.1.0",
     "pino": "^9.6.0",
-    "pino-pretty": "^13.0.0"
+    "pino-pretty": "^13.0.0",
+    "uuid": "^11.1.0",
+    "ws": "^8.18.0",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
-    "vitest": "^3.0.0",
-    "tsx": "^4.19.0",
-    "@types/express": "^5.0.0",
-    "@types/ws": "^8.5.0",
+    "@types/bcrypt": "^5.0.0",
     "@types/better-sqlite3": "^7.6.0",
     "@types/cookie": "^1.0.0",
-    "@types/bcrypt": "^5.0.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "@types/supertest": "^6.0.3",
     "@types/uuid": "^10.0.0",
-    "@types/node": "^22.0.0"
+    "@types/ws": "^8.5.0",
+    "supertest": "^7.2.2",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
   }
 }

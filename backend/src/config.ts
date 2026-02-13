@@ -8,6 +8,8 @@ const configSchema = z.object({
   sessionSecret: z.string().min(1, 'SESSION_SECRET is required'),
   defaultCwd: z.string().default(homedir()),
   dbPath: z.string().default('./data/conversations.db'),
+  githubToken: z.string().optional(),
+  githubClientId: z.string().optional(),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -20,5 +22,7 @@ export function loadConfig(): Config {
     sessionSecret: process.env.SESSION_SECRET,
     defaultCwd: process.env.DEFAULT_CWD,
     dbPath: process.env.DB_PATH,
+    githubToken: process.env.GITHUB_TOKEN,
+    githubClientId: process.env.GITHUB_CLIENT_ID,
   });
 }

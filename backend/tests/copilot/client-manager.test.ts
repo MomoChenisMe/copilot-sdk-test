@@ -10,6 +10,12 @@ const { mockClient, MockCopilotClient } = vi.hoisted(() => {
       { id: 'claude-sonnet-4.5', name: 'Claude Sonnet 4.5', capabilities: {} },
     ]),
     getState: vi.fn().mockReturnValue('connected'),
+    getAuthStatus: vi.fn().mockResolvedValue({
+      isAuthenticated: true,
+      authType: 'gh-cli',
+      host: 'github.com',
+      login: 'testuser',
+    }),
     on: vi.fn().mockReturnValue(() => {}),
     reset() {
       this.start.mockClear().mockResolvedValue(undefined);
@@ -19,6 +25,12 @@ const { mockClient, MockCopilotClient } = vi.hoisted(() => {
         { id: 'claude-sonnet-4.5', name: 'Claude Sonnet 4.5', capabilities: {} },
       ]);
       this.getState.mockClear().mockReturnValue('connected');
+      this.getAuthStatus.mockClear().mockResolvedValue({
+        isAuthenticated: true,
+        authType: 'gh-cli',
+        host: 'github.com',
+        login: 'testuser',
+      });
       this.on.mockClear().mockReturnValue(() => {});
     },
   };
@@ -38,7 +50,7 @@ describe('ClientManager', () => {
   beforeEach(() => {
     mockClient.reset();
     MockCopilotClient.mockClear();
-    manager = new ClientManager();
+    manager = new ClientManager({});
   });
 
   describe('getClient', () => {
@@ -57,6 +69,20 @@ describe('ClientManager', () => {
       expect(client1).toBe(client2);
       expect(MockCopilotClient).toHaveBeenCalledOnce();
       expect(mockClient.start).toHaveBeenCalledOnce();
+    });
+
+    it('should create CopilotClient without githubToken when not configured', async () => {
+      const mgr = new ClientManager({});
+      await mgr.getClient();
+
+      expect(MockCopilotClient).toHaveBeenCalledWith();
+    });
+
+    it('should create CopilotClient with githubToken when configured', async () => {
+      const mgr = new ClientManager({ githubToken: 'gho_abc123' });
+      await mgr.getClient();
+
+      expect(MockCopilotClient).toHaveBeenCalledWith({ githubToken: 'gho_abc123' });
     });
   });
 
@@ -82,6 +108,94 @@ describe('ClientManager', () => {
       const client = await manager.getClient();
       expect(client).toBe(mockClient);
       expect(MockCopilotClient).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('isClientStarted', () => {
+    it('should return false before getClient is called', () => {
+      expect(manager.isClientStarted()).toBe(false);
+    });
+
+    it('should return true after getClient is called', async () => {
+      await manager.getClient();
+      expect(manager.isClientStarted()).toBe(true);
+    });
+
+    it('should return false after stop is called', async () => {
+      await manager.getClient();
+      await manager.stop();
+      expect(manager.isClientStarted()).toBe(false);
+    });
+  });
+
+  describe('getAuthStatus', () => {
+    it('should return auth status from SDK client when client is started', async () => {
+      await manager.getClient(); // start client first
+      const status = await manager.getAuthStatus();
+
+      expect(mockClient.getAuthStatus).toHaveBeenCalledOnce();
+      expect(status).toEqual({
+        isAuthenticated: true,
+        authType: 'gh-cli',
+        host: 'github.com',
+        login: 'testuser',
+      });
+    });
+
+    it('should NOT auto-start client when checking auth status', async () => {
+      await manager.getAuthStatus();
+
+      expect(mockClient.start).not.toHaveBeenCalled();
+    });
+
+    it('should return inferred env status when client not started and has githubToken', async () => {
+      const mgr = new ClientManager({ githubToken: 'gho_abc123' });
+      const status = await mgr.getAuthStatus();
+
+      expect(MockCopilotClient).not.toHaveBeenCalled();
+      expect(status).toEqual({
+        isAuthenticated: true,
+        authType: 'env',
+      });
+    });
+
+    it('should return not-authenticated when client not started and no token', async () => {
+      const mgr = new ClientManager({});
+      const status = await mgr.getAuthStatus();
+
+      expect(MockCopilotClient).not.toHaveBeenCalled();
+      expect(status).toEqual({
+        isAuthenticated: false,
+        authType: 'none',
+      });
+    });
+  });
+
+  describe('setGithubToken', () => {
+    it('should stop existing client and use new token on next getClient', async () => {
+      // First: start with no token
+      await manager.getClient();
+      expect(MockCopilotClient).toHaveBeenCalledWith();
+
+      // Set new token
+      await manager.setGithubToken('gho_new_token');
+      expect(mockClient.stop).toHaveBeenCalledOnce();
+
+      // Clear mocks to track next call
+      MockCopilotClient.mockClear();
+      mockClient.reset();
+
+      // Next getClient should use new token
+      await manager.getClient();
+      expect(MockCopilotClient).toHaveBeenCalledWith({ githubToken: 'gho_new_token' });
+    });
+
+    it('should work even if no client was started yet', async () => {
+      await manager.setGithubToken('gho_fresh');
+
+      MockCopilotClient.mockClear();
+      await manager.getClient();
+      expect(MockCopilotClient).toHaveBeenCalledWith({ githubToken: 'gho_fresh' });
     });
   });
 

@@ -13,6 +13,7 @@ import { createConversationRoutes } from './conversation/routes.js';
 import { ClientManager } from './copilot/client-manager.js';
 import { SessionManager } from './copilot/session-manager.js';
 import { createModelsRoute } from './copilot/models-route.js';
+import { createCopilotAuthRoutes } from './copilot/auth-routes.js';
 import { createWsServer } from './ws/server.js';
 import { registerHandler } from './ws/router.js';
 import { createCopilotHandler } from './ws/handlers/copilot.js';
@@ -35,7 +36,10 @@ export function createApp() {
   const authMiddleware = createAuthMiddleware(sessionStore);
 
   // Copilot SDK
-  const clientManager = new ClientManager();
+  const clientManager = new ClientManager({
+    githubToken: config.githubToken,
+    githubClientId: config.githubClientId,
+  });
   const sessionManager = new SessionManager(clientManager);
 
   // Express app
@@ -48,6 +52,7 @@ export function createApp() {
   // Protected routes
   app.use('/api/conversations', authMiddleware, createConversationRoutes(repo));
   app.use('/api/copilot', authMiddleware, createModelsRoute(clientManager));
+  app.use('/api/copilot/auth', authMiddleware, createCopilotAuthRoutes(clientManager));
 
   // Serve static files in production
   if (config.nodeEnv === 'production') {

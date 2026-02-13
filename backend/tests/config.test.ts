@@ -71,4 +71,36 @@ describe('config', () => {
 
     expect(config.dbPath).toBe('/data/test.db');
   });
+
+  it('should have githubToken as undefined when GITHUB_TOKEN is not set', async () => {
+    delete process.env.GITHUB_TOKEN;
+    const { loadConfig } = await import('../src/config.js');
+    const config = loadConfig();
+
+    expect(config.githubToken).toBeUndefined();
+  });
+
+  it('should read GITHUB_TOKEN when provided', async () => {
+    process.env.GITHUB_TOKEN = 'gho_test123';
+    const { loadConfig } = await import('../src/config.js');
+    const config = loadConfig();
+
+    expect(config.githubToken).toBe('gho_test123');
+  });
+
+  it('should have githubClientId as undefined when GITHUB_CLIENT_ID is not set', async () => {
+    delete process.env.GITHUB_CLIENT_ID;
+    const { loadConfig } = await import('../src/config.js');
+    const config = loadConfig();
+
+    expect(config.githubClientId).toBeUndefined();
+  });
+
+  it('should read GITHUB_CLIENT_ID when provided', async () => {
+    process.env.GITHUB_CLIENT_ID = 'Iv1.abc123';
+    const { loadConfig } = await import('../src/config.js');
+    const config = loadConfig();
+
+    expect(config.githubClientId).toBe('Iv1.abc123');
+  });
 });
