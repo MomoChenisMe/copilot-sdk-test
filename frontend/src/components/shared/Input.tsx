@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ArrowUp, Square } from 'lucide-react';
 
 interface InputProps {
   onSend: (text: string) => void;
@@ -17,9 +18,7 @@ export function Input({ onSend, onAbort, isStreaming, disabled }: InputProps) {
     const el = textareaRef.current;
     if (el) {
       el.style.height = 'auto';
-      const minHeight = 72; // ~3 rows
-      const maxHeight = window.innerHeight / 3;
-      el.style.height = `${Math.max(minHeight, Math.min(el.scrollHeight, maxHeight))}px`;
+      el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
     }
   }, []);
 
@@ -42,7 +41,7 @@ export function Input({ onSend, onAbort, isStreaming, disabled }: InputProps) {
   };
 
   return (
-    <div className="flex items-end gap-2 px-4 pb-4 pt-1">
+    <div className="relative bg-bg-elevated border border-border rounded-2xl shadow-[var(--shadow-input)] transition-shadow focus-within:border-border-focus focus-within:shadow-[var(--shadow-md)]">
       <textarea
         ref={textareaRef}
         value={text}
@@ -50,26 +49,30 @@ export function Input({ onSend, onAbort, isStreaming, disabled }: InputProps) {
         onKeyDown={handleKeyDown}
         placeholder={t('input.placeholder')}
         disabled={disabled}
-        rows={3}
-        className="flex-1 resize-none bg-bg-input text-text-primary px-4 py-3 rounded-xl border border-border text-sm placeholder:text-text-muted focus:outline-none focus:border-accent overflow-y-auto transition-colors"
-        style={{ maxHeight: `${window.innerHeight / 3}px` }}
+        rows={1}
+        className="w-full resize-none bg-transparent text-text-primary px-4 pt-3 pb-10 text-sm placeholder:text-text-muted focus:outline-none overflow-y-auto"
+        style={{ maxHeight: '200px' }}
       />
-      {isStreaming ? (
-        <button
-          onClick={onAbort}
-          className="px-4 py-2.5 bg-error text-white rounded-xl text-sm font-medium hover:bg-red-600 transition-colors shrink-0"
-        >
-          {t('input.stop')}
-        </button>
-      ) : (
-        <button
-          onClick={handleSend}
-          disabled={!text.trim() || disabled}
-          className="px-4 py-2.5 bg-accent text-white rounded-xl text-sm font-medium hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-        >
-          {t('input.send')}
-        </button>
-      )}
+      <div className="absolute bottom-2 right-2 flex items-center gap-1">
+        {isStreaming ? (
+          <button
+            onClick={onAbort}
+            className="p-2 rounded-lg bg-bg-tertiary hover:bg-error hover:text-white transition-colors text-text-secondary"
+            aria-label={t('input.stop')}
+          >
+            <Square size={16} />
+          </button>
+        ) : (
+          <button
+            onClick={handleSend}
+            disabled={!text.trim() || disabled}
+            className="p-2 rounded-lg bg-accent text-white hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label={t('input.send')}
+          >
+            <ArrowUp size={16} />
+          </button>
+        )}
+      </div>
     </div>
   );
 }

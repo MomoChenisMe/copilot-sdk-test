@@ -1,47 +1,4 @@
-## Requirements
-
-### Requirement: i18n 初始化
-
-系統 SHALL 使用 i18next + react-i18next 提供多語系支援，預設語言為繁體中文（zh-TW），支援英文（en）作為備用語言。
-
-#### Scenario: 首次載入（瀏覽器語言為中文）
-
-- **WHEN** 使用者首次開啟應用，且瀏覽器語言設定為 zh-TW 或 zh
-- **THEN** 介面 MUST 以繁體中文顯示所有 UI 文字
-
-#### Scenario: 首次載入（瀏覽器語言為英文）
-
-- **WHEN** 使用者首次開啟應用，且瀏覽器語言設定為 en
-- **THEN** 介面 MUST 以英文顯示所有 UI 文字
-
-#### Scenario: 首次載入（瀏覽器語言為其他語言）
-
-- **WHEN** 使用者首次開啟應用，且瀏覽器語言非 zh-TW/zh/en
-- **THEN** 介面 MUST 使用 en 作為 fallback 語言
-
-#### Scenario: 語言偏好持久化
-
-- **WHEN** 使用者手動切換語言後重新開啟應用
-- **THEN** 系統 MUST 從 localStorage 讀取上次選擇的語言，優先於瀏覽器偵測結果
-
-### Requirement: 翻譯檔案結構
-
-系統 SHALL 維護 zh-TW 和 en 兩套翻譯檔案，使用巢狀 JSON 結構，以功能區域為命名空間。
-
-#### Scenario: 翻譯 key 完整性
-
-- **WHEN** 任一語言的翻譯檔案被載入
-- **THEN** 該檔案 MUST 包含所有 UI 元件使用到的翻譯 key，不得有遺漏
-
-#### Scenario: 翻譯 key 命名慣例
-
-- **WHEN** 新增翻譯 key
-- **THEN** key MUST 使用 `<area>.<item>` 的點分隔格式（如 `chat.welcomeTitle`, `sidebar.pinned`）
-
-#### Scenario: 插值支援
-
-- **WHEN** 翻譯文字包含動態變數（如時間、數量）
-- **THEN** 翻譯 MUST 使用 i18next 的 `{{variable}}` 插值語法
+## MODIFIED Requirements
 
 ### Requirement: 語言切換器 UI
 
@@ -90,6 +47,8 @@
 
 - **WHEN** Sidebar 顯示對話的更新時間
 - **THEN** 時間描述（剛剛、X 分鐘前、X 小時前、X 天前）MUST 使用翻譯 key 搭配插值
+
+## ADDED Requirements
 
 ### Requirement: 新增翻譯 key
 

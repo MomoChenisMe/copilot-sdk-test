@@ -1,4 +1,4 @@
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Block 式訊息列表
 
@@ -147,6 +147,8 @@ Chat 介面的訊息區域 SHALL 使用統一的間距系統。
 
 - **WHEN** 多條訊息依序顯示
 - **THEN** 每條訊息 MUST 使用 `mb-6` 作為底部間距
+
+## ADDED Requirements
 
 ### Requirement: 訊息去重
 

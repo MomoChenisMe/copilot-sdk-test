@@ -13,12 +13,12 @@ export function MessageBlock({ message }: MessageBlockProps) {
 
   if (isUser) {
     return (
-      <div className="flex justify-end mb-4">
+      <div className="flex justify-end mb-6">
         <div
           data-testid="user-bubble"
-          className="max-w-[80%] bg-accent/10 rounded-2xl rounded-br-md px-4 py-3"
+          className="max-w-[85%] bg-user-msg-bg border border-user-msg-border rounded-2xl rounded-br-sm px-4 py-3"
         >
-          <p className="text-text-primary whitespace-pre-wrap text-sm">{message.content}</p>
+          <p className="text-sm leading-relaxed text-text-primary whitespace-pre-wrap">{message.content}</p>
         </div>
       </div>
     );
@@ -26,15 +26,19 @@ export function MessageBlock({ message }: MessageBlockProps) {
 
   // Assistant message
   return (
-    <div className="mb-4">
-      <div className="flex items-center gap-2 mb-1">
-        <Sparkles className="w-4 h-4 text-accent" />
-        <span className="text-xs font-semibold uppercase text-text-muted">
-          {t('chat.assistant')}
-        </span>
-      </div>
-      <div className="pl-8 prose-container">
-        <Markdown content={message.content} />
+    <div className="mb-6">
+      <div className="flex items-start gap-3">
+        <div className="w-7 h-7 rounded-lg bg-accent-soft flex items-center justify-center shrink-0 mt-0.5">
+          <Sparkles size={16} className="text-accent" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <span className="text-xs font-medium text-text-muted mb-2 block">
+            {t('chat.assistant')}
+          </span>
+          <div className="text-sm leading-relaxed">
+            <Markdown content={message.content} />
+          </div>
+        </div>
       </div>
     </div>
   );

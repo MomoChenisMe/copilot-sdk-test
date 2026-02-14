@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Pencil, Star, Trash2, Search, Plus, X, Globe, LogOut } from 'lucide-react';
 import type { Conversation, SearchResult } from '../../lib/api';
 
 interface SidebarProps {
@@ -13,6 +14,9 @@ interface SidebarProps {
   onPin: (id: string, pinned: boolean) => void;
   onRename: (id: string, title: string) => void;
   onSearch: (query: string) => Promise<SearchResult[]>;
+  language: string;
+  onLanguageToggle: () => void;
+  onLogout: () => void;
 }
 
 function useFormatTime() {
@@ -44,6 +48,9 @@ export function Sidebar({
   onPin,
   onRename,
   onSearch,
+  language,
+  onLanguageToggle,
+  onLogout,
 }: SidebarProps) {
   const { t } = useTranslation();
   const formatTime = useFormatTime();
@@ -83,8 +90,8 @@ export function Sidebar({
       <div
         key={conv.id}
         data-active={isActive}
-        className={`group flex items-center px-4 py-3 cursor-pointer hover:bg-bg-tertiary transition-colors ${
-          isActive ? 'bg-bg-tertiary border-l-2 border-accent' : ''
+        className={`group flex items-center gap-3 px-3 py-2.5 mx-2 cursor-pointer rounded-lg transition-colors ${
+          isActive ? 'bg-accent-soft text-accent' : 'hover:bg-bg-tertiary'
         }`}
         onClick={() => onSelect(conv.id)}
       >
@@ -111,36 +118,36 @@ export function Sidebar({
         </div>
 
         {/* Actions (visible on hover) */}
-        <div className="hidden group-hover:flex items-center gap-1 ml-2">
+        <div className="hidden group-hover:flex items-center gap-0.5">
           <button
             onClick={(e) => {
               e.stopPropagation();
               startRename(conv);
             }}
-            className="text-text-muted hover:text-text-primary text-xs p-1"
+            className="text-text-muted hover:text-text-primary p-1 rounded hover:bg-bg-tertiary transition-colors"
             title={t('sidebar.rename')}
           >
-            ✎
+            <Pencil size={14} />
           </button>
           <button
             onClick={(e) => {
               e.stopPropagation();
               onPin(conv.id, !conv.pinned);
             }}
-            className="text-text-muted hover:text-warning text-xs p-1"
+            className="text-text-muted hover:text-warning p-1 rounded hover:bg-bg-tertiary transition-colors"
             title={conv.pinned ? t('sidebar.unpin') : t('sidebar.pin')}
           >
-            {conv.pinned ? '★' : '☆'}
+            <Star size={14} fill={conv.pinned ? 'currentColor' : 'none'} />
           </button>
           <button
             onClick={(e) => {
               e.stopPropagation();
               onDelete(conv.id);
             }}
-            className="text-text-muted hover:text-error text-xs p-1"
+            className="text-text-muted hover:text-error p-1 rounded hover:bg-bg-tertiary transition-colors"
             title={t('sidebar.delete')}
           >
-            ✕
+            <Trash2 size={14} />
           </button>
         </div>
       </div>
@@ -152,7 +159,7 @@ export function Sidebar({
       {/* Backdrop */}
       {open && (
         <div
-          className="fixed inset-0 bg-black/50 z-40"
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
           onClick={onClose}
           data-testid="sidebar-backdrop"
         />
@@ -161,34 +168,48 @@ export function Sidebar({
       {/* Sidebar panel */}
       <div
         data-testid="sidebar-panel"
-        className={`fixed top-0 left-0 h-full w-72 bg-bg-secondary z-50 flex flex-col transition-transform duration-200 ${
+        className={`fixed top-0 left-0 h-full w-72 bg-bg-secondary shadow-lg z-50 flex flex-col transition-transform duration-300 ${
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <h2 className="text-text-primary font-semibold text-lg">{t('sidebar.conversations')}</h2>
+          <h2 className="text-text-primary font-semibold text-base">{t('sidebar.conversations')}</h2>
           <button
-            onClick={onCreate}
-            className="px-3 py-1 bg-accent text-white text-sm rounded hover:bg-accent-hover transition-colors"
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-tertiary transition-colors"
           >
-            {t('sidebar.new')}
+            <X size={18} />
           </button>
         </div>
 
         {/* Search */}
-        <div className="px-4 py-3">
-          <input
-            type="text"
-            placeholder={t('sidebar.search')}
-            value={searchQuery}
-            onChange={(e) => handleSearch(e.target.value)}
-            className="w-full px-3 py-2 bg-bg-input text-text-primary rounded border border-border text-sm placeholder:text-text-muted focus:outline-none focus:border-accent"
-          />
+        <div className="px-3 pt-3">
+          <div className="relative">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+            <input
+              type="text"
+              placeholder={t('sidebar.search')}
+              value={searchQuery}
+              onChange={(e) => handleSearch(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 bg-bg-tertiary text-text-primary rounded-lg text-sm placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+          </div>
+        </div>
+
+        {/* New Chat button */}
+        <div className="px-3 pt-3">
+          <button
+            onClick={onCreate}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition-colors"
+          >
+            <Plus size={16} />
+            {t('sidebar.new')}
+          </button>
         </div>
 
         {/* List */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto mt-2">
           {searchResults ? (
             // Search results view
             searchResults.length === 0 ? (
@@ -239,6 +260,23 @@ export function Sidebar({
               </div>
             </>
           )}
+        </div>
+
+        {/* Bottom settings section */}
+        <div className="border-t border-border px-3 py-3 flex items-center gap-2">
+          <button
+            onClick={onLanguageToggle}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors text-sm flex-1"
+          >
+            <Globe size={16} />
+            {language === 'zh-TW' ? '中文' : 'English'}
+          </button>
+          <button
+            onClick={onLogout}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-text-secondary hover:text-error hover:bg-bg-tertiary transition-colors text-sm"
+          >
+            <LogOut size={16} />
+          </button>
         </div>
       </div>
     </>

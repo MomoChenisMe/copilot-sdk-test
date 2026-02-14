@@ -8,7 +8,7 @@ import { useTerminal } from '../../hooks/useTerminal';
 import { useModels } from '../../hooks/useModels';
 import { conversationApi } from '../../lib/api';
 import { TopBar } from './TopBar';
-import { BottomBar } from './BottomBar';
+import { TabBar } from './TabBar';
 import { Sidebar } from './Sidebar';
 import { ChatView } from '../copilot/ChatView';
 import { TerminalView } from '../terminal/TerminalView';
@@ -120,19 +120,14 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     [activeConversationId, sendMessage],
   );
 
-  const handleCwdChange = useCallback(
-    (newCwd: string) => {
-      setCwd(newCwd);
-      send({ type: 'cwd:change', data: { cwd: newCwd } });
-    },
-    [send],
-  );
+  const handleHomeClick = useCallback(() => {
+    setActiveConversationId(null);
+  }, [setActiveConversationId]);
 
   const handleModelChange = useCallback(
     (modelId: string) => {
       if (activeConversationId) {
         updateConversation(activeConversationId, { title: activeConversation?.title });
-        // Model changes will be applied on next session creation
       }
     },
     [activeConversationId, updateConversation, activeConversation],
@@ -142,21 +137,30 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     <div className="flex flex-col h-full bg-bg-primary">
       <TopBar
         title={activeConversation?.title || t('app.title')}
-        modelName={activeConversation?.model || defaultModel}
         status={status}
         theme={theme}
-        language={language}
         onMenuClick={() => setSidebarOpen(!sidebarOpen)}
         onThemeToggle={toggleTheme}
-        onLanguageToggle={handleLanguageToggle}
+        onHomeClick={handleHomeClick}
+        onNewChat={handleNewConversation}
       />
+
+      <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
 
       <div className="flex-1 overflow-hidden relative">
         {/* Main content area */}
-        <div className={`h-full ${activeTab === 'copilot' ? 'block' : 'hidden'}`}>
-          <ChatView onNewConversation={handleNewConversation} />
+        <div className={`h-full flex flex-col ${activeTab === 'copilot' ? '' : 'hidden'}`}>
+          <ChatView
+            onNewConversation={handleNewConversation}
+            onSend={handleSend}
+            onAbort={abortMessage}
+            isStreaming={isStreaming}
+            disabled={!activeConversationId}
+            currentModel={activeConversation?.model || defaultModel}
+            onModelChange={handleModelChange}
+          />
         </div>
-        <div className={`h-full ${activeTab === 'terminal' ? 'block' : 'hidden'}`}>
+        <div className={`h-full ${activeTab === 'terminal' ? '' : 'hidden'}`}>
           <TerminalView
             onData={handleData}
             onResize={handleResize}
@@ -165,17 +169,6 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
           />
         </div>
       </div>
-
-      <BottomBar
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        onSend={handleSend}
-        onAbort={abortMessage}
-        isStreaming={isStreaming}
-        disabled={!activeConversationId}
-        currentModel={activeConversation?.model || defaultModel}
-        onModelChange={handleModelChange}
-      />
 
       <Sidebar
         open={sidebarOpen}
@@ -195,6 +188,9 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
           await updateConversation(id, { title });
         }}
         onSearch={searchConversations}
+        language={language}
+        onLanguageToggle={handleLanguageToggle}
+        onLogout={onLogout}
       />
     </div>
   );

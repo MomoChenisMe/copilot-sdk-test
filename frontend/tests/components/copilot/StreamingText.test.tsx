@@ -8,14 +8,16 @@ describe('StreamingText', () => {
     expect(screen.getByText('Hello world')).toBeTruthy();
   });
 
-  it('shows block cursor (█) when streaming', () => {
+  it('shows pipe cursor (|) when streaming', () => {
     const { container } = render(<StreamingText text="Typing..." isStreaming={true} />);
-    expect(container.textContent).toContain('█');
+    expect(container.textContent).toContain('|');
   });
 
   it('hides cursor when not streaming', () => {
     const { container } = render(<StreamingText text="Done." isStreaming={false} />);
-    expect(container.textContent).not.toContain('█');
+    // No cursor character
+    const cursorEl = container.querySelector('.cursor-blink');
+    expect(cursorEl).toBeNull();
   });
 
   it('renders Markdown content (bold)', () => {
@@ -30,9 +32,9 @@ describe('StreamingText', () => {
     expect(code.tagName).toBe('CODE');
   });
 
-  it('cursor animates (has animate-pulse)', () => {
+  it('cursor has cursor-blink animation class', () => {
     const { container } = render(<StreamingText text="hi" isStreaming={true} />);
-    const cursor = container.querySelector('.animate-pulse');
+    const cursor = container.querySelector('.cursor-blink');
     expect(cursor).toBeTruthy();
   });
 
@@ -43,6 +45,6 @@ describe('StreamingText', () => {
 
   it('shows cursor even with empty text when streaming', () => {
     const { container } = render(<StreamingText text="" isStreaming={true} />);
-    expect(container.textContent).toContain('█');
+    expect(container.textContent).toContain('|');
   });
 });

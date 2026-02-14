@@ -1,4 +1,4 @@
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: AppShell 佈局
 
@@ -87,6 +87,8 @@ Sidebar SHALL 顯示所有對話列表，底部新增設定區（語言切換、
 - **WHEN** Sidebar 渲染
 - **THEN** Sidebar 底部 MUST 顯示設定區（以 border-t 分隔），包含語言切換按鈕（Globe icon + 當前語言）和登出按鈕（LogOut icon）
 
+## ADDED Requirements
+
 ### Requirement: TabBar
 
 系統 SHALL 提供獨立的 TabBar 元件，放置於 TopBar 和內容區之間，用於 Copilot/Terminal tab 切換。
@@ -111,16 +113,19 @@ Sidebar SHALL 顯示所有對話列表，底部新增設定區（語言切換、
 - **WHEN** 使用者點擊 tab 按鈕
 - **THEN** 主內容區 MUST 切換到對應的視圖（ChatView 或 TerminalView）
 
-### Requirement: 登入頁面
+## REMOVED Requirements
 
-未認證的使用者 SHALL 看到登入頁面。
+### Requirement: BottomBar
 
-#### Scenario: 未認證存取
+**Reason**: BottomBar 過度集中（tab 切換 + ModelSelector + Input），已拆分為 TabBar（獨立元件）和 Input（移入 ChatView）。
+**Migration**: Tab 切換改用新的 TabBar 元件；Input 和 ModelSelector 整合至 ChatView 底部。
 
-- **WHEN** 未認證的使用者開啟應用
-- **THEN** 介面 MUST 顯示密碼輸入框和登入按鈕
+### Requirement: 深色主題
 
-#### Scenario: 登入成功後跳轉
+**Reason**: 已被 design-system spec 的「Slate Indigo 色彩系統」和「主題切換」需求取代。新系統支援 light/dark 雙主題，不再限定為深色。
+**Migration**: 使用 `design-system` spec 中定義的 Slate Indigo 色彩系統。
 
-- **WHEN** 使用者成功登入
-- **THEN** 介面 MUST 切換到主應用介面
+### Requirement: 工作目錄切換
+
+**Reason**: 從 TopBar 中移除以精簡化設計。工作目錄功能保留在後端，但 UI 暫不顯示。
+**Migration**: 功能在後端仍存在，未來可在 Terminal tab 或設定頁面中恢復。

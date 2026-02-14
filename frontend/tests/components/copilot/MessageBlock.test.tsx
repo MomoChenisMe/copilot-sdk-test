@@ -26,6 +26,7 @@ const makeMessage = (overrides: Partial<Message> = {}): Message => ({
 });
 
 describe('MessageBlock', () => {
+  // User message tests
   it('renders user message with right-aligned styling', () => {
     const { container } = render(<MessageBlock message={makeMessage({ role: 'user' })} />);
     const wrapper = container.firstChild as HTMLElement;
@@ -38,14 +39,28 @@ describe('MessageBlock', () => {
     expect(screen.queryByTestId('markdown')).toBeNull();
   });
 
-  it('renders user message with accent background', () => {
+  it('renders user message with user-msg-bg background', () => {
     const { container } = render(<MessageBlock message={makeMessage({ role: 'user' })} />);
     const bubble = container.querySelector('[data-testid="user-bubble"]');
     expect(bubble).toBeTruthy();
-    expect(bubble?.className).toContain('rounded');
-    expect(bubble?.className).toContain('bg-accent/10');
+    expect(bubble?.className).toContain('bg-user-msg-bg');
+    expect(bubble?.className).toContain('border-user-msg-border');
   });
 
+  it('renders user message with rounded-2xl rounded-br-sm', () => {
+    const { container } = render(<MessageBlock message={makeMessage({ role: 'user' })} />);
+    const bubble = container.querySelector('[data-testid="user-bubble"]');
+    expect(bubble?.className).toContain('rounded-2xl');
+    expect(bubble?.className).toContain('rounded-br-sm');
+  });
+
+  it('renders user message with max-w-[85%]', () => {
+    const { container } = render(<MessageBlock message={makeMessage({ role: 'user' })} />);
+    const bubble = container.querySelector('[data-testid="user-bubble"]');
+    expect(bubble?.className).toContain('max-w-[85%]');
+  });
+
+  // Assistant message tests
   it('renders assistant message left-aligned', () => {
     const { container } = render(
       <MessageBlock message={makeMessage({ role: 'assistant', content: '# Hello' })} />
@@ -68,19 +83,27 @@ describe('MessageBlock', () => {
     expect(screen.getByText('Assistant')).toBeTruthy();
   });
 
-  it('renders Sparkles icon for assistant messages', () => {
+  it('renders Sparkles icon as avatar for assistant messages', () => {
     render(
       <MessageBlock message={makeMessage({ role: 'assistant', content: 'Hi' })} />
     );
     expect(screen.getByTestId('sparkles-icon')).toBeTruthy();
   });
 
-  it('renders assistant content with pl-8 indent', () => {
+  it('renders assistant message with avatar + content layout (flex items-start gap-3)', () => {
     const { container } = render(
       <MessageBlock message={makeMessage({ role: 'assistant', content: 'Hi' })} />
     );
-    const contentArea = container.querySelector('.pl-8');
-    expect(contentArea).toBeTruthy();
+    const layout = container.querySelector('.flex.items-start.gap-3');
+    expect(layout).toBeTruthy();
+  });
+
+  it('renders avatar with bg-accent-soft rounded-lg', () => {
+    const { container } = render(
+      <MessageBlock message={makeMessage({ role: 'assistant', content: 'Hi' })} />
+    );
+    const avatar = container.querySelector('.bg-accent-soft.rounded-lg');
+    expect(avatar).toBeTruthy();
   });
 
   it('does not render Sparkles icon or label for user messages', () => {

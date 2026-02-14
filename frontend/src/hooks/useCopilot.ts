@@ -44,6 +44,7 @@ export function useCopilot({ subscribe, send }: UseCopilotOptions) {
               metadata: null,
               createdAt: new Date().toISOString(),
             });
+            useAppStore.getState().setStreamingText('');
           }
           break;
         }

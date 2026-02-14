@@ -51,11 +51,16 @@
   "topBar": {
     "menu": "menu",
     "toggleTheme": "toggle theme",
-    "toggleLanguage": "toggle language"
+    "home": "Home",
+    "newChat": "New chat"
+  },
+  "tabBar": {
+    "copilot": "Copilot",
+    "terminal": "Terminal"
   },
   "sidebar": {
     "conversations": "Conversations",
-    "new": "+ New",
+    "new": "New Chat",
     "search": "Search...",
     "noResults": "No results found",
     "pinned": "Pinned",
@@ -68,6 +73,8 @@
     "justNow": "just now",
     "minutesAgo": "{{count}}m ago",
     "hoursAgo": "{{count}}h ago",
-    "daysAgo": "{{count}}d ago"
+    "daysAgo": "{{count}}d ago",
+    "language": "Language",
+    "logout": "Logout"
   }
 }

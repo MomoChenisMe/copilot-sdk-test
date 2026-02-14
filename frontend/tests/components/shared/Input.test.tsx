@@ -14,10 +14,10 @@ describe('Input', () => {
     expect(screen.getByPlaceholderText('Message AI Terminal...')).toBeTruthy();
   });
 
-  it('renders textarea with 3 rows by default', () => {
+  it('renders textarea with 1 row (auto-grow)', () => {
     render(<Input {...defaultProps} />);
     const textarea = screen.getByPlaceholderText('Message AI Terminal...');
-    expect(textarea.getAttribute('rows')).toBe('3');
+    expect(textarea.getAttribute('rows')).toBe('1');
   });
 
   it('sends message on Enter (not Shift+Enter)', () => {
@@ -38,14 +38,14 @@ describe('Input', () => {
     expect(onSend).not.toHaveBeenCalled();
   });
 
-  it('shows Stop button when streaming', () => {
+  it('shows Stop button (icon-only) when streaming', () => {
     render(<Input {...defaultProps} isStreaming={true} />);
-    expect(screen.getByText('Stop')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /stop/i })).toBeTruthy();
   });
 
-  it('shows Send button when not streaming', () => {
+  it('shows Send button (icon-only) when not streaming', () => {
     render(<Input {...defaultProps} />);
-    expect(screen.getByText('Send')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /send/i })).toBeTruthy();
   });
 
   it('disables textarea when disabled prop is true', () => {
@@ -61,5 +61,19 @@ describe('Input', () => {
     fireEvent.change(textarea, { target: { value: 'hello' } });
     fireEvent.keyDown(textarea, { key: 'Enter' });
     expect(textarea.value).toBe('');
+  });
+
+  it('has floating card style (rounded-2xl bg-bg-elevated)', () => {
+    const { container } = render(<Input {...defaultProps} />);
+    const card = container.firstChild as HTMLElement;
+    expect(card.className).toContain('rounded-2xl');
+    expect(card.className).toContain('bg-bg-elevated');
+  });
+
+  it('calls onAbort when Stop button is clicked', () => {
+    const onAbort = vi.fn();
+    render(<Input {...defaultProps} isStreaming={true} onAbort={onAbort} />);
+    fireEvent.click(screen.getByRole('button', { name: /stop/i }));
+    expect(onAbort).toHaveBeenCalledTimes(1);
   });
 });

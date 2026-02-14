@@ -23,14 +23,16 @@ describe('ToolRecord', () => {
     expect(spinner).toBeTruthy();
   });
 
-  it('shows green checkmark when status is success', () => {
-    render(<ToolRecord record={makeRecord({ status: 'success' })} />);
-    expect(screen.getByText('✓')).toBeTruthy();
+  it('shows Check icon when status is success', () => {
+    const { container } = render(<ToolRecord record={makeRecord({ status: 'success' })} />);
+    const checkIcon = container.querySelector('.lucide-check');
+    expect(checkIcon).toBeTruthy();
   });
 
-  it('shows red cross when status is error', () => {
-    render(<ToolRecord record={makeRecord({ status: 'error', error: 'File not found' })} />);
-    expect(screen.getByText('✗')).toBeTruthy();
+  it('shows X icon when status is error', () => {
+    const { container } = render(<ToolRecord record={makeRecord({ status: 'error', error: 'File not found' })} />);
+    const xIcon = container.querySelector('.lucide-x');
+    expect(xIcon).toBeTruthy();
   });
 
   it('is collapsed by default', () => {
@@ -48,7 +50,6 @@ describe('ToolRecord', () => {
         })}
       />
     );
-    // Click to expand
     fireEvent.click(screen.getByText('read_file'));
     expect(screen.getByText('Arguments')).toBeTruthy();
     expect(screen.getByText('Result')).toBeTruthy();
@@ -68,14 +69,15 @@ describe('ToolRecord', () => {
     expect(screen.getByText('Permission denied')).toBeTruthy();
   });
 
-  it('has subtle background (tool-card-bg)', () => {
+  it('has rounded-xl border card style', () => {
     const { container } = render(<ToolRecord record={makeRecord()} />);
     const card = container.firstChild as HTMLElement;
-    expect(card.className).toContain('bg-tool-card-bg');
+    expect(card.className).toContain('rounded-xl');
+    expect(card.className).toContain('border-border');
   });
 
   it('renders multiple tool records independently', () => {
-    const { container } = render(
+    render(
       <div>
         <ToolRecord record={makeRecord({ toolCallId: 'tc-1', toolName: 'read_file' })} />
         <ToolRecord record={makeRecord({ toolCallId: 'tc-2', toolName: 'write_file', status: 'success' })} />

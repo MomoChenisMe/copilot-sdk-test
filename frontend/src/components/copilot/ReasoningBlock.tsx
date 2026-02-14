@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ChevronDown } from 'lucide-react';
 
 interface ReasoningBlockProps {
   text: string;
@@ -26,16 +27,19 @@ export function ReasoningBlock({ text, isStreaming }: ReasoningBlockProps) {
     : t('reasoning.thoughtFor', { duration: estimateDuration(text) });
 
   return (
-    <div className="my-2 rounded-lg bg-tool-card-bg border border-border/50">
+    <div className="my-2 rounded-xl border border-border overflow-hidden">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-bg-tertiary/50 transition-colors rounded-lg"
+        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left hover:bg-bg-tertiary/50 transition-colors"
       >
+        {isStreaming && (
+          <span className="inline-block w-3.5 h-3.5 border-2 border-accent border-t-transparent rounded-full animate-spin shrink-0" />
+        )}
         <span className="text-text-secondary font-medium">{title}</span>
-        <span className="ml-auto text-text-muted text-xs">{expanded ? '▼' : '▶'}</span>
+        <ChevronDown size={14} className={`ml-auto text-text-muted transition-transform ${expanded ? 'rotate-180' : ''}`} />
       </button>
       {expanded && (
-        <div className="px-3 pb-3 text-sm font-mono text-text-muted whitespace-pre-wrap max-h-64 overflow-y-auto">
+        <div className="px-4 pb-3 text-sm font-mono text-text-muted whitespace-pre-wrap max-h-64 overflow-y-auto border-t border-border">
           {text}
         </div>
       )}

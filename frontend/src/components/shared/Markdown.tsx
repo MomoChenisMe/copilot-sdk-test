@@ -25,27 +25,28 @@ function CodeBlock({ className, children, ...props }: React.HTMLAttributes<HTMLE
 
   if (isInline) {
     return (
-      <code className="bg-bg-tertiary text-text-primary px-1.5 py-0.5 rounded text-sm font-mono" {...props}>
+      <code className="bg-bg-tertiary text-accent px-1.5 py-0.5 rounded-md text-[13px] font-mono" {...props}>
         {children}
       </code>
     );
   }
 
-  const lang = className?.replace('language-', '') || '';
+  // Fix language extraction: className may be "hljs language-python"
+  const lang = className?.split(/\s+/).find(c => c.startsWith('language-'))?.replace('language-', '') || '';
 
   return (
-    <div className="relative group my-3">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-code-block-bg rounded-t-lg border-b border-border/30">
+    <div className="rounded-xl overflow-hidden border border-border my-4">
+      <div className="flex items-center justify-between px-4 py-2 bg-code-header-bg">
         <span className="text-xs text-text-muted font-mono">{lang}</span>
         <button
           onClick={handleCopy}
-          className="text-text-muted hover:text-text-primary transition-colors p-1"
+          className="text-text-muted hover:text-text-primary transition-colors p-1 opacity-0 group-hover:opacity-100"
           aria-label={t('markdown.copyCode')}
         >
           {copied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
         </button>
       </div>
-      <pre className="bg-code-block-bg p-3 rounded-b-lg overflow-x-auto">
+      <pre className="bg-code-bg p-4 overflow-x-auto">
         <code className={className} {...props}>
           {children}
         </code>
@@ -56,7 +57,7 @@ function CodeBlock({ className, children, ...props }: React.HTMLAttributes<HTMLE
 
 const components: Components = {
   code: CodeBlock as Components['code'],
-  pre: ({ children }) => <>{children}</>,
+  pre: ({ children }) => <div className="group">{children}</div>,
 };
 
 export function Markdown({ content }: MarkdownProps) {

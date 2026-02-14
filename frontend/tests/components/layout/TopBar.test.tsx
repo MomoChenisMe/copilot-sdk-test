@@ -5,13 +5,12 @@ import { TopBar } from '../../../src/components/layout/TopBar';
 describe('TopBar', () => {
   const defaultProps = {
     title: 'Test Conversation',
-    modelName: 'GPT-4o',
     status: 'connected' as const,
     theme: 'light' as const,
-    language: 'en',
     onMenuClick: vi.fn(),
     onThemeToggle: vi.fn(),
-    onLanguageToggle: vi.fn(),
+    onHomeClick: vi.fn(),
+    onNewChat: vi.fn(),
   };
 
   it('renders the conversation title', () => {
@@ -19,15 +18,11 @@ describe('TopBar', () => {
     expect(screen.getByText('Test Conversation')).toBeTruthy();
   });
 
-  it('renders model name below the title', () => {
-    render(<TopBar {...defaultProps} modelName="Claude Sonnet 4.5" />);
-    expect(screen.getByText('Claude Sonnet 4.5')).toBeTruthy();
-  });
-
-  it('shows "AI Terminal" when no active conversation', () => {
-    render(<TopBar {...defaultProps} title="AI Terminal" modelName="" />);
-    expect(screen.getByText('AI Terminal')).toBeTruthy();
-    expect(screen.queryByText('GPT-4o')).toBeNull();
+  it('title is clickable and calls onHomeClick', () => {
+    const onHomeClick = vi.fn();
+    render(<TopBar {...defaultProps} onHomeClick={onHomeClick} />);
+    fireEvent.click(screen.getByText('Test Conversation'));
+    expect(onHomeClick).toHaveBeenCalledTimes(1);
   });
 
   it('calls onMenuClick when hamburger is clicked', () => {
@@ -36,6 +31,14 @@ describe('TopBar', () => {
     const menuButton = screen.getByRole('button', { name: /menu/i });
     fireEvent.click(menuButton);
     expect(onMenuClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders new chat button and calls onNewChat when clicked', () => {
+    const onNewChat = vi.fn();
+    render(<TopBar {...defaultProps} onNewChat={onNewChat} />);
+    const newChatBtn = screen.getByRole('button', { name: /new chat/i });
+    fireEvent.click(newChatBtn);
+    expect(onNewChat).toHaveBeenCalledTimes(1);
   });
 
   it('renders connection badge with connected status', () => {
@@ -67,37 +70,17 @@ describe('TopBar', () => {
     expect(onThemeToggle).toHaveBeenCalledTimes(1);
   });
 
-  it('does not show model name when modelName is empty', () => {
-    render(<TopBar {...defaultProps} modelName="" />);
-    // Model name area should not render if empty
-    const modelElement = screen.queryByTestId('model-name');
-    expect(modelElement).toBeNull();
+  it('has h-12 height and border-b', () => {
+    const { container } = render(<TopBar {...defaultProps} />);
+    const header = container.querySelector('header');
+    expect(header?.className).toContain('h-12');
+    expect(header?.className).toContain('border-b');
   });
 
-  // Language switcher tests (Task 8.1)
-  it('renders language toggle button with Globe icon', () => {
+  it('does not render language toggle or model name', () => {
     render(<TopBar {...defaultProps} />);
-    const langButton = screen.getByRole('button', { name: /language/i });
-    expect(langButton).toBeTruthy();
-  });
-
-  it('displays current language code on the toggle button', () => {
-    render(<TopBar {...defaultProps} language="en" />);
-    const langButton = screen.getByRole('button', { name: /language/i });
-    expect(langButton.textContent).toContain('EN');
-  });
-
-  it('displays zh-TW language code when language is zh-TW', () => {
-    render(<TopBar {...defaultProps} language="zh-TW" />);
-    const langButton = screen.getByRole('button', { name: /language/i });
-    expect(langButton.textContent).toContain('中');
-  });
-
-  it('calls onLanguageToggle when language button is clicked', () => {
-    const onLanguageToggle = vi.fn();
-    render(<TopBar {...defaultProps} onLanguageToggle={onLanguageToggle} />);
-    const langButton = screen.getByRole('button', { name: /language/i });
-    fireEvent.click(langButton);
-    expect(onLanguageToggle).toHaveBeenCalledTimes(1);
+    // Language and model name are no longer in TopBar
+    expect(screen.queryByRole('button', { name: /language/i })).toBeNull();
+    expect(screen.queryByTestId('model-name')).toBeNull();
   });
 });

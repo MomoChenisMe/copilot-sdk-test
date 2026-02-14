@@ -41,9 +41,10 @@ describe('ReasoningBlock', () => {
     expect(content.className).toContain('font-mono');
   });
 
-  it('has subtle background', () => {
+  it('has rounded-xl border card style', () => {
     const { container } = render(<ReasoningBlock text="Content" isStreaming={true} />);
     const block = container.firstChild as HTMLElement;
-    expect(block.className).toContain('bg-tool-card-bg');
+    expect(block.className).toContain('rounded-xl');
+    expect(block.className).toContain('border-border');
   });
 });

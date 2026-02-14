@@ -18,7 +18,7 @@ export function ConnectionBadge({ status }: ConnectionBadgeProps) {
 
   return (
     <div className="flex items-center gap-1.5" title={label}>
-      <span className={`w-2 h-2 rounded-full ${color}`} />
+      <span className={`w-1.5 h-1.5 rounded-full ${color}`} />
       <span className="text-xs text-text-muted hidden sm:inline">{label}</span>
     </div>
   );

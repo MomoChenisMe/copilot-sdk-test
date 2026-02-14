@@ -51,11 +51,16 @@
   "topBar": {
     "menu": "選單",
     "toggleTheme": "切換主題",
-    "toggleLanguage": "切換語言"
+    "home": "首頁",
+    "newChat": "新對話"
+  },
+  "tabBar": {
+    "copilot": "Copilot",
+    "terminal": "終端機"
   },
   "sidebar": {
     "conversations": "對話紀錄",
-    "new": "+ 新增",
+    "new": "新對話",
     "search": "搜尋...",
     "noResults": "沒有找到結果",
     "pinned": "已釘選",
@@ -68,6 +73,8 @@
     "justNow": "剛剛",
     "minutesAgo": "{{count}} 分鐘前",
     "hoursAgo": "{{count}} 小時前",
-    "daysAgo": "{{count}} 天前"
+    "daysAgo": "{{count}} 天前",
+    "language": "語言",
+    "logout": "登出"
   }
 }

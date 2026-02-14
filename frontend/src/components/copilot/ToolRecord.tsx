@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Check, X, Loader, ChevronDown } from 'lucide-react';
 import type { ToolRecord as ToolRecordType } from '../../store';
 
 interface ToolRecordProps {
@@ -12,37 +13,37 @@ export function ToolRecord({ record }: ToolRecordProps) {
 
   const statusIcon =
     record.status === 'running' ? (
-      <span className="inline-block w-3 h-3 border-2 border-success border-t-transparent rounded-full animate-spin" />
+      <Loader size={14} className="text-accent animate-spin" />
     ) : record.status === 'success' ? (
-      <span className="text-success text-sm">✓</span>
+      <Check size={14} className="text-success" />
     ) : (
-      <span className="text-error text-sm">✗</span>
+      <X size={14} className="text-error" />
     );
 
   return (
-    <div className="my-2 rounded-lg bg-tool-card-bg border border-border/50">
+    <div className="my-2 rounded-xl border border-border overflow-hidden">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-bg-tertiary/50 transition-colors rounded-lg"
+        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left hover:bg-bg-tertiary/50 transition-colors"
       >
         {statusIcon}
         <span className="text-text-primary font-mono text-xs font-semibold">{record.toolName}</span>
-        <span className="ml-auto text-text-muted text-xs">{expanded ? '▼' : '▶'}</span>
+        <ChevronDown size={14} className={`ml-auto text-text-muted transition-transform ${expanded ? 'rotate-180' : ''}`} />
       </button>
       {expanded && (
-        <div className="px-3 pb-3 text-xs font-mono">
+        <div className="px-4 pb-3 text-xs font-mono border-t border-border">
           {record.arguments != null && (
-            <div className="mb-2">
-              <p className="text-text-muted mb-1 font-sans">{t('tool.arguments')}</p>
-              <pre className="bg-code-block-bg p-2 rounded text-text-secondary overflow-x-auto">
+            <div className="mb-2 mt-2">
+              <p className="text-text-muted mb-1 font-sans text-xs">{t('tool.arguments')}</p>
+              <pre className="bg-code-bg p-3 rounded-lg text-text-secondary overflow-x-auto text-xs">
                 {JSON.stringify(record.arguments, null, 2)}
               </pre>
             </div>
           )}
           {record.result != null && (
             <div className="mb-2">
-              <p className="text-text-muted mb-1 font-sans">{t('tool.result')}</p>
-              <pre className="bg-code-block-bg p-2 rounded text-text-secondary overflow-x-auto max-h-48 overflow-y-auto">
+              <p className="text-text-muted mb-1 font-sans text-xs">{t('tool.result')}</p>
+              <pre className="bg-code-bg p-3 rounded-lg text-text-secondary overflow-x-auto max-h-48 overflow-y-auto text-xs">
                 {typeof record.result === 'string'
                   ? record.result
                   : JSON.stringify(record.result, null, 2)}
@@ -51,8 +52,8 @@ export function ToolRecord({ record }: ToolRecordProps) {
           )}
           {record.error && (
             <div>
-              <p className="text-text-muted mb-1 font-sans">{t('tool.error')}</p>
-              <pre className="bg-code-block-bg p-2 rounded text-error overflow-x-auto">
+              <p className="text-text-muted mb-1 font-sans text-xs">{t('tool.error')}</p>
+              <pre className="bg-code-bg p-3 rounded-lg text-error overflow-x-auto text-xs">
                 {record.error}
               </pre>
             </div>

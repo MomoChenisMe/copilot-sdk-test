@@ -158,6 +158,35 @@ describe('useCopilot', () => {
     expect(assistantMsgs[0].content).toBe('Streamed');
   });
 
+  it('should deduplicate messages with the same id in addMessage', () => {
+    renderHook(() => useCopilot({ subscribe, send }));
+
+    act(() => {
+      emit({ type: 'copilot:message', data: { messageId: 'msg-dup', content: 'Hello' } });
+      emit({ type: 'copilot:message', data: { messageId: 'msg-dup', content: 'Hello' } });
+    });
+
+    const state = useAppStore.getState();
+    const assistantMsgs = state.messages.filter((m) => m.role === 'assistant');
+    expect(assistantMsgs.length).toBe(1);
+  });
+
+  it('should clear streamingText after copilot:message', () => {
+    renderHook(() => useCopilot({ subscribe, send }));
+
+    act(() => {
+      emit({ type: 'copilot:delta', data: { messageId: 'm1', content: 'Streaming...' } });
+    });
+
+    expect(useAppStore.getState().streamingText).toBe('Streaming...');
+
+    act(() => {
+      emit({ type: 'copilot:message', data: { messageId: 'm1', content: 'Final message' } });
+    });
+
+    expect(useAppStore.getState().streamingText).toBe('');
+  });
+
   it('sendMessage should add user message and send ws message', () => {
     const { result } = renderHook(() => useCopilot({ subscribe, send }));
 

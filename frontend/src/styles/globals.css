@@ -1,44 +1,131 @@
 @import "tailwindcss";
+@import "highlight.js/styles/github-dark.css";
+
+/* ============================================
+   Slate Indigo Design System
+   Light theme (default) + Dark theme
+   ============================================ */
 
 /* Light theme (default) */
 @theme {
-  --color-bg-primary: #ffffff;
-  --color-bg-secondary: #f9fafb;
-  --color-bg-tertiary: #f3f4f6;
-  --color-bg-input: #ffffff;
-  --color-text-primary: #111827;
-  --color-text-secondary: #4b5563;
-  --color-text-muted: #9ca3af;
-  --color-accent: #7c3aed;
-  --color-accent-hover: #6d28d9;
-  --color-success: #16a34a;
-  --color-warning: #ca8a04;
-  --color-error: #dc2626;
-  --color-border: #e5e7eb;
-  --color-user-message-bg: #ede9fe;
-  --color-code-block-bg: #1e1e2e;
-  --color-tool-card-bg: #f9fafb;
+  /* Background */
+  --color-bg-primary: #FFFFFF;
+  --color-bg-secondary: #F8FAFC;
+  --color-bg-tertiary: #F1F5F9;
+  --color-bg-input: #FFFFFF;
+  --color-bg-elevated: #FFFFFF;
+
+  /* Text */
+  --color-text-primary: #0F172A;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94A3B8;
+  --color-text-inverse: #FFFFFF;
+
+  /* Accent (Indigo) */
+  --color-accent: #4F46E5;
+  --color-accent-hover: #4338CA;
+  --color-accent-soft: #EEF2FF;
+  --color-accent-muted: #C7D2FE;
+
+  /* Semantic */
+  --color-success: #16A34A;
+  --color-success-soft: #DCFCE7;
+  --color-warning: #CA8A04;
+  --color-warning-soft: #FEF9C3;
+  --color-error: #DC2626;
+  --color-error-soft: #FEE2E2;
+
+  /* Borders */
+  --color-border: #E2E8F0;
+  --color-border-subtle: #F1F5F9;
+  --color-border-focus: #818CF8;
+
+  /* Message */
+  --color-user-msg-bg: #EEF2FF;
+  --color-user-msg-border: #C7D2FE;
+
+  /* Code */
+  --color-code-bg: #1E293B;
+  --color-code-header-bg: #0F172A;
+
+  /* Tool card */
+  --color-tool-card-bg: #F8FAFC;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
+  --shadow-input: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
 }
 
 /* Dark theme */
 html[data-theme="dark"] {
-  --color-bg-primary: #0f172a;
-  --color-bg-secondary: #1e293b;
-  --color-bg-tertiary: #334155;
-  --color-bg-input: #1e293b;
-  --color-text-primary: #f1f5f9;
-  --color-text-secondary: #94a3b8;
-  --color-text-muted: #64748b;
-  --color-accent: #a78bfa;
-  --color-accent-hover: #8b5cf6;
-  --color-success: #22c55e;
-  --color-warning: #eab308;
-  --color-error: #ef4444;
-  --color-border: #334155;
-  --color-user-message-bg: #2e1065;
-  --color-code-block-bg: #0f172a;
-  --color-tool-card-bg: #1e293b;
+  /* Background */
+  --color-bg-primary: #0B0F1A;
+  --color-bg-secondary: #111827;
+  --color-bg-tertiary: #1F2937;
+  --color-bg-input: #1F2937;
+  --color-bg-elevated: #1F2937;
+
+  /* Text */
+  --color-text-primary: #F1F5F9;
+  --color-text-secondary: #94A3B8;
+  --color-text-muted: #64748B;
+  --color-text-inverse: #0F172A;
+
+  /* Accent (Indigo) */
+  --color-accent: #818CF8;
+  --color-accent-hover: #6366F1;
+  --color-accent-soft: rgba(99, 102, 241, 0.12);
+  --color-accent-muted: rgba(99, 102, 241, 0.24);
+
+  /* Semantic */
+  --color-success: #22C55E;
+  --color-success-soft: rgba(34, 197, 94, 0.12);
+  --color-warning: #EAB308;
+  --color-warning-soft: rgba(234, 179, 8, 0.12);
+  --color-error: #EF4444;
+  --color-error-soft: rgba(239, 68, 68, 0.12);
+
+  /* Borders */
+  --color-border: #1F2937;
+  --color-border-subtle: #1F2937;
+  --color-border-focus: #818CF8;
+
+  /* Message */
+  --color-user-msg-bg: rgba(99, 102, 241, 0.12);
+  --color-user-msg-border: rgba(99, 102, 241, 0.24);
+
+  /* Code */
+  --color-code-bg: #0B0F1A;
+  --color-code-header-bg: #111827;
+
+  /* Tool card */
+  --color-tool-card-bg: #111827;
+
+  /* Shadows (stronger for dark) */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+  --shadow-input: 0 1px 3px 0 rgba(0, 0, 0, 0.2), 0 1px 2px -1px rgba(0, 0, 0, 0.2);
 }
+
+/* ============================================
+   Animations
+   ============================================ */
+
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.cursor-blink {
+  animation: cursor-blink 1s step-end infinite;
+}
+
+/* ============================================
+   Base styles
+   ============================================ */
 
 * {
   box-sizing: border-box;

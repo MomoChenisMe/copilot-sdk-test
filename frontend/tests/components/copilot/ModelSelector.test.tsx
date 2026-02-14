@@ -56,12 +56,13 @@ describe('ModelSelector', () => {
     expect(screen.queryByText('Claude Sonnet 4.5')).toBeNull();
   });
 
-  it('highlights the current model in the dropdown', () => {
+  it('highlights the current model with accent styles', () => {
     render(<ModelSelector {...defaultProps} />);
     fireEvent.click(screen.getByText('GPT-4o'));
-    // Find all model buttons in the dropdown
     const modelButtons = screen.getAllByRole('button');
-    const currentModelButton = modelButtons.find((b) => b.textContent === 'GPT-4o' && b.className.includes('text-accent'));
+    const currentModelButton = modelButtons.find(
+      (b) => b.textContent === 'GPT-4o' && b.className.includes('text-accent') && b.className.includes('bg-accent-soft')
+    );
     expect(currentModelButton).toBeTruthy();
   });
 
@@ -76,8 +77,6 @@ describe('ModelSelector', () => {
     render(<ModelSelector {...defaultProps} />);
     expect(screen.getByText('Error')).toBeTruthy();
   });
-
-  // --- Task 4: ModelSelector improvements ---
 
   it('dropdown has max-h-60 overflow-y-auto for scrollable list', () => {
     const { container } = render(<ModelSelector {...defaultProps} />);
@@ -101,6 +100,13 @@ describe('ModelSelector', () => {
     expect(screen.getByText('GitHub Copilot Models')).toBeTruthy();
   });
 
+  it('trigger button has pill style (bg-bg-tertiary rounded-lg)', () => {
+    render(<ModelSelector {...defaultProps} />);
+    const trigger = screen.getByRole('button', { name: /GPT-4o/i });
+    expect(trigger.className).toContain('bg-bg-tertiary');
+    expect(trigger.className).toContain('rounded-lg');
+  });
+
   it('trigger button has truncate and max-w-40', () => {
     render(<ModelSelector {...defaultProps} />);
     const trigger = screen.getByRole('button', { name: /GPT-4o/i });
@@ -113,18 +119,17 @@ describe('ModelSelector', () => {
     fireEvent.click(screen.getByText('GPT-4o'));
     const dropdown = container.querySelector('[data-testid="model-dropdown"]');
     const items = dropdown?.querySelectorAll('button');
-    // Each model button should have title and truncate
     items?.forEach((item) => {
       expect(item.className).toContain('truncate');
       expect(item.getAttribute('title')).toBeTruthy();
     });
   });
 
-  it('dropdown is positioned right-0', () => {
+  it('dropdown has rounded-xl shadow style', () => {
     const { container } = render(<ModelSelector {...defaultProps} />);
     fireEvent.click(screen.getByText('GPT-4o'));
     const dropdown = container.querySelector('[data-testid="model-dropdown"]');
-    expect(dropdown?.className).toContain('right-0');
+    expect(dropdown?.className).toContain('rounded-xl');
   });
 
   it('closes dropdown on click outside', () => {
@@ -134,11 +139,8 @@ describe('ModelSelector', () => {
         <ModelSelector {...defaultProps} />
       </div>
     );
-    // Open dropdown
     fireEvent.click(screen.getByText('GPT-4o'));
     expect(screen.getByText('Claude Sonnet 4.5')).toBeTruthy();
-
-    // Click outside
     fireEvent.mouseDown(screen.getByTestId('outside'));
     expect(screen.queryByText('Claude Sonnet 4.5')).toBeNull();
   });
