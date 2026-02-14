@@ -5,10 +5,11 @@ import { TopBar } from '../../../src/components/layout/TopBar';
 describe('TopBar', () => {
   const defaultProps = {
     title: 'Test Conversation',
-    cwd: '/home/user',
+    modelName: 'GPT-4o',
     status: 'connected' as const,
+    theme: 'light' as const,
     onMenuClick: vi.fn(),
-    onCwdChange: vi.fn(),
+    onThemeToggle: vi.fn(),
   };
 
   it('renders the conversation title', () => {
@@ -16,9 +17,15 @@ describe('TopBar', () => {
     expect(screen.getByText('Test Conversation')).toBeTruthy();
   });
 
-  it('renders the current working directory', () => {
-    render(<TopBar {...defaultProps} />);
-    expect(screen.getByText('/home/user')).toBeTruthy();
+  it('renders model name below the title', () => {
+    render(<TopBar {...defaultProps} modelName="Claude Sonnet 4.5" />);
+    expect(screen.getByText('Claude Sonnet 4.5')).toBeTruthy();
+  });
+
+  it('shows "AI Terminal" when no active conversation', () => {
+    render(<TopBar {...defaultProps} title="AI Terminal" modelName="" />);
+    expect(screen.getByText('AI Terminal')).toBeTruthy();
+    expect(screen.queryByText('GPT-4o')).toBeNull();
   });
 
   it('calls onMenuClick when hamburger is clicked', () => {
@@ -29,54 +36,39 @@ describe('TopBar', () => {
     expect(onMenuClick).toHaveBeenCalledTimes(1);
   });
 
-  it('renders connection badge', () => {
+  it('renders connection badge with connected status', () => {
     render(<TopBar {...defaultProps} status="connected" />);
     expect(screen.getByTitle('已連線')).toBeTruthy();
   });
 
-  it('shows connecting status', () => {
+  it('renders connection badge with connecting status', () => {
     render(<TopBar {...defaultProps} status="connecting" />);
     expect(screen.getByTitle('連線中')).toBeTruthy();
   });
 
-  it('shows disconnected status', () => {
+  it('renders connection badge with disconnected status', () => {
     render(<TopBar {...defaultProps} status="disconnected" />);
     expect(screen.getByTitle('已斷線')).toBeTruthy();
   });
 
-  it('allows editing cwd when clicking the cwd display', () => {
-    const onCwdChange = vi.fn();
-    render(<TopBar {...defaultProps} onCwdChange={onCwdChange} />);
-
-    // Click on cwd to enter edit mode
-    const cwdDisplay = screen.getByText('/home/user');
-    fireEvent.click(cwdDisplay);
-
-    // Should show an input
-    const input = screen.getByRole('textbox');
-    expect(input).toBeTruthy();
-    expect((input as HTMLInputElement).value).toBe('/home/user');
-
-    // Change value and submit
-    fireEvent.change(input, { target: { value: '/tmp' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-    expect(onCwdChange).toHaveBeenCalledWith('/tmp');
+  it('renders theme toggle button', () => {
+    render(<TopBar {...defaultProps} />);
+    const themeButton = screen.getByRole('button', { name: /theme/i });
+    expect(themeButton).toBeTruthy();
   });
 
-  it('cancels cwd edit on Escape', () => {
-    const onCwdChange = vi.fn();
-    render(<TopBar {...defaultProps} onCwdChange={onCwdChange} />);
+  it('calls onThemeToggle when theme button is clicked', () => {
+    const onThemeToggle = vi.fn();
+    render(<TopBar {...defaultProps} onThemeToggle={onThemeToggle} />);
+    const themeButton = screen.getByRole('button', { name: /theme/i });
+    fireEvent.click(themeButton);
+    expect(onThemeToggle).toHaveBeenCalledTimes(1);
+  });
 
-    const cwdDisplay = screen.getByText('/home/user');
-    fireEvent.click(cwdDisplay);
-
-    const input = screen.getByRole('textbox');
-    fireEvent.change(input, { target: { value: '/tmp' } });
-    fireEvent.keyDown(input, { key: 'Escape' });
-
-    // Should not call onCwdChange
-    expect(onCwdChange).not.toHaveBeenCalled();
-    // Should show original cwd again
-    expect(screen.getByText('/home/user')).toBeTruthy();
+  it('does not show model name when modelName is empty', () => {
+    render(<TopBar {...defaultProps} modelName="" />);
+    // Model name area should not render if empty
+    const modelElement = screen.queryByTestId('model-name');
+    expect(modelElement).toBeNull();
   });
 });

@@ -22,16 +22,33 @@ describe('BottomBar', () => {
     onModelChange: vi.fn(),
   };
 
-  it('renders Copilot and Terminal tabs', () => {
+  it('renders Copilot and Terminal pill tabs', () => {
     render(<BottomBar {...defaultProps} />);
     expect(screen.getByText('Copilot')).toBeTruthy();
     expect(screen.getByText('Terminal')).toBeTruthy();
   });
 
-  it('highlights the active tab', () => {
+  it('renders pill tabs and ModelSelector on the same line', () => {
+    const { container } = render(<BottomBar {...defaultProps} />);
+    // The pill container and model selector should be in the same flex row
+    const tabRow = container.querySelector('[data-testid="tab-row"]');
+    expect(tabRow).toBeTruthy();
+    // Both pills and model selector should be children of the same row
+    expect(tabRow?.querySelector('[data-testid="model-selector"]')).toBeTruthy();
+  });
+
+  it('highlights the active pill tab with accent styling', () => {
     render(<BottomBar {...defaultProps} activeTab="copilot" />);
     const copilotTab = screen.getByText('Copilot').closest('button');
-    expect(copilotTab?.className).toContain('text-accent');
+    // Active pill should have accent background
+    expect(copilotTab?.className).toContain('bg-accent');
+    expect(copilotTab?.className).toContain('text-white');
+  });
+
+  it('renders inactive pill with muted styling', () => {
+    render(<BottomBar {...defaultProps} activeTab="copilot" />);
+    const terminalTab = screen.getByText('Terminal').closest('button');
+    expect(terminalTab?.className).toContain('text-text-muted');
   });
 
   it('calls onTabChange when clicking a tab', () => {
@@ -43,18 +60,18 @@ describe('BottomBar', () => {
 
   it('shows the input area when copilot tab is active', () => {
     render(<BottomBar {...defaultProps} activeTab="copilot" />);
-    expect(screen.getByPlaceholderText('Send a message...')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Message AI Terminal...')).toBeTruthy();
   });
 
   it('hides the input area when terminal tab is active', () => {
     render(<BottomBar {...defaultProps} activeTab="terminal" />);
-    expect(screen.queryByPlaceholderText('Send a message...')).toBeNull();
+    expect(screen.queryByPlaceholderText('Message AI Terminal...')).toBeNull();
   });
 
   it('calls onSend when Enter is pressed', () => {
     const onSend = vi.fn();
     render(<BottomBar {...defaultProps} onSend={onSend} />);
-    const textarea = screen.getByPlaceholderText('Send a message...');
+    const textarea = screen.getByPlaceholderText('Message AI Terminal...');
     fireEvent.change(textarea, { target: { value: 'hello' } });
     fireEvent.keyDown(textarea, { key: 'Enter' });
     expect(onSend).toHaveBeenCalledWith('hello');
@@ -74,7 +91,7 @@ describe('BottomBar', () => {
 
   it('disables input when disabled prop is true', () => {
     render(<BottomBar {...defaultProps} disabled={true} />);
-    const textarea = screen.getByPlaceholderText('Send a message...');
+    const textarea = screen.getByPlaceholderText('Message AI Terminal...');
     expect(textarea).toBeDisabled();
   });
 

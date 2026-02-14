@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useAppStore } from '../store';
 import type { WsMessage } from '../lib/ws-types';
 
@@ -19,6 +19,9 @@ export function useCopilot({ subscribe, send }: UseCopilotOptions) {
     addMessage,
   } = useAppStore();
 
+  // Track whether we received a copilot:message during the current streaming cycle
+  const receivedMessageRef = useRef(false);
+
   useEffect(() => {
     const unsub = subscribe((msg) => {
       const data = (msg.data ?? {}) as Record<string, unknown>;
@@ -30,6 +33,7 @@ export function useCopilot({ subscribe, send }: UseCopilotOptions) {
           break;
 
         case 'copilot:message':
+          receivedMessageRef.current = true;
           addMessage({
             id: (data.messageId as string) || crypto.randomUUID(),
             conversationId: '',
@@ -61,9 +65,27 @@ export function useCopilot({ subscribe, send }: UseCopilotOptions) {
           appendReasoningText(data.content as string);
           break;
 
-        case 'copilot:idle':
+        case 'copilot:idle': {
+          // If SDK didn't send copilot:message but we have accumulated streamingText,
+          // convert it to a permanent message
+          if (!receivedMessageRef.current) {
+            const text = useAppStore.getState().streamingText;
+            if (text) {
+              addMessage({
+                id: crypto.randomUUID(),
+                conversationId: '',
+                role: 'assistant',
+                content: text,
+                metadata: null,
+                createdAt: new Date().toISOString(),
+              });
+            }
+          }
           setIsStreaming(false);
+          clearStreaming();
+          receivedMessageRef.current = false;
           break;
+        }
 
         case 'copilot:error':
           setCopilotError(data.message as string);
@@ -89,6 +111,7 @@ export function useCopilot({ subscribe, send }: UseCopilotOptions) {
     (conversationId: string, prompt: string) => {
       clearStreaming();
       setIsStreaming(true);
+      receivedMessageRef.current = false;
 
       // Add user message to local state
       addMessage({

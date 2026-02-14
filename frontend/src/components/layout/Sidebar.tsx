@@ -14,6 +14,20 @@ interface SidebarProps {
   onSearch: (query: string) => Promise<SearchResult[]>;
 }
 
+function formatTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return 'just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `${diffH}h ago`;
+  const diffD = Math.floor(diffH / 24);
+  if (diffD < 7) return `${diffD}d ago`;
+  return date.toLocaleDateString();
+}
+
 export function Sidebar({
   open,
   onClose,
@@ -53,6 +67,79 @@ export function Sidebar({
     setEditingId(null);
   };
 
+  const pinnedConversations = conversations.filter((c) => c.pinned);
+  const recentConversations = conversations.filter((c) => !c.pinned);
+
+  const renderConversationItem = (conv: Conversation) => {
+    const isActive = conv.id === activeConversationId;
+    return (
+      <div
+        key={conv.id}
+        data-active={isActive}
+        className={`group flex items-center px-4 py-3 cursor-pointer hover:bg-bg-tertiary transition-colors ${
+          isActive ? 'bg-bg-tertiary border-l-2 border-accent' : ''
+        }`}
+        onClick={() => onSelect(conv.id)}
+      >
+        {/* Title + time */}
+        <div className="flex-1 min-w-0">
+          {editingId === conv.id ? (
+            <input
+              type="text"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitRename();
+                if (e.key === 'Escape') setEditingId(null);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full bg-bg-input text-text-primary text-sm px-1 py-0.5 rounded border border-accent focus:outline-none"
+              autoFocus
+            />
+          ) : (
+            <p className="text-text-primary text-sm truncate">{conv.title}</p>
+          )}
+          <p className="text-text-muted text-xs mt-0.5">{formatTime(conv.updatedAt)}</p>
+        </div>
+
+        {/* Actions (visible on hover) */}
+        <div className="hidden group-hover:flex items-center gap-1 ml-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              startRename(conv);
+            }}
+            className="text-text-muted hover:text-text-primary text-xs p-1"
+            title="Rename"
+          >
+            ✎
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onPin(conv.id, !conv.pinned);
+            }}
+            className="text-text-muted hover:text-warning text-xs p-1"
+            title={conv.pinned ? 'Unpin' : 'Pin'}
+          >
+            {conv.pinned ? '★' : '☆'}
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(conv.id);
+            }}
+            className="text-text-muted hover:text-error text-xs p-1"
+            title="Delete"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <>
       {/* Backdrop */}
@@ -60,11 +147,13 @@ export function Sidebar({
         <div
           className="fixed inset-0 bg-black/50 z-40"
           onClick={onClose}
+          data-testid="sidebar-backdrop"
         />
       )}
 
       {/* Sidebar panel */}
       <div
+        data-testid="sidebar-panel"
         className={`fixed top-0 left-0 h-full w-72 bg-bg-secondary z-50 flex flex-col transition-transform duration-200 ${
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
@@ -119,79 +208,29 @@ export function Sidebar({
               ))
             )
           ) : (
-            // Conversation list view
-            conversations.map((conv) => (
-              <div
-                key={conv.id}
-                className={`group flex items-center px-4 py-3 border-b border-border cursor-pointer hover:bg-bg-tertiary transition-colors ${
-                  conv.id === activeConversationId ? 'bg-bg-tertiary' : ''
-                }`}
-                onClick={() => onSelect(conv.id)}
-              >
-                {/* Pin indicator */}
-                {conv.pinned && (
-                  <span className="text-warning text-xs mr-2" title="Pinned">
-                    ★
-                  </span>
+            <>
+              {/* Pinned section */}
+              {pinnedConversations.length > 0 && (
+                <div>
+                  <p className="px-4 py-2 text-xs font-semibold text-text-muted uppercase tracking-wider">
+                    Pinned
+                  </p>
+                  {pinnedConversations.map(renderConversationItem)}
+                </div>
+              )}
+
+              {/* Recent section */}
+              <div>
+                <p className="px-4 py-2 text-xs font-semibold text-text-muted uppercase tracking-wider">
+                  Recent
+                </p>
+                {recentConversations.length > 0 ? (
+                  recentConversations.map(renderConversationItem)
+                ) : (
+                  <p className="px-4 py-3 text-text-muted text-sm">No conversations yet</p>
                 )}
-
-                {/* Title */}
-                <div className="flex-1 min-w-0">
-                  {editingId === conv.id ? (
-                    <input
-                      type="text"
-                      value={editTitle}
-                      onChange={(e) => setEditTitle(e.target.value)}
-                      onBlur={commitRename}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') commitRename();
-                        if (e.key === 'Escape') setEditingId(null);
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      className="w-full bg-bg-input text-text-primary text-sm px-1 py-0.5 rounded border border-accent focus:outline-none"
-                      autoFocus
-                    />
-                  ) : (
-                    <p className="text-text-primary text-sm truncate">{conv.title}</p>
-                  )}
-                  <p className="text-text-muted text-xs mt-0.5">{conv.model}</p>
-                </div>
-
-                {/* Actions (visible on hover) */}
-                <div className="hidden group-hover:flex items-center gap-1 ml-2">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      startRename(conv);
-                    }}
-                    className="text-text-muted hover:text-text-primary text-xs p-1"
-                    title="Rename"
-                  >
-                    ✎
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onPin(conv.id, !conv.pinned);
-                    }}
-                    className="text-text-muted hover:text-warning text-xs p-1"
-                    title={conv.pinned ? 'Unpin' : 'Pin'}
-                  >
-                    {conv.pinned ? '★' : '☆'}
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete(conv.id);
-                    }}
-                    className="text-text-muted hover:text-error text-xs p-1"
-                    title="Delete"
-                  >
-                    ✕
-                  </button>
-                </div>
               </div>
-            ))
+            </>
           )}
         </div>
       </div>

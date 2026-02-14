@@ -1,49 +1,18 @@
-import { useState, useCallback } from 'react';
+import { Sun, Moon, Menu } from 'lucide-react';
 import type { WsStatus } from '../../lib/ws-types';
+import type { Theme } from '../../store';
 import { ConnectionBadge } from '../shared/ConnectionBadge';
 
 interface TopBarProps {
   title: string;
-  cwd: string;
+  modelName: string;
   status: WsStatus;
+  theme: Theme;
   onMenuClick: () => void;
-  onCwdChange: (cwd: string) => void;
+  onThemeToggle: () => void;
 }
 
-export function TopBar({ title, cwd, status, onMenuClick, onCwdChange }: TopBarProps) {
-  const [editingCwd, setEditingCwd] = useState(false);
-  const [cwdValue, setCwdValue] = useState(cwd);
-
-  const startEdit = useCallback(() => {
-    setCwdValue(cwd);
-    setEditingCwd(true);
-  }, [cwd]);
-
-  const commitEdit = useCallback(() => {
-    const trimmed = cwdValue.trim();
-    if (trimmed && trimmed !== cwd) {
-      onCwdChange(trimmed);
-    }
-    setEditingCwd(false);
-  }, [cwdValue, cwd, onCwdChange]);
-
-  const cancelEdit = useCallback(() => {
-    setEditingCwd(false);
-  }, []);
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        commitEdit();
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        cancelEdit();
-      }
-    },
-    [commitEdit, cancelEdit],
-  );
-
+export function TopBar({ title, modelName, status, theme, onMenuClick, onThemeToggle }: TopBarProps) {
   return (
     <header className="flex items-center gap-3 px-3 py-2 bg-bg-secondary border-b border-border shrink-0">
       {/* Hamburger menu */}
@@ -52,38 +21,33 @@ export function TopBar({ title, cwd, status, onMenuClick, onCwdChange }: TopBarP
         className="p-1.5 rounded hover:bg-bg-tertiary transition-colors text-text-secondary"
         aria-label="menu"
       >
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
-          <line x1="3" y1="5" x2="17" y2="5" />
-          <line x1="3" y1="10" x2="17" y2="10" />
-          <line x1="3" y1="15" x2="17" y2="15" />
-        </svg>
+        <Menu size={20} />
       </button>
 
-      {/* Title + CWD */}
+      {/* Title + Model name */}
       <div className="flex-1 min-w-0">
         <h1 className="text-sm font-semibold text-text-primary truncate">{title}</h1>
-        {editingCwd ? (
-          <input
-            type="text"
-            value={cwdValue}
-            onChange={(e) => setCwdValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onBlur={commitEdit}
-            className="w-full text-xs text-text-muted bg-bg-input px-1 py-0.5 rounded border border-accent focus:outline-none font-mono"
-            autoFocus
-          />
-        ) : (
-          <p
-            className="text-xs text-text-muted font-mono truncate cursor-pointer hover:text-text-secondary"
-            onClick={startEdit}
-          >
-            {cwd}
+        {modelName && (
+          <p className="text-xs text-text-muted truncate" data-testid="model-name">
+            {modelName}
           </p>
         )}
       </div>
 
-      {/* Connection badge */}
-      <ConnectionBadge status={status} />
+      {/* Right actions */}
+      <div className="flex items-center gap-2">
+        {/* Theme toggle */}
+        <button
+          onClick={onThemeToggle}
+          className="p-1.5 rounded hover:bg-bg-tertiary transition-colors text-text-secondary"
+          aria-label="toggle theme"
+        >
+          {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+        </button>
+
+        {/* Connection badge */}
+        <ConnectionBadge status={status} />
+      </div>
     </header>
   );
 }

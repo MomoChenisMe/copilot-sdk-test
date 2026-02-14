@@ -10,37 +10,37 @@ export function ToolRecord({ record }: ToolRecordProps) {
 
   const statusIcon =
     record.status === 'running' ? (
-      <span className="inline-block w-3 h-3 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+      <span className="inline-block w-3 h-3 border-2 border-success border-t-transparent rounded-full animate-spin" />
     ) : record.status === 'success' ? (
-      <span className="text-success">✓</span>
+      <span className="text-success text-sm">✓</span>
     ) : (
-      <span className="text-error">✗</span>
+      <span className="text-error text-sm">✗</span>
     );
 
   return (
-    <div className="my-2 rounded border border-border bg-bg-input">
+    <div className="my-2 rounded-lg bg-tool-card-bg border border-border/50">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-bg-tertiary transition-colors"
+        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-bg-tertiary/50 transition-colors rounded-lg"
       >
         {statusIcon}
-        <span className="text-text-secondary font-mono text-xs">{record.toolName}</span>
+        <span className="text-text-primary font-mono text-xs font-semibold">{record.toolName}</span>
         <span className="ml-auto text-text-muted text-xs">{expanded ? '▼' : '▶'}</span>
       </button>
       {expanded && (
         <div className="px-3 pb-3 text-xs font-mono">
           {record.arguments != null && (
             <div className="mb-2">
-              <p className="text-text-muted mb-1">Arguments:</p>
-              <pre className="bg-bg-primary p-2 rounded text-text-secondary overflow-x-auto">
+              <p className="text-text-muted mb-1 font-sans">Arguments</p>
+              <pre className="bg-code-block-bg p-2 rounded text-text-secondary overflow-x-auto">
                 {JSON.stringify(record.arguments, null, 2)}
               </pre>
             </div>
           )}
           {record.result != null && (
-            <div>
-              <p className="text-text-muted mb-1">Result:</p>
-              <pre className="bg-bg-primary p-2 rounded text-text-secondary overflow-x-auto max-h-48 overflow-y-auto">
+            <div className="mb-2">
+              <p className="text-text-muted mb-1 font-sans">Result</p>
+              <pre className="bg-code-block-bg p-2 rounded text-text-secondary overflow-x-auto max-h-48 overflow-y-auto">
                 {typeof record.result === 'string'
                   ? record.result
                   : JSON.stringify(record.result, null, 2)}
@@ -49,8 +49,8 @@ export function ToolRecord({ record }: ToolRecordProps) {
           )}
           {record.error && (
             <div>
-              <p className="text-text-muted mb-1">Error:</p>
-              <pre className="bg-bg-primary p-2 rounded text-error overflow-x-auto">
+              <p className="text-text-muted mb-1 font-sans">Error</p>
+              <pre className="bg-code-block-bg p-2 rounded text-error overflow-x-auto">
                 {record.error}
               </pre>
             </div>

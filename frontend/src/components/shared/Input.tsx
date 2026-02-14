@@ -15,8 +15,9 @@ export function Input({ onSend, onAbort, isStreaming, disabled }: InputProps) {
     const el = textareaRef.current;
     if (el) {
       el.style.height = 'auto';
+      const minHeight = 72; // ~3 rows
       const maxHeight = window.innerHeight / 3;
-      el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
+      el.style.height = `${Math.max(minHeight, Math.min(el.scrollHeight, maxHeight))}px`;
     }
   }, []);
 
@@ -39,22 +40,22 @@ export function Input({ onSend, onAbort, isStreaming, disabled }: InputProps) {
   };
 
   return (
-    <div className="flex items-end gap-2 p-3 bg-bg-secondary border-t border-border">
+    <div className="flex items-end gap-2 px-3 pb-3 pt-1">
       <textarea
         ref={textareaRef}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Send a message..."
+        placeholder="Message AI Terminal..."
         disabled={disabled}
-        rows={1}
-        className="flex-1 resize-none bg-bg-input text-text-primary px-3 py-2 rounded border border-border text-sm placeholder:text-text-muted focus:outline-none focus:border-accent overflow-y-auto"
+        rows={3}
+        className="flex-1 resize-none bg-bg-input text-text-primary px-4 py-3 rounded-xl border border-border text-sm placeholder:text-text-muted focus:outline-none focus:border-accent overflow-y-auto transition-colors"
         style={{ maxHeight: `${window.innerHeight / 3}px` }}
       />
       {isStreaming ? (
         <button
           onClick={onAbort}
-          className="px-4 py-2 bg-error text-white rounded text-sm font-medium hover:bg-red-600 transition-colors shrink-0"
+          className="px-4 py-2.5 bg-error text-white rounded-xl text-sm font-medium hover:bg-red-600 transition-colors shrink-0"
         >
           Stop
         </button>
@@ -62,7 +63,7 @@ export function Input({ onSend, onAbort, isStreaming, disabled }: InputProps) {
         <button
           onClick={handleSend}
           disabled={!text.trim() || disabled}
-          className="px-4 py-2 bg-accent text-white rounded text-sm font-medium hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+          className="px-4 py-2.5 bg-accent text-white rounded-xl text-sm font-medium hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
         >
           Send
         </button>

@@ -8,26 +8,27 @@ interface MessageBlockProps {
 export function MessageBlock({ message }: MessageBlockProps) {
   const isUser = message.role === 'user';
 
-  return (
-    <div className={`py-4 px-4 ${isUser ? 'bg-bg-primary' : 'bg-bg-secondary'}`}>
-      <div className="max-w-3xl mx-auto">
-        {/* Role label */}
-        <div className="flex items-center gap-2 mb-2">
-          <span
-            className={`text-xs font-semibold uppercase ${
-              isUser ? 'text-accent' : 'text-success'
-            }`}
-          >
-            {isUser ? 'You' : 'Assistant'}
-          </span>
+  if (isUser) {
+    return (
+      <div className="flex justify-end mb-4">
+        <div
+          data-testid="user-bubble"
+          className="max-w-[80%] bg-user-message-bg rounded-2xl rounded-br-md px-4 py-3"
+        >
+          <p className="text-text-primary whitespace-pre-wrap text-sm">{message.content}</p>
         </div>
+      </div>
+    );
+  }
 
-        {/* Content */}
-        {isUser ? (
-          <p className="text-text-primary whitespace-pre-wrap">{message.content}</p>
-        ) : (
-          <Markdown content={message.content} />
-        )}
+  // Assistant message
+  return (
+    <div className="mb-4">
+      <span className="text-xs font-semibold uppercase text-text-muted mb-1 block">
+        Assistant
+      </span>
+      <div className="prose-container">
+        <Markdown content={message.content} />
       </div>
     </div>
   );

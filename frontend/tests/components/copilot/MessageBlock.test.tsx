@@ -1,0 +1,72 @@
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { MessageBlock } from '../../../src/components/copilot/MessageBlock';
+import type { Message } from '../../../src/lib/api';
+
+// Mock Markdown component
+vi.mock('../../../src/components/shared/Markdown', () => ({
+  Markdown: ({ content }: { content: string }) => (
+    <div data-testid="markdown">{content}</div>
+  ),
+}));
+
+const makeMessage = (overrides: Partial<Message> = {}): Message => ({
+  id: 'msg-1',
+  conversationId: 'conv-1',
+  role: 'user',
+  content: 'Hello world',
+  metadata: null,
+  createdAt: '2025-01-01T00:00:00Z',
+  ...overrides,
+});
+
+describe('MessageBlock', () => {
+  it('renders user message with right-aligned styling', () => {
+    const { container } = render(<MessageBlock message={makeMessage({ role: 'user' })} />);
+    // User messages should have flex justify-end
+    const wrapper = container.firstChild as HTMLElement;
+    expect(wrapper.className).toContain('justify-end');
+  });
+
+  it('renders user message as plain text (not Markdown)', () => {
+    render(<MessageBlock message={makeMessage({ role: 'user', content: 'Plain text' })} />);
+    expect(screen.getByText('Plain text')).toBeTruthy();
+    expect(screen.queryByTestId('markdown')).toBeNull();
+  });
+
+  it('renders user message with rounded background', () => {
+    const { container } = render(<MessageBlock message={makeMessage({ role: 'user' })} />);
+    const bubble = container.querySelector('[data-testid="user-bubble"]');
+    expect(bubble).toBeTruthy();
+    expect(bubble?.className).toContain('rounded');
+    expect(bubble?.className).toContain('bg-user-message-bg');
+  });
+
+  it('renders assistant message left-aligned', () => {
+    const { container } = render(
+      <MessageBlock message={makeMessage({ role: 'assistant', content: '# Hello' })} />
+    );
+    const wrapper = container.firstChild as HTMLElement;
+    expect(wrapper.className).not.toContain('justify-end');
+  });
+
+  it('renders assistant message with Markdown', () => {
+    render(
+      <MessageBlock message={makeMessage({ role: 'assistant', content: '# Title' })} />
+    );
+    expect(screen.getByTestId('markdown')).toBeTruthy();
+  });
+
+  it('renders assistant label for assistant messages', () => {
+    render(
+      <MessageBlock message={makeMessage({ role: 'assistant', content: 'Hi' })} />
+    );
+    expect(screen.getByText('Assistant')).toBeTruthy();
+  });
+
+  it('does not render label for user messages', () => {
+    render(<MessageBlock message={makeMessage({ role: 'user' })} />);
+    expect(screen.queryByText('Assistant')).toBeNull();
+    expect(screen.queryByText('You')).toBeNull();
+  });
+});

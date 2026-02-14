@@ -26,43 +26,46 @@ export function BottomBar({
 }: BottomBarProps) {
   return (
     <div className="shrink-0 bg-bg-secondary border-t border-border">
-      {/* Tab bar */}
-      <div className="flex border-b border-border">
-        <button
-          onClick={() => onTabChange('copilot')}
-          className={`flex-1 py-2 text-sm font-medium transition-colors ${
-            activeTab === 'copilot'
-              ? 'text-accent border-b-2 border-accent'
-              : 'text-text-muted hover:text-text-secondary'
-          }`}
-        >
-          Copilot
-        </button>
-        <button
-          onClick={() => onTabChange('terminal')}
-          className={`flex-1 py-2 text-sm font-medium transition-colors ${
-            activeTab === 'terminal'
-              ? 'text-accent border-b-2 border-accent'
-              : 'text-text-muted hover:text-text-secondary'
-          }`}
-        >
-          Terminal
-        </button>
+      {/* Tab row: pill tabs + model selector on same line */}
+      <div className="flex items-center justify-between px-3 py-2" data-testid="tab-row">
+        {/* Pill tabs */}
+        <div className="flex items-center bg-bg-tertiary rounded-full p-0.5">
+          <button
+            onClick={() => onTabChange('copilot')}
+            className={`px-3 py-1 text-sm font-medium rounded-full transition-colors ${
+              activeTab === 'copilot'
+                ? 'bg-accent text-white'
+                : 'text-text-muted hover:text-text-secondary'
+            }`}
+          >
+            Copilot
+          </button>
+          <button
+            onClick={() => onTabChange('terminal')}
+            className={`px-3 py-1 text-sm font-medium rounded-full transition-colors ${
+              activeTab === 'terminal'
+                ? 'bg-accent text-white'
+                : 'text-text-muted hover:text-text-secondary'
+            }`}
+          >
+            Terminal
+          </button>
+        </div>
+
+        {/* Model selector (only in copilot tab) */}
+        {activeTab === 'copilot' && (
+          <ModelSelector currentModel={currentModel} onSelect={onModelChange} />
+        )}
       </div>
 
       {/* Input area (only for copilot tab) */}
       {activeTab === 'copilot' && (
-        <div>
-          <div className="flex items-center px-3 pt-2">
-            <ModelSelector currentModel={currentModel} onSelect={onModelChange} />
-          </div>
-          <Input
-            onSend={onSend}
-            onAbort={onAbort}
-            isStreaming={isStreaming}
-            disabled={disabled}
-          />
-        </div>
+        <Input
+          onSend={onSend}
+          onAbort={onAbort}
+          isStreaming={isStreaming}
+          disabled={disabled}
+        />
       )}
     </div>
   );

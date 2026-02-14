@@ -169,4 +169,64 @@ describe('EventRelay', () => {
       data: { errorType: 'api_error', message: 'Rate limit exceeded' },
     });
   });
+
+  // --- Defensive fallback chain tests ---
+
+  it('should fallback to delta/content when deltaContent is missing on message_delta', () => {
+    const { send, handlers } = setup();
+
+    handlers.get('assistant.message_delta')!({
+      type: 'assistant.message_delta',
+      messageId: 'msg-2',
+      delta: 'Fallback delta',
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      type: 'copilot:delta',
+      data: { messageId: 'msg-2', content: 'Fallback delta' },
+    });
+  });
+
+  it('should fallback to content when deltaContent is missing on reasoning_delta', () => {
+    const { send, handlers } = setup();
+
+    handlers.get('assistant.reasoning_delta')!({
+      type: 'assistant.reasoning_delta',
+      reasoningId: 'r-2',
+      content: 'Reasoning fallback',
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      type: 'copilot:reasoning_delta',
+      data: { reasoningId: 'r-2', content: 'Reasoning fallback' },
+    });
+  });
+
+  it('should default to empty string when all content properties are missing', () => {
+    const { send, handlers } = setup();
+
+    handlers.get('assistant.message_delta')!({
+      type: 'assistant.message_delta',
+      messageId: 'msg-3',
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      type: 'copilot:delta',
+      data: { messageId: 'msg-3', content: '' },
+    });
+  });
+
+  it('should fallback error message when message is missing on session.error', () => {
+    const { send, handlers } = setup();
+
+    handlers.get('session.error')!({
+      type: 'session.error',
+      errorType: 'unknown_error',
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      type: 'copilot:error',
+      data: { errorType: 'unknown_error', message: 'Unknown error' },
+    });
+  });
 });

@@ -10,7 +10,27 @@ export interface ToolRecord {
   error?: string;
 }
 
+export type Theme = 'light' | 'dark';
+
+export interface ModelInfo {
+  id: string;
+  name: string;
+}
+
 export interface AppState {
+  // Theme
+  theme: Theme;
+  toggleTheme: () => void;
+  getInitialTheme: () => Theme;
+
+  // Models
+  models: ModelInfo[];
+  modelsLoading: boolean;
+  modelsError: string | null;
+  setModels: (models: ModelInfo[]) => void;
+  setModelsLoading: (loading: boolean) => void;
+  setModelsError: (error: string | null) => void;
+
   // Conversations
   conversations: Conversation[];
   activeConversationId: string | null;
@@ -59,7 +79,34 @@ export interface AppState {
   setCopilotError: (error: string | null) => void;
 }
 
-export const useAppStore = create<AppState>((set) => ({
+function readThemeFromStorage(): Theme {
+  try {
+    const stored = localStorage.getItem('theme');
+    if (stored === 'light' || stored === 'dark') return stored;
+  } catch {
+    // localStorage may be unavailable
+  }
+  return 'light';
+}
+
+export const useAppStore = create<AppState>((set, get) => ({
+  // Theme state
+  theme: 'light',
+  toggleTheme: () => {
+    const next = get().theme === 'light' ? 'dark' : 'light';
+    try { localStorage.setItem('theme', next); } catch { /* noop */ }
+    set({ theme: next });
+  },
+  getInitialTheme: () => readThemeFromStorage(),
+
+  // Models state
+  models: [],
+  modelsLoading: false,
+  modelsError: null,
+  setModels: (models) => set({ models }),
+  setModelsLoading: (loading) => set({ modelsLoading: loading }),
+  setModelsError: (error) => set({ modelsError: error }),
+
   // State
   conversations: [],
   activeConversationId: null,

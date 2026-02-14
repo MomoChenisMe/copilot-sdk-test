@@ -1,9 +1,10 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useAppStore } from '../../store';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useConversations } from '../../hooks/useConversations';
 import { useCopilot } from '../../hooks/useCopilot';
 import { useTerminal } from '../../hooks/useTerminal';
+import { useModels } from '../../hooks/useModels';
 import { conversationApi } from '../../lib/api';
 import { TopBar } from './TopBar';
 import { BottomBar } from './BottomBar';
@@ -25,13 +26,16 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     update: updateConversation,
     remove: removeConversation,
     search: searchConversations,
-    refresh: refreshConversations,
   } = useConversations();
+
+  // Load models from API
+  useModels();
 
   const activeConversationId = useAppStore((s) => s.activeConversationId);
   const setActiveConversationId = useAppStore((s) => s.setActiveConversationId);
   const isStreaming = useAppStore((s) => s.isStreaming);
   const setMessages = useAppStore((s) => s.setMessages);
+  const models = useAppStore((s) => s.models);
 
   const { sendMessage, abortMessage } = useCopilot({ subscribe, send });
 
@@ -45,13 +49,33 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   // Assign the terminal writeRef
   terminalWriteRef.current = writeRef.current;
 
+  const theme = useAppStore((s) => s.theme);
+  const toggleTheme = useAppStore((s) => s.toggleTheme);
+  const getInitialTheme = useAppStore((s) => s.getInitialTheme);
+
+  // Initialize theme from localStorage on mount
+  useEffect(() => {
+    const savedTheme = getInitialTheme();
+    if (savedTheme !== theme) {
+      useAppStore.setState({ theme: savedTheme });
+    }
+    document.documentElement.dataset.theme = savedTheme;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync data-theme attribute when theme changes
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
   const activeConversation = conversations.find((c) => c.id === activeConversationId);
+  const defaultModel = models[0]?.id || '';
 
   const handleNewConversation = useCallback(async () => {
-    const conv = await createConversation('gpt-5', cwd);
+    const model = models[0]?.id || 'gpt-4o';
+    const conv = await createConversation(model, cwd);
     setActiveConversationId(conv.id);
     setSidebarOpen(false);
-  }, [createConversation, cwd, setActiveConversationId]);
+  }, [createConversation, cwd, setActiveConversationId, models]);
 
   const handleSelectConversation = useCallback(
     async (id: string) => {
@@ -98,16 +122,17 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     <div className="flex flex-col h-full bg-bg-primary">
       <TopBar
         title={activeConversation?.title || 'AI Terminal'}
-        cwd={cwd}
+        modelName={activeConversation?.model || defaultModel}
         status={status}
+        theme={theme}
         onMenuClick={() => setSidebarOpen(!sidebarOpen)}
-        onCwdChange={handleCwdChange}
+        onThemeToggle={toggleTheme}
       />
 
       <div className="flex-1 overflow-hidden relative">
         {/* Main content area */}
         <div className={`h-full ${activeTab === 'copilot' ? 'block' : 'hidden'}`}>
-          <ChatView />
+          <ChatView onNewConversation={handleNewConversation} />
         </div>
         <div className={`h-full ${activeTab === 'terminal' ? 'block' : 'hidden'}`}>
           <TerminalView
@@ -126,7 +151,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         onAbort={abortMessage}
         isStreaming={isStreaming}
         disabled={!activeConversationId}
-        currentModel={activeConversation?.model || 'gpt-5'}
+        currentModel={activeConversation?.model || defaultModel}
         onModelChange={handleModelChange}
       />
 
