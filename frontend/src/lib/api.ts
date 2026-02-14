@@ -62,9 +62,15 @@ export interface ToolRecord {
   error?: string;
 }
 
+export type TurnSegment =
+  | { type: 'text'; content: string }
+  | { type: 'tool'; toolCallId: string; toolName: string; arguments?: unknown; status: 'running' | 'success' | 'error'; result?: unknown; error?: string }
+  | { type: 'reasoning'; content: string };
+
 export interface MessageMetadata {
   toolRecords?: ToolRecord[];
   reasoning?: string;
+  turnSegments?: TurnSegment[];
 }
 
 // --- Conversation API ---
@@ -103,7 +109,7 @@ export const conversationApi = {
   create: (model: string, cwd: string) =>
     apiPost<Conversation>('/api/conversations', { model, cwd }),
 
-  update: (id: string, updates: { title?: string; pinned?: boolean; sdkSessionId?: string }) =>
+  update: (id: string, updates: { title?: string; pinned?: boolean; sdkSessionId?: string; model?: string }) =>
     apiPatch<Conversation>(`/api/conversations/${id}`, updates),
 
   delete: (id: string) => apiDelete<{ ok: true }>(`/api/conversations/${id}`),

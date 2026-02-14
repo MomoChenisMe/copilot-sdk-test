@@ -33,6 +33,13 @@ vi.mock('../../../src/components/copilot/ReasoningBlock', () => ({
   ),
 }));
 
+// Mock ToolResultBlock component
+vi.mock('../../../src/components/copilot/ToolResultBlock', () => ({
+  ToolResultBlock: ({ result, toolName, status }: { result: unknown; toolName: string; status?: string }) => (
+    <div data-testid={`tool-result-${toolName}`} data-status={status}>{String(result)}</div>
+  ),
+}));
+
 const makeMessage = (overrides: Partial<Message> = {}): Message => ({
   id: 'msg-1',
   conversationId: 'conv-1',
@@ -207,7 +214,97 @@ describe('MessageBlock', () => {
     expect(screen.getByTestId('tool-record-tc1')).toBeTruthy();
   });
 
-  it('renders in correct order: Reasoning → Tool Records → Text Content', () => {
+  // --- turnSegments rendering (Phase 6) ---
+
+  it('renders turnSegments in order when present in metadata', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'assistant',
+          content: 'Final text',
+          metadata: {
+            turnSegments: [
+              { type: 'text', content: 'First part' },
+              { type: 'tool', toolCallId: 'tc1', toolName: 'bash', status: 'success', result: 'hi' },
+              { type: 'text', content: 'Second part' },
+            ],
+            toolRecords: [
+              { toolCallId: 'tc1', toolName: 'bash', status: 'success', result: 'hi' },
+            ],
+          },
+        })}
+      />
+    );
+
+    // Should render text segments as markdown
+    const markdowns = screen.getAllByTestId('markdown');
+    expect(markdowns.length).toBeGreaterThanOrEqual(2);
+    expect(markdowns[0].textContent).toBe('First part');
+    expect(markdowns[1].textContent).toBe('Second part');
+
+    // Should render tool record
+    expect(screen.getByTestId('tool-record-tc1')).toBeTruthy();
+  });
+
+  it('renders reasoning turnSegment as ReasoningBlock', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'assistant',
+          content: 'Answer',
+          metadata: {
+            turnSegments: [
+              { type: 'reasoning', content: 'Let me think...' },
+              { type: 'text', content: 'Answer' },
+            ],
+          },
+        })}
+      />
+    );
+
+    expect(screen.getByTestId('reasoning-block')).toBeTruthy();
+    expect(screen.getByTestId('reasoning-block').textContent).toContain('Let me think...');
+  });
+
+  it('falls back to old rendering when turnSegments is absent', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'assistant',
+          content: 'Old message',
+          metadata: {
+            toolRecords: [
+              { toolCallId: 'tc1', toolName: 'read_file', status: 'success' },
+            ],
+            reasoning: 'Old reasoning',
+          },
+        })}
+      />
+    );
+
+    // Old rendering order: reasoning → tools → text
+    expect(screen.getByTestId('reasoning-block')).toBeTruthy();
+    expect(screen.getByTestId('tool-record-tc1')).toBeTruthy();
+    expect(screen.getByTestId('markdown')).toBeTruthy();
+  });
+
+  it('renders only text when metadata is null', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'assistant',
+          content: 'Just text',
+          metadata: null,
+        })}
+      />
+    );
+
+    expect(screen.getByTestId('markdown')).toBeTruthy();
+    expect(screen.getByTestId('markdown').textContent).toBe('Just text');
+    expect(screen.queryByTestId('reasoning-block')).toBeNull();
+  });
+
+  it('renders in correct order: Reasoning → Tool Records → Text Content (fallback)', () => {
     const { container } = render(
       <MessageBlock
         message={makeMessage({
@@ -243,5 +340,87 @@ describe('MessageBlock', () => {
     expect(reasoningIdx).toBeGreaterThanOrEqual(0);
     expect(toolIdx).toBeGreaterThan(reasoningIdx);
     expect(markdownIdx).toBeGreaterThan(toolIdx);
+  });
+
+  // --- ToolResultBlock inline rendering for bash-like tools ---
+
+  it('renders ToolResultBlock after bash tool segment with result', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'assistant',
+          content: 'Done',
+          metadata: {
+            turnSegments: [
+              { type: 'tool', toolCallId: 'tc1', toolName: 'bash', status: 'success', result: 'output here' },
+              { type: 'text', content: 'Done' },
+            ],
+          },
+        })}
+      />
+    );
+
+    expect(screen.getByTestId('tool-record-tc1')).toBeTruthy();
+    expect(screen.getByTestId('tool-result-bash')).toBeTruthy();
+    expect(screen.getByTestId('tool-result-bash').textContent).toContain('output here');
+  });
+
+  it('does NOT render ToolResultBlock for non-inline tools', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'assistant',
+          content: 'Done',
+          metadata: {
+            turnSegments: [
+              { type: 'tool', toolCallId: 'tc1', toolName: 'create', status: 'success', result: 'created file' },
+              { type: 'text', content: 'Done' },
+            ],
+          },
+        })}
+      />
+    );
+
+    expect(screen.getByTestId('tool-record-tc1')).toBeTruthy();
+    expect(screen.queryByTestId('tool-result-create')).toBeNull();
+  });
+
+  it('does NOT render ToolResultBlock for running bash tool (no result yet)', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'assistant',
+          content: '',
+          metadata: {
+            turnSegments: [
+              { type: 'tool', toolCallId: 'tc1', toolName: 'bash', status: 'running' },
+            ],
+          },
+        })}
+      />
+    );
+
+    expect(screen.getByTestId('tool-record-tc1')).toBeTruthy();
+    expect(screen.queryByTestId('tool-result-bash')).toBeNull();
+  });
+
+  // WARNING FIX: bash tool with error status should also show ToolResultBlock
+  it('renders ToolResultBlock for bash tool with error status and error field', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'assistant',
+          content: '',
+          metadata: {
+            turnSegments: [
+              { type: 'tool', toolCallId: 'tc1', toolName: 'bash', status: 'error', error: 'command not found' },
+            ],
+          },
+        })}
+      />
+    );
+
+    expect(screen.getByTestId('tool-record-tc1')).toBeTruthy();
+    expect(screen.getByTestId('tool-result-bash')).toBeTruthy();
   });
 });

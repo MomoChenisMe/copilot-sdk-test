@@ -127,10 +127,10 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   const handleModelChange = useCallback(
     (modelId: string) => {
       if (activeConversationId) {
-        updateConversation(activeConversationId, { title: activeConversation?.title });
+        updateConversation(activeConversationId, { model: modelId });
       }
     },
-    [activeConversationId, updateConversation, activeConversation],
+    [activeConversationId, updateConversation],
   );
 
   return (

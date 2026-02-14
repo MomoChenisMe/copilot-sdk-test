@@ -5,9 +5,13 @@ import { useAppStore } from '../../store';
 import { MessageBlock } from './MessageBlock';
 import { StreamingText } from './StreamingText';
 import { ToolRecord } from './ToolRecord';
+import { ToolRecordErrorBoundary } from './ToolRecordErrorBoundary';
+import { ToolResultBlock } from './ToolResultBlock';
 import { ReasoningBlock } from './ReasoningBlock';
 import { ModelSelector } from './ModelSelector';
 import { Input } from '../shared/Input';
+
+const INLINE_RESULT_TOOLS = ['bash', 'shell', 'execute', 'run'];
 
 interface ChatViewProps {
   onNewConversation: () => void;
@@ -34,6 +38,7 @@ export function ChatView({
   const streamingText = useAppStore((s) => s.streamingText);
   const toolRecords = useAppStore((s) => s.toolRecords);
   const reasoningText = useAppStore((s) => s.reasoningText);
+  const turnSegments = useAppStore((s) => s.turnSegments);
   const copilotError = useAppStore((s) => s.copilotError);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -53,7 +58,7 @@ export function ChatView({
     }
   }, [messages, streamingText, toolRecords]);
 
-  const showStreamingBlock = isStreaming || streamingText || toolRecords.length > 0 || copilotError;
+  const showStreamingBlock = isStreaming || streamingText || toolRecords.length > 0 || turnSegments.length > 0 || copilotError;
 
   // Welcome screen — no active conversation
   if (!activeConversationId) {
@@ -134,17 +139,55 @@ export function ChatView({
                     {t('chat.assistant')}
                   </span>
 
-                  {/* Reasoning */}
-                  <ReasoningBlock text={reasoningText} isStreaming={isStreaming} />
+                  {/* Render turnSegments if available, otherwise fallback */}
+                  {turnSegments.length > 0 ? (
+                    <>
+                      {turnSegments.map((segment, index) => {
+                        switch (segment.type) {
+                          case 'reasoning':
+                            return <ReasoningBlock key={`reasoning-${index}`} text={segment.content} isStreaming={false} />;
+                          case 'tool': {
+                            const showResult = INLINE_RESULT_TOOLS.includes(segment.toolName) &&
+                              segment.status !== 'running' &&
+                              (segment.result != null || segment.error != null);
+                            const resultValue = segment.result ?? segment.error;
+                            return (
+                              <div key={`tool-${segment.toolCallId}`}>
+                                <ToolRecordErrorBoundary>
+                                  <ToolRecord record={segment} />
+                                </ToolRecordErrorBoundary>
+                                {showResult && (
+                                  <ToolResultBlock result={resultValue} toolName={segment.toolName} status={segment.status} />
+                                )}
+                              </div>
+                            );
+                          }
+                          case 'text':
+                            return null; // Text segments are handled via streamingText
+                          default:
+                            return null;
+                        }
+                      })}
+                      {/* Streaming text at the end */}
+                      {(streamingText || isStreaming) && (
+                        <StreamingText text={streamingText} isStreaming={isStreaming} />
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {/* Fallback: old rendering order */}
+                      <ReasoningBlock text={reasoningText} isStreaming={isStreaming} />
 
-                  {/* Tool records */}
-                  {toolRecords.map((record) => (
-                    <ToolRecord key={record.toolCallId} record={record} />
-                  ))}
+                      {toolRecords.map((record) => (
+                        <ToolRecordErrorBoundary key={record.toolCallId}>
+                          <ToolRecord record={record} />
+                        </ToolRecordErrorBoundary>
+                      ))}
 
-                  {/* Streaming text */}
-                  {(streamingText || isStreaming) && (
-                    <StreamingText text={streamingText} isStreaming={isStreaming} />
+                      {(streamingText || isStreaming) && (
+                        <StreamingText text={streamingText} isStreaming={isStreaming} />
+                      )}
+                    </>
                   )}
 
                   {/* Error */}

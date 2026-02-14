@@ -93,6 +93,14 @@ describe('ConversationRepository', () => {
       expect(updated!.sdkSessionId).toBe('sdk-123');
     });
 
+    it('should update model', () => {
+      const conv = repo.create({ model: 'gpt-5', cwd: '/tmp' });
+      const updated = repo.update(conv.id, { model: 'claude-sonnet-4-5' });
+
+      expect(updated).toBeTruthy();
+      expect(updated!.model).toBe('claude-sonnet-4-5');
+    });
+
     it('should return null for nonexistent id', () => {
       expect(repo.update('nonexistent', { title: 'x' })).toBeNull();
     });

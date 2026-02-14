@@ -125,33 +125,6 @@ describe('copilot WS handler', () => {
       });
     });
 
-    it('should save assistant message when relay sends copilot:message', async () => {
-      // Capture the send function that EventRelay receives
-      let relaySend: ((msg: WsMessage) => void) | null = null;
-      mockSession.on.mockImplementation((event: string, cb: any) => {
-        if (event === 'assistant.message') {
-          // When relay attaches, simulate the event immediately
-          setTimeout(() => cb({ messageId: 'msg-1', content: 'AI response' }), 10);
-        }
-        return () => {};
-      });
-
-      handler(
-        {
-          type: 'copilot:send',
-          data: { conversationId: 'conv-1', prompt: 'Hello' },
-        },
-        send,
-      );
-
-      await vi.waitFor(() => {
-        expect(mockRepo.addMessage).toHaveBeenCalledWith('conv-1', {
-          role: 'assistant',
-          content: 'AI response',
-        });
-      });
-    });
-
     it('should send error when conversation not found', async () => {
       mockRepo.getById.mockReturnValue(null);
 
@@ -185,6 +158,305 @@ describe('copilot WS handler', () => {
           type: 'copilot:error',
           data: { message: 'prompt is required' },
         });
+      });
+    });
+  });
+
+  describe('accumulatingSend', () => {
+    // Helper to simulate events through the relay
+    function setupRelayCapture() {
+      const eventHandlers = new Map<string, (event: any) => void>();
+      mockSession.on.mockImplementation((event: string, cb: any) => {
+        eventHandlers.set(event, cb);
+        return () => { eventHandlers.delete(event); };
+      });
+      return eventHandlers;
+    }
+
+    it('should forward copilot:message events to frontend', async () => {
+      const eventHandlers = setupRelayCapture();
+
+      handler(
+        { type: 'copilot:send', data: { conversationId: 'conv-1', prompt: 'Hello' } },
+        send,
+      );
+
+      await vi.waitFor(() => {
+        expect(eventHandlers.has('assistant.message')).toBe(true);
+      });
+
+      // Simulate assistant.message event
+      eventHandlers.get('assistant.message')!({ messageId: 'msg-1', content: 'Hi there' });
+
+      await vi.waitFor(() => {
+        expect(send).toHaveBeenCalledWith({
+          type: 'copilot:message',
+          data: { messageId: 'msg-1', content: 'Hi there' },
+        });
+      });
+    });
+
+    it('should forward copilot:tool_start events to frontend', async () => {
+      const eventHandlers = setupRelayCapture();
+
+      handler(
+        { type: 'copilot:send', data: { conversationId: 'conv-1', prompt: 'Hello' } },
+        send,
+      );
+
+      await vi.waitFor(() => {
+        expect(eventHandlers.has('tool.execution_start')).toBe(true);
+      });
+
+      eventHandlers.get('tool.execution_start')!({
+        toolCallId: 'tc-1',
+        toolName: 'bash',
+        arguments: { command: 'echo hi' },
+      });
+
+      await vi.waitFor(() => {
+        expect(send).toHaveBeenCalledWith({
+          type: 'copilot:tool_start',
+          data: { toolCallId: 'tc-1', toolName: 'bash', arguments: { command: 'echo hi' } },
+        });
+      });
+    });
+
+    it('should forward copilot:tool_end events to frontend', async () => {
+      const eventHandlers = setupRelayCapture();
+
+      handler(
+        { type: 'copilot:send', data: { conversationId: 'conv-1', prompt: 'Hello' } },
+        send,
+      );
+
+      await vi.waitFor(() => {
+        expect(eventHandlers.has('tool.execution_complete')).toBe(true);
+      });
+
+      eventHandlers.get('tool.execution_complete')!({
+        toolCallId: 'tc-1',
+        success: true,
+        result: 'hi',
+      });
+
+      await vi.waitFor(() => {
+        expect(send).toHaveBeenCalledWith({
+          type: 'copilot:tool_end',
+          data: { toolCallId: 'tc-1', success: true, result: 'hi' },
+        });
+      });
+    });
+
+    it('should NOT save per-message to DB — only on idle', async () => {
+      const eventHandlers = setupRelayCapture();
+
+      handler(
+        { type: 'copilot:send', data: { conversationId: 'conv-1', prompt: 'Hello' } },
+        send,
+      );
+
+      await vi.waitFor(() => {
+        expect(eventHandlers.has('assistant.message')).toBe(true);
+      });
+
+      // Simulate assistant.message — should NOT trigger addMessage for assistant
+      eventHandlers.get('assistant.message')!({ messageId: 'msg-1', content: 'Hi' });
+
+      // Only user message should have been saved at this point
+      const assistantCalls = mockRepo.addMessage.mock.calls.filter(
+        (call: any[]) => call[1].role === 'assistant',
+      );
+      expect(assistantCalls).toHaveLength(0);
+    });
+
+    it('should persist accumulated content on copilot:idle', async () => {
+      const eventHandlers = setupRelayCapture();
+
+      handler(
+        { type: 'copilot:send', data: { conversationId: 'conv-1', prompt: 'Hello' } },
+        send,
+      );
+
+      await vi.waitFor(() => {
+        expect(eventHandlers.has('assistant.message')).toBe(true);
+      });
+
+      // Simulate events
+      eventHandlers.get('assistant.message')!({ messageId: 'msg-1', content: 'Part 1. ' });
+      eventHandlers.get('tool.execution_start')!({
+        toolCallId: 'tc-1',
+        toolName: 'bash',
+        arguments: { command: 'echo hi' },
+      });
+      eventHandlers.get('tool.execution_complete')!({
+        toolCallId: 'tc-1',
+        success: true,
+        result: 'hi',
+      });
+      eventHandlers.get('assistant.message')!({ messageId: 'msg-2', content: 'Part 2.' });
+
+      // Trigger idle
+      eventHandlers.get('session.idle')!({});
+
+      await vi.waitFor(() => {
+        const assistantCalls = mockRepo.addMessage.mock.calls.filter(
+          (call: any[]) => call[1].role === 'assistant',
+        );
+        expect(assistantCalls).toHaveLength(1);
+
+        const savedMessage = assistantCalls[0][1];
+        expect(savedMessage.content).toBe('Part 1. Part 2.');
+        expect(savedMessage.metadata).toBeTruthy();
+        expect(savedMessage.metadata.toolRecords).toHaveLength(1);
+        expect(savedMessage.metadata.toolRecords[0].toolName).toBe('bash');
+        expect(savedMessage.metadata.toolRecords[0].status).toBe('success');
+        expect(savedMessage.metadata.turnSegments).toBeTruthy();
+        expect(savedMessage.metadata.turnSegments.length).toBeGreaterThanOrEqual(3);
+      });
+    });
+
+    it('should persist reasoning in metadata on idle', async () => {
+      const eventHandlers = setupRelayCapture();
+
+      handler(
+        { type: 'copilot:send', data: { conversationId: 'conv-1', prompt: 'Think hard' } },
+        send,
+      );
+
+      await vi.waitFor(() => {
+        expect(eventHandlers.has('assistant.reasoning')).toBe(true);
+      });
+
+      eventHandlers.get('assistant.reasoning')!({ reasoningId: 'r-1', content: 'Let me think...' });
+      eventHandlers.get('assistant.message')!({ messageId: 'msg-1', content: 'Answer.' });
+      eventHandlers.get('session.idle')!({});
+
+      await vi.waitFor(() => {
+        const assistantCalls = mockRepo.addMessage.mock.calls.filter(
+          (call: any[]) => call[1].role === 'assistant',
+        );
+        expect(assistantCalls).toHaveLength(1);
+        expect(assistantCalls[0][1].metadata.reasoning).toBe('Let me think...');
+      });
+    });
+
+    it('should forward idle event to frontend', async () => {
+      const eventHandlers = setupRelayCapture();
+
+      handler(
+        { type: 'copilot:send', data: { conversationId: 'conv-1', prompt: 'Hello' } },
+        send,
+      );
+
+      await vi.waitFor(() => {
+        expect(eventHandlers.has('session.idle')).toBe(true);
+      });
+
+      eventHandlers.get('assistant.message')!({ messageId: 'msg-1', content: 'Done' });
+      eventHandlers.get('session.idle')!({});
+
+      await vi.waitFor(() => {
+        expect(send).toHaveBeenCalledWith({ type: 'copilot:idle' });
+      });
+    });
+
+    it('should reset accumulation state on new copilot:send', async () => {
+      const eventHandlers = setupRelayCapture();
+
+      // First message
+      handler(
+        { type: 'copilot:send', data: { conversationId: 'conv-1', prompt: 'First' } },
+        send,
+      );
+
+      await vi.waitFor(() => {
+        expect(eventHandlers.has('assistant.message')).toBe(true);
+      });
+
+      eventHandlers.get('assistant.message')!({ messageId: 'msg-1', content: 'Response 1' });
+      eventHandlers.get('session.idle')!({});
+
+      await vi.waitFor(() => {
+        const assistantCalls = mockRepo.addMessage.mock.calls.filter(
+          (call: any[]) => call[1].role === 'assistant',
+        );
+        expect(assistantCalls).toHaveLength(1);
+      });
+
+      mockRepo.addMessage.mockClear();
+
+      // Second message — should reset state
+      handler(
+        { type: 'copilot:send', data: { conversationId: 'conv-1', prompt: 'Second' } },
+        send,
+      );
+
+      await vi.waitFor(() => {
+        expect(eventHandlers.has('assistant.message')).toBe(true);
+      });
+
+      eventHandlers.get('assistant.message')!({ messageId: 'msg-2', content: 'Response 2' });
+      eventHandlers.get('session.idle')!({});
+
+      await vi.waitFor(() => {
+        const assistantCalls = mockRepo.addMessage.mock.calls.filter(
+          (call: any[]) => call[1].role === 'assistant',
+        );
+        expect(assistantCalls).toHaveLength(1);
+        // Should only contain Response 2, not Response 1
+        expect(assistantCalls[0][1].content).toBe('Response 2');
+      });
+    });
+
+    it('should save accumulated content on copilot:abort', async () => {
+      const eventHandlers = setupRelayCapture();
+
+      handler(
+        { type: 'copilot:send', data: { conversationId: 'conv-1', prompt: 'Hello' } },
+        send,
+      );
+
+      await vi.waitFor(() => {
+        expect(eventHandlers.has('assistant.message')).toBe(true);
+      });
+
+      // Simulate partial response
+      eventHandlers.get('assistant.message')!({ messageId: 'msg-1', content: 'Partial response' });
+
+      // Abort
+      handler({ type: 'copilot:abort' }, send);
+
+      await vi.waitFor(() => {
+        const assistantCalls = mockRepo.addMessage.mock.calls.filter(
+          (call: any[]) => call[1].role === 'assistant',
+        );
+        expect(assistantCalls).toHaveLength(1);
+        expect(assistantCalls[0][1].content).toBe('Partial response');
+      });
+    });
+
+    it('should not save empty content on idle', async () => {
+      const eventHandlers = setupRelayCapture();
+
+      handler(
+        { type: 'copilot:send', data: { conversationId: 'conv-1', prompt: 'Hello' } },
+        send,
+      );
+
+      await vi.waitFor(() => {
+        expect(eventHandlers.has('session.idle')).toBe(true);
+      });
+
+      // idle with no accumulated content
+      eventHandlers.get('session.idle')!({});
+
+      await vi.waitFor(() => {
+        // Only user message should be saved
+        const assistantCalls = mockRepo.addMessage.mock.calls.filter(
+          (call: any[]) => call[1].role === 'assistant',
+        );
+        expect(assistantCalls).toHaveLength(0);
       });
     });
   });

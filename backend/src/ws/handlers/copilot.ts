@@ -7,6 +7,58 @@ import { createLogger } from '../../utils/logger.js';
 
 const log = createLogger('ws-copilot');
 
+interface TurnSegment {
+  type: 'text' | 'tool' | 'reasoning';
+  [key: string]: unknown;
+}
+
+interface ToolRecord {
+  toolCallId: string;
+  toolName: string;
+  arguments?: unknown;
+  status: 'running' | 'success' | 'error';
+  result?: unknown;
+  error?: string;
+}
+
+interface AccumulationState {
+  contentSegments: string[];
+  toolRecords: ToolRecord[];
+  reasoningText: string;
+  turnSegments: TurnSegment[];
+}
+
+function createEmptyAccumulation(): AccumulationState {
+  return {
+    contentSegments: [],
+    toolRecords: [],
+    reasoningText: '',
+    turnSegments: [],
+  };
+}
+
+function persistAccumulated(
+  repo: ConversationRepository,
+  conversationId: string,
+  state: AccumulationState,
+): void {
+  const content = state.contentSegments.join('');
+  const hasContent = content.length > 0 || state.toolRecords.length > 0 || state.reasoningText.length > 0;
+
+  if (!hasContent) return;
+
+  const metadata: Record<string, unknown> = {};
+  if (state.turnSegments.length > 0) metadata.turnSegments = state.turnSegments;
+  if (state.toolRecords.length > 0) metadata.toolRecords = state.toolRecords;
+  if (state.reasoningText) metadata.reasoning = state.reasoningText;
+
+  repo.addMessage(conversationId, {
+    role: 'assistant',
+    content,
+    metadata,
+  });
+}
+
 export function createCopilotHandler(
   sessionManager: SessionManager,
   repo: ConversationRepository,
@@ -14,6 +66,7 @@ export function createCopilotHandler(
   let activeSession: CopilotSession | null = null;
   let relay: EventRelay | null = null;
   let activeConversationId: string | null = null;
+  let accumulation = createEmptyAccumulation();
 
   return (message: WsMessage, send: (msg: WsMessage) => void): void => {
     const { type, data } = message;
@@ -40,21 +93,84 @@ export function createCopilotHandler(
           return;
         }
 
+        // Reset accumulation state for new turn
+        accumulation = createEmptyAccumulation();
+
         // Save user message
         repo.addMessage(conversationId, { role: 'user', content: prompt });
         activeConversationId = conversationId;
 
-        // Wrap send to intercept copilot:message and save assistant response
-        const wrappedSend = (msg: WsMessage) => {
-          if (msg.type === 'copilot:message' && activeConversationId) {
-            const msgData = msg.data as Record<string, unknown> | undefined;
-            if (msgData?.content) {
-              repo.addMessage(activeConversationId, {
-                role: 'assistant',
-                content: msgData.content as string,
+        // Build accumulatingSend: intercept events for accumulation, then forward
+        const accumulatingSend = (msg: WsMessage) => {
+          const msgData = (msg.data ?? {}) as Record<string, unknown>;
+
+          switch (msg.type) {
+            case 'copilot:message': {
+              const content = (msgData.content as string) ?? '';
+              if (content) {
+                accumulation.contentSegments.push(content);
+                accumulation.turnSegments.push({ type: 'text', content });
+              }
+              break;
+            }
+            case 'copilot:tool_start': {
+              const toolRecord: ToolRecord = {
+                toolCallId: msgData.toolCallId as string,
+                toolName: msgData.toolName as string,
+                arguments: msgData.arguments,
+                status: 'running',
+              };
+              accumulation.toolRecords.push(toolRecord);
+              accumulation.turnSegments.push({
+                type: 'tool',
+                toolCallId: toolRecord.toolCallId,
+                toolName: toolRecord.toolName,
+                arguments: toolRecord.arguments,
+                status: 'running',
               });
+              break;
+            }
+            case 'copilot:tool_end': {
+              const toolCallId = msgData.toolCallId as string;
+              const success = msgData.success as boolean;
+              // Update tool record
+              const record = accumulation.toolRecords.find((r) => r.toolCallId === toolCallId);
+              if (record) {
+                record.status = success ? 'success' : 'error';
+                if (success) record.result = msgData.result;
+                else record.error = msgData.error as string;
+              }
+              // Update turn segment
+              const segment = accumulation.turnSegments.find(
+                (s) => s.type === 'tool' && s.toolCallId === toolCallId,
+              );
+              if (segment) {
+                segment.status = success ? 'success' : 'error';
+                if (success) segment.result = msgData.result;
+                else segment.error = msgData.error;
+              }
+              break;
+            }
+            case 'copilot:reasoning':
+            case 'copilot:reasoning_delta': {
+              const content = (msgData.content as string) ?? '';
+              if (content) {
+                accumulation.reasoningText += content;
+              }
+              break;
+            }
+            case 'copilot:idle': {
+              // Persist accumulated turn to DB
+              if (activeConversationId) {
+                persistAccumulated(repo, activeConversationId, accumulation);
+              }
+              // Reset for next turn
+              accumulation = createEmptyAccumulation();
+              break;
             }
           }
+
+          // Always forward to frontend
           send(msg);
         };
 
@@ -76,7 +192,7 @@ export function createCopilotHandler(
 
             // Set up event relay
             if (relay) relay.detach();
-            relay = new EventRelay(wrappedSend);
+            relay = new EventRelay(accumulatingSend);
             relay.attach(session);
 
             // Send the message
@@ -94,6 +210,12 @@ export function createCopilotHandler(
       }
 
       case 'copilot:abort': {
+        // Save any accumulated content before aborting
+        if (activeConversationId) {
+          persistAccumulated(repo, activeConversationId, accumulation);
+          accumulation = createEmptyAccumulation();
+        }
+
         if (activeSession) {
           void (async () => {
             try {

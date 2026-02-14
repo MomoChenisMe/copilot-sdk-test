@@ -27,6 +27,7 @@ describe('useCopilot', () => {
       toolRecords: [],
       reasoningText: '',
       turnContentSegments: [],
+      turnSegments: [],
       copilotError: null,
     });
   });
@@ -274,7 +275,7 @@ describe('useCopilot', () => {
     expect(state.turnContentSegments).toEqual([]);
   });
 
-  it('should set metadata to null when no tools or reasoning exist', () => {
+  it('should only have turnSegments in metadata when no tools or reasoning exist', () => {
     renderHook(() => useCopilot({ subscribe, send }));
 
     act(() => {
@@ -287,7 +288,100 @@ describe('useCopilot', () => {
 
     const msg = useAppStore.getState().messages.find((m) => m.role === 'assistant');
     expect(msg).toBeTruthy();
-    expect(msg!.metadata).toBeNull();
+    const meta = msg!.metadata as any;
+    expect(meta).toBeTruthy();
+    expect(meta.turnSegments).toHaveLength(1);
+    expect(meta.toolRecords).toBeUndefined();
+    expect(meta.reasoning).toBeUndefined();
+  });
+
+  // --- turnSegments accumulation ---
+
+  it('should push text turn segment on copilot:message', () => {
+    renderHook(() => useCopilot({ subscribe, send }));
+
+    act(() => {
+      emit({ type: 'copilot:message', data: { messageId: 'm1', content: 'Hello' } });
+    });
+
+    const segs = useAppStore.getState().turnSegments;
+    expect(segs).toHaveLength(1);
+    expect(segs[0]).toEqual({ type: 'text', content: 'Hello' });
+  });
+
+  it('should push tool turn segment on copilot:tool_start', () => {
+    renderHook(() => useCopilot({ subscribe, send }));
+
+    act(() => {
+      emit({ type: 'copilot:tool_start', data: { toolCallId: 'tc-1', toolName: 'bash', arguments: { cmd: 'ls' } } });
+    });
+
+    const segs = useAppStore.getState().turnSegments;
+    expect(segs).toHaveLength(1);
+    expect(segs[0].type).toBe('tool');
+    expect((segs[0] as any).toolCallId).toBe('tc-1');
+    expect((segs[0] as any).status).toBe('running');
+  });
+
+  it('should update tool turn segment on copilot:tool_end', () => {
+    renderHook(() => useCopilot({ subscribe, send }));
+
+    act(() => {
+      emit({ type: 'copilot:tool_start', data: { toolCallId: 'tc-1', toolName: 'bash' } });
+      emit({ type: 'copilot:tool_end', data: { toolCallId: 'tc-1', success: true, result: 'output' } });
+    });
+
+    const segs = useAppStore.getState().turnSegments;
+    expect(segs).toHaveLength(1);
+    expect((segs[0] as any).status).toBe('success');
+    expect((segs[0] as any).result).toBe('output');
+  });
+
+  it('should push reasoning turn segment on copilot:reasoning', () => {
+    renderHook(() => useCopilot({ subscribe, send }));
+
+    act(() => {
+      emit({ type: 'copilot:reasoning', data: { content: 'Thinking...' } });
+    });
+
+    const segs = useAppStore.getState().turnSegments;
+    expect(segs).toHaveLength(1);
+    expect(segs[0]).toEqual({ type: 'reasoning', content: 'Thinking...' });
+  });
+
+  it('should include turnSegments in idle metadata', () => {
+    renderHook(() => useCopilot({ subscribe, send }));
+
+    act(() => {
+      emit({ type: 'copilot:message', data: { messageId: 'm1', content: 'Hello' } });
+      emit({ type: 'copilot:tool_start', data: { toolCallId: 'tc-1', toolName: 'bash' } });
+      emit({ type: 'copilot:tool_end', data: { toolCallId: 'tc-1', success: true, result: 'ok' } });
+      emit({ type: 'copilot:message', data: { messageId: 'm2', content: 'Done' } });
+    });
+
+    act(() => {
+      emit({ type: 'copilot:idle' });
+    });
+
+    const msg = useAppStore.getState().messages.find((m) => m.role === 'assistant');
+    expect(msg).toBeTruthy();
+    const meta = msg!.metadata as any;
+    expect(meta.turnSegments).toBeTruthy();
+    expect(meta.turnSegments).toHaveLength(3); // text, tool, text
+    expect(meta.turnSegments[0].type).toBe('text');
+    expect(meta.turnSegments[1].type).toBe('tool');
+    expect(meta.turnSegments[2].type).toBe('text');
+  });
+
+  it('should clear turnSegments on copilot:idle', () => {
+    renderHook(() => useCopilot({ subscribe, send }));
+
+    act(() => {
+      emit({ type: 'copilot:message', data: { messageId: 'm1', content: 'Hello' } });
+      emit({ type: 'copilot:idle' });
+    });
+
+    expect(useAppStore.getState().turnSegments).toEqual([]);
   });
 
   // --- copilot:error (unchanged) ---

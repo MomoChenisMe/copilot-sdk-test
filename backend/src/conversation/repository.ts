@@ -42,7 +42,7 @@ export class ConversationRepository {
 
   update(
     id: string,
-    updates: { title?: string; pinned?: boolean; sdkSessionId?: string },
+    updates: { title?: string; pinned?: boolean; sdkSessionId?: string; model?: string },
   ): Conversation | null {
     const existing = this.getById(id);
     if (!existing) return null;
@@ -61,6 +61,10 @@ export class ConversationRepository {
     if (updates.sdkSessionId !== undefined) {
       setClauses.push('sdk_session_id = ?');
       params.push(updates.sdkSessionId);
+    }
+    if (updates.model !== undefined) {
+      setClauses.push('model = ?');
+      params.push(updates.model);
     }
 
     params.push(id);

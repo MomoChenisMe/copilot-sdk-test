@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useAppStore } from '../../src/store/index';
 import type { ToolRecord } from '../../src/store/index';
+import type { TurnSegment } from '../../src/lib/api';
 
 describe('Store: ToolRecord re-export', () => {
   it('should re-export ToolRecord type from api.ts (compile-time check)', () => {
@@ -135,5 +136,89 @@ describe('Store: turnContentSegments', () => {
 
     expect(useAppStore.getState().turnContentSegments).toEqual([]);
     expect(useAppStore.getState().activeConversationId).toBeNull();
+  });
+});
+
+describe('Store: turnSegments', () => {
+  beforeEach(() => {
+    useAppStore.setState({
+      turnSegments: [],
+      streamingText: '',
+      isStreaming: false,
+      toolRecords: [],
+      reasoningText: '',
+      copilotError: null,
+      turnContentSegments: [],
+    });
+  });
+
+  it('should have empty turnSegments initially', () => {
+    expect(useAppStore.getState().turnSegments).toEqual([]);
+  });
+
+  it('should add a text turn segment', () => {
+    useAppStore.getState().addTurnSegment({ type: 'text', content: 'Hello' });
+    expect(useAppStore.getState().turnSegments).toHaveLength(1);
+    expect(useAppStore.getState().turnSegments[0]).toEqual({ type: 'text', content: 'Hello' });
+  });
+
+  it('should add a tool turn segment', () => {
+    useAppStore.getState().addTurnSegment({
+      type: 'tool',
+      toolCallId: 'tc-1',
+      toolName: 'bash',
+      status: 'running',
+    });
+    const segs = useAppStore.getState().turnSegments;
+    expect(segs).toHaveLength(1);
+    expect(segs[0].type).toBe('tool');
+  });
+
+  it('should add a reasoning turn segment', () => {
+    useAppStore.getState().addTurnSegment({ type: 'reasoning', content: 'Thinking...' });
+    const segs = useAppStore.getState().turnSegments;
+    expect(segs).toHaveLength(1);
+    expect(segs[0]).toEqual({ type: 'reasoning', content: 'Thinking...' });
+  });
+
+  it('should update tool segment by toolCallId', () => {
+    useAppStore.getState().addTurnSegment({
+      type: 'tool',
+      toolCallId: 'tc-1',
+      toolName: 'bash',
+      status: 'running',
+    });
+    useAppStore.getState().updateToolInTurnSegments('tc-1', { status: 'success', result: 'output' });
+
+    const seg = useAppStore.getState().turnSegments[0] as TurnSegment & { type: 'tool' };
+    expect(seg.status).toBe('success');
+    expect(seg.result).toBe('output');
+  });
+
+  it('should not modify non-matching segments when updating', () => {
+    useAppStore.getState().addTurnSegment({ type: 'text', content: 'Hello' });
+    useAppStore.getState().addTurnSegment({
+      type: 'tool',
+      toolCallId: 'tc-1',
+      toolName: 'bash',
+      status: 'running',
+    });
+    useAppStore.getState().updateToolInTurnSegments('tc-1', { status: 'error', error: 'fail' });
+
+    const segs = useAppStore.getState().turnSegments;
+    expect(segs[0]).toEqual({ type: 'text', content: 'Hello' });
+    expect((segs[1] as any).status).toBe('error');
+  });
+
+  it('should clear turnSegments on clearStreaming', () => {
+    useAppStore.getState().addTurnSegment({ type: 'text', content: 'Hello' });
+    useAppStore.getState().clearStreaming();
+    expect(useAppStore.getState().turnSegments).toEqual([]);
+  });
+
+  it('should clear turnSegments on setActiveConversationId', () => {
+    useAppStore.getState().addTurnSegment({ type: 'text', content: 'Hello' });
+    useAppStore.getState().setActiveConversationId('new-conv');
+    expect(useAppStore.getState().turnSegments).toEqual([]);
   });
 });

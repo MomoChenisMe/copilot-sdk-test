@@ -1,9 +1,13 @@
 import { useTranslation } from 'react-i18next';
-import type { Message, MessageMetadata } from '../../lib/api';
+import type { Message, MessageMetadata, TurnSegment } from '../../lib/api';
 import { Markdown } from '../shared/Markdown';
 import { ReasoningBlock } from './ReasoningBlock';
 import { ToolRecord } from './ToolRecord';
+import { ToolRecordErrorBoundary } from './ToolRecordErrorBoundary';
+import { ToolResultBlock } from './ToolResultBlock';
 import { Sparkles } from 'lucide-react';
+
+const INLINE_RESULT_TOOLS = ['bash', 'shell', 'execute', 'run'];
 
 interface MessageBlockProps {
   message: Message;
@@ -28,8 +32,69 @@ export function MessageBlock({ message }: MessageBlockProps) {
 
   // Parse metadata for assistant messages
   const metadata = message.metadata as MessageMetadata | null | undefined;
+  const turnSegments = metadata?.turnSegments;
   const toolRecords = metadata?.toolRecords;
   const reasoning = metadata?.reasoning;
+
+  // Render content area based on turnSegments availability
+  const renderContent = () => {
+    // New path: ordered turnSegments rendering
+    if (turnSegments && turnSegments.length > 0) {
+      return turnSegments.map((segment, index) => {
+        switch (segment.type) {
+          case 'text':
+            return (
+              <div key={`text-${index}`} className="text-sm leading-relaxed">
+                <Markdown content={segment.content} />
+              </div>
+            );
+          case 'tool': {
+            const toolSeg = segment as TurnSegment & { type: 'tool' };
+            const isInlineTool = INLINE_RESULT_TOOLS.includes(toolSeg.toolName);
+            const showResult = isInlineTool &&
+              toolSeg.status !== 'running' &&
+              (toolSeg.result != null || toolSeg.error != null);
+            const resultValue = toolSeg.result ?? toolSeg.error;
+            return (
+              <div key={`tool-${toolSeg.toolCallId}`}>
+                <ToolRecordErrorBoundary>
+                  <ToolRecord record={toolSeg} />
+                </ToolRecordErrorBoundary>
+                {showResult && (
+                  <ToolResultBlock result={resultValue} toolName={toolSeg.toolName} status={toolSeg.status} />
+                )}
+              </div>
+            );
+          }
+          case 'reasoning':
+            return (
+              <ReasoningBlock key={`reasoning-${index}`} text={segment.content} isStreaming={false} />
+            );
+          default:
+            return null;
+        }
+      });
+    }
+
+    // Fallback: old rendering order (reasoning → tools → text)
+    return (
+      <>
+        {reasoning && (
+          <ReasoningBlock text={reasoning} isStreaming={false} />
+        )}
+        {toolRecords && toolRecords.map((record) => (
+          <ToolRecordErrorBoundary key={record.toolCallId}>
+            <ToolRecord record={record} />
+          </ToolRecordErrorBoundary>
+        ))}
+        {message.content && (
+          <div className="text-sm leading-relaxed">
+            <Markdown content={message.content} />
+          </div>
+        )}
+      </>
+    );
+  };
 
   // Assistant message
   return (
@@ -42,17 +107,7 @@ export function MessageBlock({ message }: MessageBlockProps) {
           <span className="text-xs font-medium text-text-muted mb-2 block">
             {t('chat.assistant')}
           </span>
-          {reasoning && (
-            <ReasoningBlock text={reasoning} isStreaming={false} />
-          )}
-          {toolRecords && toolRecords.map((record) => (
-            <ToolRecord key={record.toolCallId} record={record} />
-          ))}
-          {message.content && (
-            <div className="text-sm leading-relaxed">
-              <Markdown content={message.content} />
-            </div>
-          )}
+          {renderContent()}
         </div>
       </div>
     </div>

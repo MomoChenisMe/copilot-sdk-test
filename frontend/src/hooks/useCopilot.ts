@@ -19,6 +19,8 @@ export function useCopilot({ subscribe, send }: UseCopilotOptions) {
     setCopilotError,
     addMessage,
     addTurnContentSegment,
+    addTurnSegment,
+    updateToolInTurnSegments,
   } = useAppStore();
 
   // Track whether we received a copilot:message with content during the current turn
@@ -39,28 +41,43 @@ export function useCopilot({ subscribe, send }: UseCopilotOptions) {
           if (content) {
             receivedMessageRef.current = true;
             addTurnContentSegment(content);
+            addTurnSegment({ type: 'text', content });
           }
           // Always clear streamingText when a message event arrives
           useAppStore.getState().setStreamingText('');
           break;
         }
 
-        case 'copilot:tool_start':
+        case 'copilot:tool_start': {
+          const toolCallId = data.toolCallId as string;
+          const toolName = data.toolName as string;
           addToolRecord({
-            toolCallId: data.toolCallId as string,
-            toolName: data.toolName as string,
+            toolCallId,
+            toolName,
+            arguments: data.arguments,
+            status: 'running',
+          });
+          addTurnSegment({
+            type: 'tool',
+            toolCallId,
+            toolName,
             arguments: data.arguments,
             status: 'running',
           });
           break;
+        }
 
-        case 'copilot:tool_end':
-          updateToolRecord(data.toolCallId as string, {
-            status: data.success ? 'success' : 'error',
+        case 'copilot:tool_end': {
+          const toolCallId = data.toolCallId as string;
+          const updates = {
+            status: (data.success ? 'success' : 'error') as 'success' | 'error',
             result: data.result as unknown,
             error: data.error as string | undefined,
-          });
+          };
+          updateToolRecord(toolCallId, updates);
+          updateToolInTurnSegments(toolCallId, updates);
           break;
+        }
 
         case 'copilot:reasoning_delta':
           appendReasoningText(data.content as string);
@@ -73,6 +90,7 @@ export function useCopilot({ subscribe, send }: UseCopilotOptions) {
             const content = data.content as string | undefined;
             if (content) {
               useAppStore.getState().appendReasoningText(content);
+              addTurnSegment({ type: 'reasoning', content });
             }
           }
           break;
@@ -89,15 +107,18 @@ export function useCopilot({ subscribe, send }: UseCopilotOptions) {
             content = state.streamingText;
           }
 
-          // Build metadata if tools or reasoning exist
+          // Build metadata if tools, reasoning, or turnSegments exist
           let metadata: MessageMetadata | null = null;
-          if (state.toolRecords.length > 0 || state.reasoningText) {
+          if (state.toolRecords.length > 0 || state.reasoningText || state.turnSegments.length > 0) {
             metadata = {};
             if (state.toolRecords.length > 0) {
               metadata.toolRecords = [...state.toolRecords];
             }
             if (state.reasoningText) {
               metadata.reasoning = state.reasoningText;
+            }
+            if (state.turnSegments.length > 0) {
+              metadata.turnSegments = [...state.turnSegments];
             }
           }
 
@@ -138,6 +159,8 @@ export function useCopilot({ subscribe, send }: UseCopilotOptions) {
     setCopilotError,
     addMessage,
     addTurnContentSegment,
+    addTurnSegment,
+    updateToolInTurnSegments,
   ]);
 
   const sendMessage = useCallback(

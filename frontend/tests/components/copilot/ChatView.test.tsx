@@ -27,6 +27,12 @@ vi.mock('../../../src/components/copilot/ReasoningBlock', () => ({
   ),
 }));
 
+vi.mock('../../../src/components/copilot/ToolResultBlock', () => ({
+  ToolResultBlock: ({ result, toolName, status }: { result: unknown; toolName: string; status?: string }) => (
+    result != null ? <div data-testid={`tool-result-${toolName}`} data-status={status}>{String(result)}</div> : null
+  ),
+}));
+
 import { ChatView } from '../../../src/components/copilot/ChatView';
 
 describe('ChatView', () => {
@@ -43,6 +49,7 @@ describe('ChatView', () => {
       isStreaming: false,
       toolRecords: [],
       reasoningText: '',
+      turnSegments: [],
       copilotError: null,
     });
   });
@@ -124,5 +131,58 @@ describe('ChatView', () => {
     const { container } = render(<ChatView {...defaultProps} />);
     const centeredCol = container.querySelector('.max-w-3xl');
     expect(centeredCol).toBeTruthy();
+  });
+
+  // --- Streaming block turnSegments rendering (Phase 8) ---
+
+  it('renders turnSegments in streaming block in order', () => {
+    useAppStore.setState({
+      activeConversationId: 'conv-1',
+      isStreaming: true,
+      turnSegments: [
+        { type: 'reasoning', content: 'Thinking...' },
+        { type: 'tool', toolCallId: 'tc1', toolName: 'bash', status: 'success', result: 'output' },
+        { type: 'text', content: 'First part' },
+      ],
+      streamingText: 'More text...',
+    });
+    render(<ChatView {...defaultProps} />);
+
+    // Should render reasoning from turnSegments
+    expect(screen.getByTestId('reasoning')).toBeTruthy();
+    expect(screen.getByTestId('reasoning').textContent).toBe('Thinking...');
+
+    // Should render tool from turnSegments
+    expect(screen.getByTestId('tool-tc1')).toBeTruthy();
+
+    // Should render tool result for bash
+    expect(screen.getByTestId('tool-result-bash')).toBeTruthy();
+
+    // Should still render streaming text at the end
+    expect(screen.getByTestId('streaming-text')).toBeTruthy();
+  });
+
+  it('renders streaming block without turnSegments (fallback to old rendering)', () => {
+    useAppStore.setState({
+      activeConversationId: 'conv-1',
+      isStreaming: true,
+      reasoningText: 'Old reasoning',
+      toolRecords: [
+        { toolCallId: 'tc1', toolName: 'bash', status: 'running' },
+      ],
+      turnSegments: [],
+      streamingText: 'Streaming...',
+    });
+    render(<ChatView {...defaultProps} />);
+
+    // Should render reasoning from reasoningText
+    expect(screen.getByTestId('reasoning')).toBeTruthy();
+    expect(screen.getByTestId('reasoning').textContent).toBe('Old reasoning');
+
+    // Should render tool from toolRecords
+    expect(screen.getByTestId('tool-tc1')).toBeTruthy();
+
+    // Should render streaming text
+    expect(screen.getByTestId('streaming-text')).toBeTruthy();
   });
 });

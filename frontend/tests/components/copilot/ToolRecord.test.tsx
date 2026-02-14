@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { ToolRecord } from '../../../src/components/copilot/ToolRecord';
+import { ToolRecord, safeStringify } from '../../../src/components/copilot/ToolRecord';
 import type { ToolRecord as ToolRecordType } from '../../../src/store/index';
 
 const makeRecord = (overrides: Partial<ToolRecordType> = {}): ToolRecordType => ({
@@ -87,5 +87,66 @@ describe('ToolRecord', () => {
     expect(screen.getByText('read_file')).toBeTruthy();
     expect(screen.getByText('write_file')).toBeTruthy();
     expect(screen.getByText('exec_cmd')).toBeTruthy();
+  });
+
+  it('displays "unknown" when toolName is undefined', () => {
+    const record = makeRecord({ toolName: undefined as unknown as string });
+    render(<ToolRecord record={record} />);
+    expect(screen.getByText('unknown')).toBeTruthy();
+  });
+
+  it('displays "unknown" when toolName is null', () => {
+    const record = makeRecord({ toolName: null as unknown as string });
+    render(<ToolRecord record={record} />);
+    expect(screen.getByText('unknown')).toBeTruthy();
+  });
+
+  it('does not crash when arguments contain circular references', () => {
+    const circular: Record<string, unknown> = { a: 1 };
+    circular.self = circular;
+    const record = makeRecord({ arguments: circular, status: 'success' });
+    render(<ToolRecord record={record} />);
+    fireEvent.click(screen.getByText('read_file'));
+    // Should render without crashing
+    expect(screen.getByText('Arguments')).toBeTruthy();
+  });
+
+  it('does not crash when result contains circular references', () => {
+    const circular: Record<string, unknown> = { b: 2 };
+    circular.self = circular;
+    const record = makeRecord({ result: circular, status: 'success' });
+    render(<ToolRecord record={record} />);
+    fireEvent.click(screen.getByText('read_file'));
+    expect(screen.getByText('Result')).toBeTruthy();
+  });
+});
+
+describe('safeStringify', () => {
+  it('stringifies normal objects', () => {
+    expect(safeStringify({ a: 1, b: 'hello' })).toBe(JSON.stringify({ a: 1, b: 'hello' }, null, 2));
+  });
+
+  it('handles null', () => {
+    expect(safeStringify(null)).toBe('null');
+  });
+
+  it('handles undefined', () => {
+    expect(safeStringify(undefined)).toBe('undefined');
+  });
+
+  it('handles circular references without throwing', () => {
+    const obj: Record<string, unknown> = { key: 'value' };
+    obj.self = obj;
+    const result = safeStringify(obj);
+    expect(typeof result).toBe('string');
+    expect(result).not.toBe('');
+  });
+
+  it('handles strings directly', () => {
+    expect(safeStringify('hello')).toBe('"hello"');
+  });
+
+  it('handles numbers', () => {
+    expect(safeStringify(42)).toBe('42');
   });
 });

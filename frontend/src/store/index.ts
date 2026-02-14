@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import type { Conversation, Message, ToolRecord } from '../lib/api';
+import type { Conversation, Message, ToolRecord, TurnSegment } from '../lib/api';
 
-export type { ToolRecord };
+export type { ToolRecord, TurnSegment };
 
 export type Theme = 'light' | 'dark';
 
@@ -48,6 +48,9 @@ export interface AppState {
   // Turn content accumulation
   turnContentSegments: string[];
 
+  // Turn segments (ordered interleaved segments)
+  turnSegments: TurnSegment[];
+
   // Error
   copilotError: string | null;
 
@@ -77,6 +80,10 @@ export interface AppState {
 
   // Actions — Turn content segments
   addTurnContentSegment: (content: string) => void;
+
+  // Actions — Turn segments
+  addTurnSegment: (segment: TurnSegment) => void;
+  updateToolInTurnSegments: (toolCallId: string, updates: Partial<TurnSegment & { type: 'tool' }>) => void;
 
   // Actions — Error
   setCopilotError: (error: string | null) => void;
@@ -126,6 +133,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   toolRecords: [],
   reasoningText: '',
   turnContentSegments: [],
+  turnSegments: [],
   copilotError: null,
 
   // Conversation actions
@@ -140,6 +148,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       toolRecords: [],
       reasoningText: '',
       turnContentSegments: [],
+      turnSegments: [],
       copilotError: null,
     }),
 
@@ -179,7 +188,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setIsStreaming: (streaming) => set({ isStreaming: streaming }),
 
   clearStreaming: () =>
-    set({ streamingText: '', isStreaming: false, toolRecords: [], reasoningText: '', turnContentSegments: [], copilotError: null }),
+    set({ streamingText: '', isStreaming: false, toolRecords: [], reasoningText: '', turnContentSegments: [], turnSegments: [], copilotError: null }),
 
   // Tool record actions
   addToolRecord: (record) =>
@@ -199,6 +208,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Turn content segment actions
   addTurnContentSegment: (content) =>
     set((state) => ({ turnContentSegments: [...state.turnContentSegments, content] })),
+
+  // Turn segment actions
+  addTurnSegment: (segment) =>
+    set((state) => ({ turnSegments: [...state.turnSegments, segment] })),
+
+  updateToolInTurnSegments: (toolCallId, updates) =>
+    set((state) => ({
+      turnSegments: state.turnSegments.map((s) =>
+        s.type === 'tool' && s.toolCallId === toolCallId ? { ...s, ...updates } : s,
+      ),
+    })),
 
   // Error actions
   setCopilotError: (error) => set({ copilotError: error }),

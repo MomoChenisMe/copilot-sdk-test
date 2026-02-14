@@ -33,7 +33,7 @@ export function useConversations() {
   );
 
   const update = useCallback(
-    async (id: string, updates: { title?: string; pinned?: boolean }) => {
+    async (id: string, updates: { title?: string; pinned?: boolean; model?: string }) => {
       const updated = await conversationApi.update(id, updates);
       setConversations((prev) => prev.map((c) => (c.id === id ? updated : c)));
       return updated;
