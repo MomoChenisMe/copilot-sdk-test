@@ -10,6 +10,11 @@ vi.mock('../../../src/components/shared/Markdown', () => ({
   ),
 }));
 
+// Mock lucide-react Sparkles icon
+vi.mock('lucide-react', () => ({
+  Sparkles: (props: any) => <svg data-testid="sparkles-icon" {...props} />,
+}));
+
 const makeMessage = (overrides: Partial<Message> = {}): Message => ({
   id: 'msg-1',
   conversationId: 'conv-1',
@@ -23,7 +28,6 @@ const makeMessage = (overrides: Partial<Message> = {}): Message => ({
 describe('MessageBlock', () => {
   it('renders user message with right-aligned styling', () => {
     const { container } = render(<MessageBlock message={makeMessage({ role: 'user' })} />);
-    // User messages should have flex justify-end
     const wrapper = container.firstChild as HTMLElement;
     expect(wrapper.className).toContain('justify-end');
   });
@@ -34,12 +38,12 @@ describe('MessageBlock', () => {
     expect(screen.queryByTestId('markdown')).toBeNull();
   });
 
-  it('renders user message with rounded background', () => {
+  it('renders user message with accent background', () => {
     const { container } = render(<MessageBlock message={makeMessage({ role: 'user' })} />);
     const bubble = container.querySelector('[data-testid="user-bubble"]');
     expect(bubble).toBeTruthy();
     expect(bubble?.className).toContain('rounded');
-    expect(bubble?.className).toContain('bg-user-message-bg');
+    expect(bubble?.className).toContain('bg-accent/10');
   });
 
   it('renders assistant message left-aligned', () => {
@@ -64,9 +68,24 @@ describe('MessageBlock', () => {
     expect(screen.getByText('Assistant')).toBeTruthy();
   });
 
-  it('does not render label for user messages', () => {
+  it('renders Sparkles icon for assistant messages', () => {
+    render(
+      <MessageBlock message={makeMessage({ role: 'assistant', content: 'Hi' })} />
+    );
+    expect(screen.getByTestId('sparkles-icon')).toBeTruthy();
+  });
+
+  it('renders assistant content with pl-8 indent', () => {
+    const { container } = render(
+      <MessageBlock message={makeMessage({ role: 'assistant', content: 'Hi' })} />
+    );
+    const contentArea = container.querySelector('.pl-8');
+    expect(contentArea).toBeTruthy();
+  });
+
+  it('does not render Sparkles icon or label for user messages', () => {
     render(<MessageBlock message={makeMessage({ role: 'user' })} />);
     expect(screen.queryByText('Assistant')).toBeNull();
-    expect(screen.queryByText('You')).toBeNull();
+    expect(screen.queryByTestId('sparkles-icon')).toBeNull();
   });
 });

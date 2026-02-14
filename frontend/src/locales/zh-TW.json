@@ -1,0 +1,73 @@
+{
+  "app": {
+    "loading": "載入中...",
+    "title": "AI Terminal"
+  },
+  "login": {
+    "title": "AI Terminal",
+    "subtitle": "請輸入密碼以繼續",
+    "password": "密碼",
+    "loggingIn": "登入中...",
+    "login": "登入"
+  },
+  "connection": {
+    "connected": "已連線",
+    "connecting": "連線中",
+    "disconnected": "已斷線"
+  },
+  "chat": {
+    "welcomeTitle": "歡迎使用 AI Terminal",
+    "welcomeDescription": "您的 AI 開發夥伴。開始對話以探索更多可能。",
+    "startConversation": "開始新對話",
+    "emptyPrompt": "發送訊息以開始...",
+    "assistant": "助手"
+  },
+  "model": {
+    "loading": "載入中...",
+    "error": "錯誤",
+    "sourceTitle": "GitHub Copilot Models"
+  },
+  "reasoning": {
+    "thinking": "思考中...",
+    "thoughtFor": "思考了 {{duration}}"
+  },
+  "tool": {
+    "arguments": "參數",
+    "result": "結果",
+    "error": "錯誤"
+  },
+  "markdown": {
+    "copyCode": "複製程式碼"
+  },
+  "input": {
+    "placeholder": "輸入訊息...",
+    "send": "發送",
+    "stop": "停止"
+  },
+  "bottomBar": {
+    "copilot": "Copilot",
+    "terminal": "終端機"
+  },
+  "topBar": {
+    "menu": "選單",
+    "toggleTheme": "切換主題",
+    "toggleLanguage": "切換語言"
+  },
+  "sidebar": {
+    "conversations": "對話紀錄",
+    "new": "+ 新增",
+    "search": "搜尋...",
+    "noResults": "沒有找到結果",
+    "pinned": "已釘選",
+    "recent": "最近",
+    "noConversations": "尚無對話紀錄",
+    "rename": "重新命名",
+    "pin": "釘選",
+    "unpin": "取消釘選",
+    "delete": "刪除",
+    "justNow": "剛剛",
+    "minutesAgo": "{{count}} 分鐘前",
+    "hoursAgo": "{{count}} 小時前",
+    "daysAgo": "{{count}} 天前"
+  }
+}

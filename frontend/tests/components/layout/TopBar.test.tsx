@@ -8,8 +8,10 @@ describe('TopBar', () => {
     modelName: 'GPT-4o',
     status: 'connected' as const,
     theme: 'light' as const,
+    language: 'en',
     onMenuClick: vi.fn(),
     onThemeToggle: vi.fn(),
+    onLanguageToggle: vi.fn(),
   };
 
   it('renders the conversation title', () => {
@@ -38,17 +40,17 @@ describe('TopBar', () => {
 
   it('renders connection badge with connected status', () => {
     render(<TopBar {...defaultProps} status="connected" />);
-    expect(screen.getByTitle('已連線')).toBeTruthy();
+    expect(screen.getByTitle('Connected')).toBeTruthy();
   });
 
   it('renders connection badge with connecting status', () => {
     render(<TopBar {...defaultProps} status="connecting" />);
-    expect(screen.getByTitle('連線中')).toBeTruthy();
+    expect(screen.getByTitle('Connecting')).toBeTruthy();
   });
 
   it('renders connection badge with disconnected status', () => {
     render(<TopBar {...defaultProps} status="disconnected" />);
-    expect(screen.getByTitle('已斷線')).toBeTruthy();
+    expect(screen.getByTitle('Disconnected')).toBeTruthy();
   });
 
   it('renders theme toggle button', () => {
@@ -70,5 +72,32 @@ describe('TopBar', () => {
     // Model name area should not render if empty
     const modelElement = screen.queryByTestId('model-name');
     expect(modelElement).toBeNull();
+  });
+
+  // Language switcher tests (Task 8.1)
+  it('renders language toggle button with Globe icon', () => {
+    render(<TopBar {...defaultProps} />);
+    const langButton = screen.getByRole('button', { name: /language/i });
+    expect(langButton).toBeTruthy();
+  });
+
+  it('displays current language code on the toggle button', () => {
+    render(<TopBar {...defaultProps} language="en" />);
+    const langButton = screen.getByRole('button', { name: /language/i });
+    expect(langButton.textContent).toContain('EN');
+  });
+
+  it('displays zh-TW language code when language is zh-TW', () => {
+    render(<TopBar {...defaultProps} language="zh-TW" />);
+    const langButton = screen.getByRole('button', { name: /language/i });
+    expect(langButton.textContent).toContain('中');
+  });
+
+  it('calls onLanguageToggle when language button is clicked', () => {
+    const onLanguageToggle = vi.fn();
+    render(<TopBar {...defaultProps} onLanguageToggle={onLanguageToggle} />);
+    const langButton = screen.getByRole('button', { name: /language/i });
+    fireEvent.click(langButton);
+    expect(onLanguageToggle).toHaveBeenCalledTimes(1);
   });
 });

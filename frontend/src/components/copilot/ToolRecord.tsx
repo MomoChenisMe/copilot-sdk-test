@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ToolRecord as ToolRecordType } from '../../store';
 
 interface ToolRecordProps {
@@ -6,6 +7,7 @@ interface ToolRecordProps {
 }
 
 export function ToolRecord({ record }: ToolRecordProps) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
   const statusIcon =
@@ -31,7 +33,7 @@ export function ToolRecord({ record }: ToolRecordProps) {
         <div className="px-3 pb-3 text-xs font-mono">
           {record.arguments != null && (
             <div className="mb-2">
-              <p className="text-text-muted mb-1 font-sans">Arguments</p>
+              <p className="text-text-muted mb-1 font-sans">{t('tool.arguments')}</p>
               <pre className="bg-code-block-bg p-2 rounded text-text-secondary overflow-x-auto">
                 {JSON.stringify(record.arguments, null, 2)}
               </pre>
@@ -39,7 +41,7 @@ export function ToolRecord({ record }: ToolRecordProps) {
           )}
           {record.result != null && (
             <div className="mb-2">
-              <p className="text-text-muted mb-1 font-sans">Result</p>
+              <p className="text-text-muted mb-1 font-sans">{t('tool.result')}</p>
               <pre className="bg-code-block-bg p-2 rounded text-text-secondary overflow-x-auto max-h-48 overflow-y-auto">
                 {typeof record.result === 'string'
                   ? record.result
@@ -49,7 +51,7 @@ export function ToolRecord({ record }: ToolRecordProps) {
           )}
           {record.error && (
             <div>
-              <p className="text-text-muted mb-1 font-sans">Error</p>
+              <p className="text-text-muted mb-1 font-sans">{t('tool.error')}</p>
               <pre className="bg-code-block-bg p-2 rounded text-error overflow-x-auto">
                 {record.error}
               </pre>

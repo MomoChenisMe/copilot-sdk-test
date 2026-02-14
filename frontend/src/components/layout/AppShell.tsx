@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useConversations } from '../../hooks/useConversations';
@@ -15,6 +16,7 @@ import { TerminalView } from '../terminal/TerminalView';
 type ActiveTab = 'copilot' | 'terminal';
 
 export function AppShell({ onLogout }: { onLogout: () => void }) {
+  const { t } = useTranslation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>('copilot');
   const [cwd, setCwd] = useState('/home');
@@ -52,6 +54,8 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   const theme = useAppStore((s) => s.theme);
   const toggleTheme = useAppStore((s) => s.toggleTheme);
   const getInitialTheme = useAppStore((s) => s.getInitialTheme);
+  const language = useAppStore((s) => s.language);
+  const setLanguage = useAppStore((s) => s.setLanguage);
 
   // Initialize theme from localStorage on mount
   useEffect(() => {
@@ -66,6 +70,22 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  // Initialize language from i18n on mount
+  const { i18n } = useTranslation();
+  useEffect(() => {
+    const currentLng = i18n.language || 'en';
+    const normalized = currentLng.startsWith('zh') ? 'zh-TW' : 'en';
+    if (normalized !== language) {
+      setLanguage(normalized);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleLanguageToggle = useCallback(() => {
+    const next = language === 'zh-TW' ? 'en' : 'zh-TW';
+    i18n.changeLanguage(next);
+    setLanguage(next);
+  }, [language, i18n, setLanguage]);
 
   const activeConversation = conversations.find((c) => c.id === activeConversationId);
   const defaultModel = models[0]?.id || '';
@@ -121,12 +141,14 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   return (
     <div className="flex flex-col h-full bg-bg-primary">
       <TopBar
-        title={activeConversation?.title || 'AI Terminal'}
+        title={activeConversation?.title || t('app.title')}
         modelName={activeConversation?.model || defaultModel}
         status={status}
         theme={theme}
+        language={language}
         onMenuClick={() => setSidebarOpen(!sidebarOpen)}
         onThemeToggle={toggleTheme}
+        onLanguageToggle={handleLanguageToggle}
       />
 
       <div className="flex-1 overflow-hidden relative">

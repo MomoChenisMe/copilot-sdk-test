@@ -77,6 +77,56 @@ describe('ModelSelector', () => {
     expect(screen.getByText('Error')).toBeTruthy();
   });
 
+  // --- Task 4: ModelSelector improvements ---
+
+  it('dropdown has max-h-60 overflow-y-auto for scrollable list', () => {
+    const { container } = render(<ModelSelector {...defaultProps} />);
+    fireEvent.click(screen.getByText('GPT-4o'));
+    const dropdown = container.querySelector('[data-testid="model-dropdown"]');
+    expect(dropdown?.className).toContain('max-h-60');
+    expect(dropdown?.className).toContain('overflow-y-auto');
+  });
+
+  it('dropdown has min-w-48 max-w-72 for proper width', () => {
+    const { container } = render(<ModelSelector {...defaultProps} />);
+    fireEvent.click(screen.getByText('GPT-4o'));
+    const dropdown = container.querySelector('[data-testid="model-dropdown"]');
+    expect(dropdown?.className).toContain('min-w-48');
+    expect(dropdown?.className).toContain('max-w-72');
+  });
+
+  it('dropdown shows "GitHub Copilot Models" source title', () => {
+    render(<ModelSelector {...defaultProps} />);
+    fireEvent.click(screen.getByText('GPT-4o'));
+    expect(screen.getByText('GitHub Copilot Models')).toBeTruthy();
+  });
+
+  it('trigger button has truncate and max-w-40', () => {
+    render(<ModelSelector {...defaultProps} />);
+    const trigger = screen.getByRole('button', { name: /GPT-4o/i });
+    expect(trigger.className).toContain('truncate');
+    expect(trigger.className).toContain('max-w-40');
+  });
+
+  it('dropdown items have truncate and title attribute for tooltip', () => {
+    const { container } = render(<ModelSelector {...defaultProps} />);
+    fireEvent.click(screen.getByText('GPT-4o'));
+    const dropdown = container.querySelector('[data-testid="model-dropdown"]');
+    const items = dropdown?.querySelectorAll('button');
+    // Each model button should have title and truncate
+    items?.forEach((item) => {
+      expect(item.className).toContain('truncate');
+      expect(item.getAttribute('title')).toBeTruthy();
+    });
+  });
+
+  it('dropdown is positioned right-0', () => {
+    const { container } = render(<ModelSelector {...defaultProps} />);
+    fireEvent.click(screen.getByText('GPT-4o'));
+    const dropdown = container.querySelector('[data-testid="model-dropdown"]');
+    expect(dropdown?.className).toContain('right-0');
+  });
+
   it('closes dropdown on click outside', () => {
     render(
       <div>

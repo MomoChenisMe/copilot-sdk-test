@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -10,6 +11,7 @@ interface MarkdownProps {
 }
 
 function CodeBlock({ className, children, ...props }: React.HTMLAttributes<HTMLElement> & { children?: React.ReactNode }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const isInline = !className;
 
@@ -38,7 +40,7 @@ function CodeBlock({ className, children, ...props }: React.HTMLAttributes<HTMLE
         <button
           onClick={handleCopy}
           className="text-text-muted hover:text-text-primary transition-colors p-1"
-          aria-label="copy code"
+          aria-label={t('markdown.copyCode')}
         >
           {copied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
         </button>

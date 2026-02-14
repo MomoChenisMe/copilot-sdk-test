@@ -38,7 +38,7 @@ describe('App', () => {
       logout: vi.fn(),
     });
     render(<App />);
-    expect(screen.getByText('載入中...')).toBeTruthy();
+    expect(screen.getByText('Loading...')).toBeTruthy();
   });
 
   it('shows LoginPage when not authenticated', () => {

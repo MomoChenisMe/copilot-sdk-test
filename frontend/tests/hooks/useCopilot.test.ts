@@ -111,6 +111,53 @@ describe('useCopilot', () => {
     expect(useAppStore.getState().isStreaming).toBe(false);
   });
 
+  it('should NOT set receivedMessageRef when copilot:message has empty content, allowing idle fallback', () => {
+    renderHook(() => useCopilot({ subscribe, send }));
+
+    // Accumulate streaming text
+    act(() => {
+      emit({ type: 'copilot:delta', data: { messageId: 'm1', content: 'Streamed text' } });
+    });
+
+    // Receive copilot:message with empty content — should NOT mark as received
+    act(() => {
+      emit({ type: 'copilot:message', data: { messageId: 'm1', content: '' } });
+    });
+
+    // idle should still use streamingText as fallback
+    act(() => {
+      emit({ type: 'copilot:idle' });
+    });
+
+    const state = useAppStore.getState();
+    const assistantMsgs = state.messages.filter((m) => m.role === 'assistant');
+    // Should have exactly 1 message — the fallback from streamingText, not the empty one
+    expect(assistantMsgs.length).toBe(1);
+    expect(assistantMsgs[0].content).toBe('Streamed text');
+  });
+
+  it('should NOT set receivedMessageRef when copilot:message has undefined content', () => {
+    renderHook(() => useCopilot({ subscribe, send }));
+
+    act(() => {
+      emit({ type: 'copilot:delta', data: { messageId: 'm1', content: 'Streamed' } });
+    });
+
+    // Receive copilot:message with undefined content
+    act(() => {
+      emit({ type: 'copilot:message', data: { messageId: 'm1' } });
+    });
+
+    act(() => {
+      emit({ type: 'copilot:idle' });
+    });
+
+    const state = useAppStore.getState();
+    const assistantMsgs = state.messages.filter((m) => m.role === 'assistant');
+    expect(assistantMsgs.length).toBe(1);
+    expect(assistantMsgs[0].content).toBe('Streamed');
+  });
+
   it('sendMessage should add user message and send ws message', () => {
     const { result } = renderHook(() => useCopilot({ subscribe, send }));
 

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Input } from '../shared/Input';
 import { ModelSelector } from '../copilot/ModelSelector';
 
@@ -24,10 +25,11 @@ export function BottomBar({
   currentModel,
   onModelChange,
 }: BottomBarProps) {
+  const { t } = useTranslation();
   return (
     <div className="shrink-0 bg-bg-secondary border-t border-border">
       {/* Tab row: pill tabs + model selector on same line */}
-      <div className="flex items-center justify-between px-3 py-2" data-testid="tab-row">
+      <div className="flex items-center justify-between px-4 py-2" data-testid="tab-row">
         {/* Pill tabs */}
         <div className="flex items-center bg-bg-tertiary rounded-full p-0.5">
           <button
@@ -38,7 +40,7 @@ export function BottomBar({
                 : 'text-text-muted hover:text-text-secondary'
             }`}
           >
-            Copilot
+            {t('bottomBar.copilot')}
           </button>
           <button
             onClick={() => onTabChange('terminal')}
@@ -48,7 +50,7 @@ export function BottomBar({
                 : 'text-text-muted hover:text-text-secondary'
             }`}
           >
-            Terminal
+            {t('bottomBar.terminal')}
           </button>
         </div>
 

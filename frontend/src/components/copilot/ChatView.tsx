@@ -1,4 +1,5 @@
 import { useRef, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Sparkles } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { MessageBlock } from './MessageBlock';
@@ -11,6 +12,7 @@ interface ChatViewProps {
 }
 
 export function ChatView({ onNewConversation }: ChatViewProps) {
+  const { t } = useTranslation();
   const activeConversationId = useAppStore((s) => s.activeConversationId);
   const messages = useAppStore((s) => s.messages);
   const streamingText = useAppStore((s) => s.streamingText);
@@ -46,15 +48,15 @@ export function ChatView({ onNewConversation }: ChatViewProps) {
           <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-accent/10 flex items-center justify-center">
             <Sparkles size={32} className="text-accent" />
           </div>
-          <h2 className="text-2xl font-bold text-text-primary mb-2">Welcome to AI Terminal</h2>
+          <h2 className="text-2xl font-bold text-text-primary mb-2">{t('chat.welcomeTitle')}</h2>
           <p className="text-text-secondary mb-6 max-w-md">
-            Your AI-powered development companion. Start a conversation to begin.
+            {t('chat.welcomeDescription')}
           </p>
           <button
             onClick={onNewConversation}
             className="px-6 py-3 bg-accent text-white rounded-xl font-medium hover:bg-accent-hover transition-colors"
           >
-            Start New Conversation
+            {t('chat.startConversation')}
           </button>
         </div>
       </div>
@@ -65,7 +67,7 @@ export function ChatView({ onNewConversation }: ChatViewProps) {
   if (messages.length === 0 && !showStreamingBlock) {
     return (
       <div className="flex-1 overflow-y-auto flex items-center justify-center">
-        <p className="text-text-muted text-sm">Send a message to start...</p>
+        <p className="text-text-muted text-sm">{t('chat.emptyPrompt')}</p>
       </div>
     );
   }
@@ -77,7 +79,7 @@ export function ChatView({ onNewConversation }: ChatViewProps) {
       className="flex-1 overflow-y-auto"
     >
       {/* Centered conversation column */}
-      <div className="max-w-3xl mx-auto px-4 py-4">
+      <div className="max-w-3xl mx-auto px-4 py-6">
         {/* Historical messages */}
         {messages.map((msg) => (
           <MessageBlock key={msg.id} message={msg} />
@@ -85,10 +87,10 @@ export function ChatView({ onNewConversation }: ChatViewProps) {
 
         {/* Active streaming block */}
         {showStreamingBlock && (
-          <div className="py-3">
+          <div className="mb-4">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-xs font-semibold uppercase text-text-muted">
-                Assistant
+                {t('chat.assistant')}
               </span>
             </div>
 

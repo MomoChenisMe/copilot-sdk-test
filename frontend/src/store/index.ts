@@ -23,6 +23,10 @@ export interface AppState {
   toggleTheme: () => void;
   getInitialTheme: () => Theme;
 
+  // Language
+  language: string;
+  setLanguage: (lang: string) => void;
+
   // Models
   models: ModelInfo[];
   modelsLoading: boolean;
@@ -98,6 +102,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ theme: next });
   },
   getInitialTheme: () => readThemeFromStorage(),
+
+  // Language state
+  language: 'en',
+  setLanguage: (lang) => {
+    try { localStorage.setItem('i18nextLng', lang); } catch { /* noop */ }
+    set({ language: lang });
+  },
 
   // Models state
   models: [],

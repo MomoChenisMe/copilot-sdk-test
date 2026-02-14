@@ -32,17 +32,21 @@ export function useCopilot({ subscribe, send }: UseCopilotOptions) {
           appendStreamingText(data.content as string);
           break;
 
-        case 'copilot:message':
-          receivedMessageRef.current = true;
-          addMessage({
-            id: (data.messageId as string) || crypto.randomUUID(),
-            conversationId: '',
-            role: 'assistant',
-            content: data.content as string,
-            metadata: null,
-            createdAt: new Date().toISOString(),
-          });
+        case 'copilot:message': {
+          const content = data.content as string | undefined;
+          if (content) {
+            receivedMessageRef.current = true;
+            addMessage({
+              id: (data.messageId as string) || crypto.randomUUID(),
+              conversationId: '',
+              role: 'assistant',
+              content,
+              metadata: null,
+              createdAt: new Date().toISOString(),
+            });
+          }
           break;
+        }
 
         case 'copilot:tool_start':
           addToolRecord({

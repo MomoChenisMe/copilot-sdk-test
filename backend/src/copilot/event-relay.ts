@@ -5,8 +5,8 @@ import { createLogger } from '../utils/logger.js';
 const log = createLogger('event-relay');
 
 /** Safely extract content with fallback chain */
-function extractContent(event: any): string {
-  return event.deltaContent ?? event.delta ?? event.content ?? '';
+function extractContent(data: any): string {
+  return data.deltaContent ?? data.delta ?? data.content ?? '';
 }
 
 export class EventRelay {
@@ -20,12 +20,13 @@ export class EventRelay {
     this.unsubscribes.push(
       session.on('assistant.message_delta', (event) => {
         const e = event as any;
+        const d = e.data ?? e;
         log.debug({ event: e }, 'assistant.message_delta');
         this.send({
           type: 'copilot:delta',
           data: {
-            messageId: e.messageId,
-            content: extractContent(e),
+            messageId: d.messageId,
+            content: extractContent(d),
           },
         });
       }),
@@ -34,12 +35,13 @@ export class EventRelay {
     this.unsubscribes.push(
       session.on('assistant.message', (event) => {
         const e = event as any;
+        const d = e.data ?? e;
         log.debug({ event: e }, 'assistant.message');
         this.send({
           type: 'copilot:message',
           data: {
-            messageId: e.messageId,
-            content: e.content ?? '',
+            messageId: d.messageId,
+            content: d.content ?? '',
           },
         });
       }),
@@ -48,12 +50,13 @@ export class EventRelay {
     this.unsubscribes.push(
       session.on('assistant.reasoning_delta', (event) => {
         const e = event as any;
+        const d = e.data ?? e;
         log.debug({ event: e }, 'assistant.reasoning_delta');
         this.send({
           type: 'copilot:reasoning_delta',
           data: {
-            reasoningId: e.reasoningId,
-            content: extractContent(e),
+            reasoningId: d.reasoningId,
+            content: extractContent(d),
           },
         });
       }),
@@ -62,12 +65,13 @@ export class EventRelay {
     this.unsubscribes.push(
       session.on('assistant.reasoning', (event) => {
         const e = event as any;
+        const d = e.data ?? e;
         log.debug({ event: e }, 'assistant.reasoning');
         this.send({
           type: 'copilot:reasoning',
           data: {
-            reasoningId: e.reasoningId,
-            content: e.content ?? '',
+            reasoningId: d.reasoningId,
+            content: d.content ?? '',
           },
         });
       }),
@@ -76,13 +80,14 @@ export class EventRelay {
     this.unsubscribes.push(
       session.on('tool.execution_start', (event) => {
         const e = event as any;
+        const d = e.data ?? e;
         log.debug({ event: e }, 'tool.execution_start');
         this.send({
           type: 'copilot:tool_start',
           data: {
-            toolCallId: e.toolCallId,
-            toolName: e.toolName,
-            arguments: e.arguments,
+            toolCallId: d.toolCallId,
+            toolName: d.toolName,
+            arguments: d.arguments,
           },
         });
       }),
@@ -91,15 +96,16 @@ export class EventRelay {
     this.unsubscribes.push(
       session.on('tool.execution_complete', (event) => {
         const e = event as any;
+        const d = e.data ?? e;
         log.debug({ event: e }, 'tool.execution_complete');
         const data: Record<string, unknown> = {
-          toolCallId: e.toolCallId,
-          success: e.success,
+          toolCallId: d.toolCallId,
+          success: d.success,
         };
-        if (e.success) {
-          data.result = e.result;
+        if (d.success) {
+          data.result = d.result;
         } else {
-          data.error = e.error;
+          data.error = d.error;
         }
         this.send({
           type: 'copilot:tool_end',
@@ -118,12 +124,13 @@ export class EventRelay {
     this.unsubscribes.push(
       session.on('session.error', (event) => {
         const e = event as any;
+        const d = e.data ?? e;
         log.error({ event: e }, 'session.error');
         this.send({
           type: 'copilot:error',
           data: {
-            errorType: e.errorType ?? 'unknown',
-            message: e.message ?? 'Unknown error',
+            errorType: d.errorType ?? 'unknown',
+            message: d.message ?? 'Unknown error',
           },
         });
       }),

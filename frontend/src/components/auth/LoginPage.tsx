@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface LoginPageProps {
   onLogin: (password: string) => Promise<void>;
@@ -6,6 +7,7 @@ interface LoginPageProps {
 }
 
 export function LoginPage({ onLogin, error }: LoginPageProps) {
+  const { t } = useTranslation();
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -26,8 +28,8 @@ export function LoginPage({ onLogin, error }: LoginPageProps) {
         onSubmit={handleSubmit}
         className="w-full max-w-sm mx-4 p-6 rounded-xl bg-bg-secondary border border-border"
       >
-        <h1 className="text-xl font-bold text-text-primary mb-1">AI Terminal</h1>
-        <p className="text-sm text-text-secondary mb-6">請輸入密碼以繼續</p>
+        <h1 className="text-xl font-bold text-text-primary mb-1">{t('login.title')}</h1>
+        <p className="text-sm text-text-secondary mb-6">{t('login.subtitle')}</p>
 
         {error && (
           <div className="mb-4 p-3 rounded-lg bg-error/10 text-error text-sm">{error}</div>
@@ -37,7 +39,7 @@ export function LoginPage({ onLogin, error }: LoginPageProps) {
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="密碼"
+          placeholder={t('login.password')}
           autoFocus
           className="w-full px-4 py-3 rounded-lg bg-bg-input border border-border text-text-primary placeholder-text-muted focus:outline-none focus:border-accent"
         />
@@ -47,7 +49,7 @@ export function LoginPage({ onLogin, error }: LoginPageProps) {
           disabled={!password || loading}
           className="w-full mt-4 px-4 py-3 rounded-lg bg-accent hover:bg-accent-hover text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          {loading ? '登入中...' : '登入'}
+          {loading ? t('login.loggingIn') : t('login.login')}
         </button>
       </form>
     </div>

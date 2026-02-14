@@ -229,4 +229,125 @@ describe('EventRelay', () => {
       data: { errorType: 'unknown_error', message: 'Unknown error' },
     });
   });
+
+  // --- Nested event structure tests (SDK wraps payload in { type, data: {...} }) ---
+
+  describe('nested event structure (e.data wrapper)', () => {
+    it('should extract content from nested assistant.message_delta', () => {
+      const { send, handlers } = setup();
+
+      handlers.get('assistant.message_delta')!({
+        type: 'assistant.message_delta',
+        data: { messageId: 'msg-n1', deltaContent: 'Nested hello' },
+      });
+
+      expect(send).toHaveBeenCalledWith({
+        type: 'copilot:delta',
+        data: { messageId: 'msg-n1', content: 'Nested hello' },
+      });
+    });
+
+    it('should extract content from nested assistant.message', () => {
+      const { send, handlers } = setup();
+
+      handlers.get('assistant.message')!({
+        type: 'assistant.message',
+        data: { messageId: 'msg-n2', content: 'Nested message' },
+      });
+
+      expect(send).toHaveBeenCalledWith({
+        type: 'copilot:message',
+        data: { messageId: 'msg-n2', content: 'Nested message' },
+      });
+    });
+
+    it('should extract content from nested assistant.reasoning_delta', () => {
+      const { send, handlers } = setup();
+
+      handlers.get('assistant.reasoning_delta')!({
+        type: 'assistant.reasoning_delta',
+        data: { reasoningId: 'r-n1', deltaContent: 'Nested reasoning' },
+      });
+
+      expect(send).toHaveBeenCalledWith({
+        type: 'copilot:reasoning_delta',
+        data: { reasoningId: 'r-n1', content: 'Nested reasoning' },
+      });
+    });
+
+    it('should extract content from nested assistant.reasoning', () => {
+      const { send, handlers } = setup();
+
+      handlers.get('assistant.reasoning')!({
+        type: 'assistant.reasoning',
+        data: { reasoningId: 'r-n2', content: 'Nested full reasoning' },
+      });
+
+      expect(send).toHaveBeenCalledWith({
+        type: 'copilot:reasoning',
+        data: { reasoningId: 'r-n2', content: 'Nested full reasoning' },
+      });
+    });
+
+    it('should extract fields from nested tool.execution_start', () => {
+      const { send, handlers } = setup();
+
+      handlers.get('tool.execution_start')!({
+        type: 'tool.execution_start',
+        data: {
+          toolCallId: 'tc-n1',
+          toolName: 'run_command',
+          arguments: { cmd: 'ls' },
+        },
+      });
+
+      expect(send).toHaveBeenCalledWith({
+        type: 'copilot:tool_start',
+        data: {
+          toolCallId: 'tc-n1',
+          toolName: 'run_command',
+          arguments: { cmd: 'ls' },
+        },
+      });
+    });
+
+    it('should extract fields from nested tool.execution_complete', () => {
+      const { send, handlers } = setup();
+
+      handlers.get('tool.execution_complete')!({
+        type: 'tool.execution_complete',
+        data: {
+          toolCallId: 'tc-n2',
+          success: true,
+          result: 'nested result',
+        },
+      });
+
+      expect(send).toHaveBeenCalledWith({
+        type: 'copilot:tool_end',
+        data: {
+          toolCallId: 'tc-n2',
+          success: true,
+          result: 'nested result',
+        },
+      });
+    });
+
+    it('should extract fields from nested session.error', () => {
+      const { send, handlers } = setup();
+
+      handlers.get('session.error')!({
+        type: 'session.error',
+        data: {
+          errorType: 'nested_error',
+          message: 'Nested error message',
+        },
+      });
+
+      expect(send).toHaveBeenCalledWith({
+        type: 'copilot:error',
+        data: { errorType: 'nested_error', message: 'Nested error message' },
+      });
+    });
+  });
 });

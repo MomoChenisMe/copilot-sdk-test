@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Conversation, SearchResult } from '../../lib/api';
 
 interface SidebarProps {
@@ -14,18 +15,22 @@ interface SidebarProps {
   onSearch: (query: string) => Promise<SearchResult[]>;
 }
 
-function formatTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return 'just now';
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffH = Math.floor(diffMin / 60);
-  if (diffH < 24) return `${diffH}h ago`;
-  const diffD = Math.floor(diffH / 24);
-  if (diffD < 7) return `${diffD}d ago`;
-  return date.toLocaleDateString();
+function useFormatTime() {
+  const { t } = useTranslation();
+
+  return (dateStr: string): string => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) return t('sidebar.justNow');
+    if (diffMin < 60) return t('sidebar.minutesAgo', { count: diffMin });
+    const diffH = Math.floor(diffMin / 60);
+    if (diffH < 24) return t('sidebar.hoursAgo', { count: diffH });
+    const diffD = Math.floor(diffH / 24);
+    if (diffD < 7) return t('sidebar.daysAgo', { count: diffD });
+    return date.toLocaleDateString();
+  };
 }
 
 export function Sidebar({
@@ -40,6 +45,8 @@ export function Sidebar({
   onRename,
   onSearch,
 }: SidebarProps) {
+  const { t } = useTranslation();
+  const formatTime = useFormatTime();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -111,7 +118,7 @@ export function Sidebar({
               startRename(conv);
             }}
             className="text-text-muted hover:text-text-primary text-xs p-1"
-            title="Rename"
+            title={t('sidebar.rename')}
           >
             ✎
           </button>
@@ -121,7 +128,7 @@ export function Sidebar({
               onPin(conv.id, !conv.pinned);
             }}
             className="text-text-muted hover:text-warning text-xs p-1"
-            title={conv.pinned ? 'Unpin' : 'Pin'}
+            title={conv.pinned ? t('sidebar.unpin') : t('sidebar.pin')}
           >
             {conv.pinned ? '★' : '☆'}
           </button>
@@ -131,7 +138,7 @@ export function Sidebar({
               onDelete(conv.id);
             }}
             className="text-text-muted hover:text-error text-xs p-1"
-            title="Delete"
+            title={t('sidebar.delete')}
           >
             ✕
           </button>
@@ -160,20 +167,20 @@ export function Sidebar({
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <h2 className="text-text-primary font-semibold text-lg">Conversations</h2>
+          <h2 className="text-text-primary font-semibold text-lg">{t('sidebar.conversations')}</h2>
           <button
             onClick={onCreate}
             className="px-3 py-1 bg-accent text-white text-sm rounded hover:bg-accent-hover transition-colors"
           >
-            + New
+            {t('sidebar.new')}
           </button>
         </div>
 
         {/* Search */}
-        <div className="px-4 py-2">
+        <div className="px-4 py-3">
           <input
             type="text"
-            placeholder="Search..."
+            placeholder={t('sidebar.search')}
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
             className="w-full px-3 py-2 bg-bg-input text-text-primary rounded border border-border text-sm placeholder:text-text-muted focus:outline-none focus:border-accent"
@@ -185,7 +192,7 @@ export function Sidebar({
           {searchResults ? (
             // Search results view
             searchResults.length === 0 ? (
-              <p className="px-4 py-3 text-text-muted text-sm">No results found</p>
+              <p className="px-4 py-3 text-text-muted text-sm">{t('sidebar.noResults')}</p>
             ) : (
               searchResults.map((result) => (
                 <button
@@ -213,7 +220,7 @@ export function Sidebar({
               {pinnedConversations.length > 0 && (
                 <div>
                   <p className="px-4 py-2 text-xs font-semibold text-text-muted uppercase tracking-wider">
-                    Pinned
+                    {t('sidebar.pinned')}
                   </p>
                   {pinnedConversations.map(renderConversationItem)}
                 </div>
@@ -222,12 +229,12 @@ export function Sidebar({
               {/* Recent section */}
               <div>
                 <p className="px-4 py-2 text-xs font-semibold text-text-muted uppercase tracking-wider">
-                  Recent
+                  {t('sidebar.recent')}
                 </p>
                 {recentConversations.length > 0 ? (
                   recentConversations.map(renderConversationItem)
                 ) : (
-                  <p className="px-4 py-3 text-text-muted text-sm">No conversations yet</p>
+                  <p className="px-4 py-3 text-text-muted text-sm">{t('sidebar.noConversations')}</p>
                 )}
               </div>
             </>

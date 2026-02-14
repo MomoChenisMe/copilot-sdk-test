@@ -16,21 +16,26 @@
 
 ### Requirement: TopBar
 
-TopBar SHALL 顯示漢堡選單按鈕、對話標題、當前工作目錄和連線狀態指示燈。
+TopBar SHALL 顯示漢堡選單按鈕、對話標題、主題切換、語言切換和連線狀態指示燈。TopBar MUST 使用 `px-4 py-3` 作為內距。
 
 #### Scenario: TopBar 內容顯示
 
 - **WHEN** 應用程式載入完成
-- **THEN** TopBar MUST 顯示：左側漢堡選單按鈕、中間對話標題、右側連線狀態指示燈
+- **THEN** TopBar MUST 顯示：左側漢堡選單按鈕、中間對話標題、右側依序為語言切換按鈕、主題切換按鈕、連線狀態指示燈
 
 #### Scenario: 連線狀態指示
 
 - **WHEN** WebSocket 連線狀態變更
 - **THEN** 指示燈 MUST 即時更新：綠色=已連線、黃色=重連中、紅色=斷線
 
+#### Scenario: TopBar 間距
+
+- **WHEN** TopBar 渲染
+- **THEN** TopBar MUST 使用 `px-4 py-3` 內距，元素之間使用 `gap-3` 間距
+
 ### Requirement: Sidebar（對話列表）
 
-Sidebar SHALL 顯示所有對話列表，手機上預設收合。
+Sidebar SHALL 顯示所有對話列表，手機上預設收合。搜尋輸入欄位 MUST 使用 `px-4 py-3` 內距。
 
 #### Scenario: 開啟 Sidebar
 
@@ -57,9 +62,14 @@ Sidebar SHALL 顯示所有對話列表，手機上預設收合。
 - **WHEN** 使用者長按或右滑對話項目
 - **THEN** 介面 MUST 顯示操作選單：重新命名、釘選/取消釘選、刪除
 
+#### Scenario: Sidebar 搜尋間距
+
+- **WHEN** Sidebar 搜尋欄位渲染
+- **THEN** 搜尋輸入 MUST 使用 `px-4 py-3` 內距
+
 ### Requirement: BottomBar
 
-BottomBar SHALL 包含 Agent 切換 tab 和輸入區域。
+BottomBar SHALL 包含 Agent 切換 tab 和輸入區域。Tab 列 MUST 使用 `px-4` 水平內距。
 
 #### Scenario: Tab 切換
 
@@ -75,6 +85,16 @@ BottomBar SHALL 包含 Agent 切換 tab 和輸入區域。
 
 - **WHEN** 當前為 Terminal tab
 - **THEN** 輸入區 MUST 隱藏（鍵盤輸入直接進入 xterm.js）
+
+#### Scenario: BottomBar tab 列間距
+
+- **WHEN** BottomBar tab 列渲染
+- **THEN** tab 列 MUST 使用 `px-4 py-2` 內距
+
+#### Scenario: 輸入區間距
+
+- **WHEN** 輸入區渲染
+- **THEN** 輸入區 MUST 使用 `px-4 pb-4 pt-2` 內距，提供充足的底部安全區域
 
 ### Requirement: 深色主題
 

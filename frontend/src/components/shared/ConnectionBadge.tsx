@@ -1,17 +1,20 @@
+import { useTranslation } from 'react-i18next';
 import type { WsStatus } from '../../lib/ws-types';
 
 interface ConnectionBadgeProps {
   status: WsStatus;
 }
 
-const statusConfig: Record<WsStatus, { color: string; label: string }> = {
-  connected: { color: 'bg-success', label: '已連線' },
-  connecting: { color: 'bg-warning', label: '連線中' },
-  disconnected: { color: 'bg-error', label: '已斷線' },
+const statusConfig: Record<WsStatus, { color: string; labelKey: string }> = {
+  connected: { color: 'bg-success', labelKey: 'connection.connected' },
+  connecting: { color: 'bg-warning', labelKey: 'connection.connecting' },
+  disconnected: { color: 'bg-error', labelKey: 'connection.disconnected' },
 };
 
 export function ConnectionBadge({ status }: ConnectionBadgeProps) {
-  const { color, label } = statusConfig[status];
+  const { t } = useTranslation();
+  const { color, labelKey } = statusConfig[status];
+  const label = t(labelKey);
 
   return (
     <div className="flex items-center gap-1.5" title={label}>

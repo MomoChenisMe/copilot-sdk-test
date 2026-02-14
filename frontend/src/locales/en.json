@@ -1,0 +1,73 @@
+{
+  "app": {
+    "loading": "Loading...",
+    "title": "AI Terminal"
+  },
+  "login": {
+    "title": "AI Terminal",
+    "subtitle": "Enter password to continue",
+    "password": "Password",
+    "loggingIn": "Logging in...",
+    "login": "Login"
+  },
+  "connection": {
+    "connected": "Connected",
+    "connecting": "Connecting",
+    "disconnected": "Disconnected"
+  },
+  "chat": {
+    "welcomeTitle": "Welcome to AI Terminal",
+    "welcomeDescription": "Your AI-powered development companion. Start a conversation to begin.",
+    "startConversation": "Start New Conversation",
+    "emptyPrompt": "Send a message to start...",
+    "assistant": "Assistant"
+  },
+  "model": {
+    "loading": "Loading...",
+    "error": "Error",
+    "sourceTitle": "GitHub Copilot Models"
+  },
+  "reasoning": {
+    "thinking": "Thinking...",
+    "thoughtFor": "Thought for {{duration}}"
+  },
+  "tool": {
+    "arguments": "Arguments",
+    "result": "Result",
+    "error": "Error"
+  },
+  "markdown": {
+    "copyCode": "copy code"
+  },
+  "input": {
+    "placeholder": "Message AI Terminal...",
+    "send": "Send",
+    "stop": "Stop"
+  },
+  "bottomBar": {
+    "copilot": "Copilot",
+    "terminal": "Terminal"
+  },
+  "topBar": {
+    "menu": "menu",
+    "toggleTheme": "toggle theme",
+    "toggleLanguage": "toggle language"
+  },
+  "sidebar": {
+    "conversations": "Conversations",
+    "new": "+ New",
+    "search": "Search...",
+    "noResults": "No results found",
+    "pinned": "Pinned",
+    "recent": "Recent",
+    "noConversations": "No conversations yet",
+    "rename": "Rename",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "delete": "Delete",
+    "justNow": "just now",
+    "minutesAgo": "{{count}}m ago",
+    "hoursAgo": "{{count}}h ago",
+    "daysAgo": "{{count}}d ago"
+  }
+}

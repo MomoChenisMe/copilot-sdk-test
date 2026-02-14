@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface InputProps {
   onSend: (text: string) => void;
@@ -8,6 +9,7 @@ interface InputProps {
 }
 
 export function Input({ onSend, onAbort, isStreaming, disabled }: InputProps) {
+  const { t } = useTranslation();
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -40,13 +42,13 @@ export function Input({ onSend, onAbort, isStreaming, disabled }: InputProps) {
   };
 
   return (
-    <div className="flex items-end gap-2 px-3 pb-3 pt-1">
+    <div className="flex items-end gap-2 px-4 pb-4 pt-1">
       <textarea
         ref={textareaRef}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Message AI Terminal..."
+        placeholder={t('input.placeholder')}
         disabled={disabled}
         rows={3}
         className="flex-1 resize-none bg-bg-input text-text-primary px-4 py-3 rounded-xl border border-border text-sm placeholder:text-text-muted focus:outline-none focus:border-accent overflow-y-auto transition-colors"
@@ -57,7 +59,7 @@ export function Input({ onSend, onAbort, isStreaming, disabled }: InputProps) {
           onClick={onAbort}
           className="px-4 py-2.5 bg-error text-white rounded-xl text-sm font-medium hover:bg-red-600 transition-colors shrink-0"
         >
-          Stop
+          {t('input.stop')}
         </button>
       ) : (
         <button
@@ -65,7 +67,7 @@ export function Input({ onSend, onAbort, isStreaming, disabled }: InputProps) {
           disabled={!text.trim() || disabled}
           className="px-4 py-2.5 bg-accent text-white rounded-xl text-sm font-medium hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
         >
-          Send
+          {t('input.send')}
         </button>
       )}
     </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface ReasoningBlockProps {
   text: string;
@@ -6,22 +7,23 @@ interface ReasoningBlockProps {
 }
 
 function estimateDuration(text: string): string {
-  // Rough estimate: ~50 chars per second of thinking
   const seconds = Math.max(1, Math.round(text.length / 50));
   return `${seconds}s`;
 }
 
 export function ReasoningBlock({ text, isStreaming }: ReasoningBlockProps) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
-  // Auto-expand when streaming, auto-collapse when done
   useEffect(() => {
     setExpanded(isStreaming);
   }, [isStreaming]);
 
   if (!text) return null;
 
-  const title = isStreaming ? 'Thinking...' : `Thought for ${estimateDuration(text)}`;
+  const title = isStreaming
+    ? t('reasoning.thinking')
+    : t('reasoning.thoughtFor', { duration: estimateDuration(text) });
 
   return (
     <div className="my-2 rounded-lg bg-tool-card-bg border border-border/50">
