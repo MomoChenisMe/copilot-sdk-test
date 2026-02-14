@@ -51,6 +51,22 @@ export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   return res.json();
 }
 
+// --- Shared Types ---
+
+export interface ToolRecord {
+  toolCallId: string;
+  toolName: string;
+  arguments?: unknown;
+  status: 'running' | 'success' | 'error';
+  result?: unknown;
+  error?: string;
+}
+
+export interface MessageMetadata {
+  toolRecords?: ToolRecord[];
+  reasoning?: string;
+}
+
 // --- Conversation API ---
 
 export interface Conversation {

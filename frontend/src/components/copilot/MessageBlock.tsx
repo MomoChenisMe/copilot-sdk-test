@@ -1,6 +1,8 @@
 import { useTranslation } from 'react-i18next';
-import type { Message } from '../../lib/api';
+import type { Message, MessageMetadata } from '../../lib/api';
 import { Markdown } from '../shared/Markdown';
+import { ReasoningBlock } from './ReasoningBlock';
+import { ToolRecord } from './ToolRecord';
 import { Sparkles } from 'lucide-react';
 
 interface MessageBlockProps {
@@ -24,6 +26,11 @@ export function MessageBlock({ message }: MessageBlockProps) {
     );
   }
 
+  // Parse metadata for assistant messages
+  const metadata = message.metadata as MessageMetadata | null | undefined;
+  const toolRecords = metadata?.toolRecords;
+  const reasoning = metadata?.reasoning;
+
   // Assistant message
   return (
     <div className="mb-6">
@@ -35,9 +42,17 @@ export function MessageBlock({ message }: MessageBlockProps) {
           <span className="text-xs font-medium text-text-muted mb-2 block">
             {t('chat.assistant')}
           </span>
-          <div className="text-sm leading-relaxed">
-            <Markdown content={message.content} />
-          </div>
+          {reasoning && (
+            <ReasoningBlock text={reasoning} isStreaming={false} />
+          )}
+          {toolRecords && toolRecords.map((record) => (
+            <ToolRecord key={record.toolCallId} record={record} />
+          ))}
+          {message.content && (
+            <div className="text-sm leading-relaxed">
+              <Markdown content={message.content} />
+            </div>
+          )}
         </div>
       </div>
     </div>

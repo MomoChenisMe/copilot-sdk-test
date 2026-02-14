@@ -15,6 +15,24 @@ vi.mock('lucide-react', () => ({
   Sparkles: (props: any) => <svg data-testid="sparkles-icon" {...props} />,
 }));
 
+// Mock ToolRecord component
+vi.mock('../../../src/components/copilot/ToolRecord', () => ({
+  ToolRecord: ({ record }: { record: { toolCallId: string; toolName: string } }) => (
+    <div data-testid={`tool-record-${record.toolCallId}`}>
+      {record.toolName}
+    </div>
+  ),
+}));
+
+// Mock ReasoningBlock component
+vi.mock('../../../src/components/copilot/ReasoningBlock', () => ({
+  ReasoningBlock: ({ text, isStreaming }: { text: string; isStreaming: boolean }) => (
+    <div data-testid="reasoning-block" data-streaming={isStreaming}>
+      {text}
+    </div>
+  ),
+}));
+
 const makeMessage = (overrides: Partial<Message> = {}): Message => ({
   id: 'msg-1',
   conversationId: 'conv-1',
@@ -110,5 +128,120 @@ describe('MessageBlock', () => {
     render(<MessageBlock message={makeMessage({ role: 'user' })} />);
     expect(screen.queryByText('Assistant')).toBeNull();
     expect(screen.queryByTestId('sparkles-icon')).toBeNull();
+  });
+
+  // --- Metadata rendering tests (Task 5.1-5.4) ---
+
+  it('renders ToolRecord components when metadata.toolRecords exists', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'assistant',
+          content: 'Done!',
+          metadata: {
+            toolRecords: [
+              { toolCallId: 'tc1', toolName: 'bash', status: 'success', result: { content: 'ok' } },
+              { toolCallId: 'tc2', toolName: 'create', status: 'error', error: 'failed' },
+            ],
+          },
+        })}
+      />
+    );
+
+    expect(screen.getByTestId('tool-record-tc1')).toBeTruthy();
+    expect(screen.getByTestId('tool-record-tc2')).toBeTruthy();
+    expect(screen.getByText('bash')).toBeTruthy();
+    expect(screen.getByText('create')).toBeTruthy();
+  });
+
+  it('renders ReasoningBlock when metadata.reasoning exists', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'assistant',
+          content: 'Result',
+          metadata: {
+            reasoning: 'Thinking about the problem...',
+          },
+        })}
+      />
+    );
+
+    const reasoning = screen.getByTestId('reasoning-block');
+    expect(reasoning).toBeTruthy();
+    expect(reasoning.textContent).toContain('Thinking about the problem...');
+    // Should NOT be streaming for historical messages
+    expect(reasoning.getAttribute('data-streaming')).toBe('false');
+  });
+
+  it('does NOT render ToolRecord or ReasoningBlock when metadata is null', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'assistant',
+          content: 'Simple reply',
+          metadata: null,
+        })}
+      />
+    );
+
+    expect(screen.queryByTestId('reasoning-block')).toBeNull();
+    expect(screen.queryByTestId(/^tool-record-/)).toBeNull();
+  });
+
+  it('renders tool records even when content is empty but metadata exists', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'assistant',
+          content: '',
+          metadata: {
+            toolRecords: [
+              { toolCallId: 'tc1', toolName: 'report_intent', status: 'success' },
+            ],
+          },
+        })}
+      />
+    );
+
+    expect(screen.getByTestId('tool-record-tc1')).toBeTruthy();
+  });
+
+  it('renders in correct order: Reasoning → Tool Records → Text Content', () => {
+    const { container } = render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'assistant',
+          content: 'Final text',
+          metadata: {
+            toolRecords: [
+              { toolCallId: 'tc1', toolName: 'bash', status: 'success' },
+            ],
+            reasoning: 'Thinking...',
+          },
+        })}
+      />
+    );
+
+    // Get the content area (flex-1 min-w-0)
+    const contentArea = container.querySelector('.flex-1.min-w-0');
+    expect(contentArea).toBeTruthy();
+
+    const children = Array.from(contentArea!.children);
+    // Find the indices of reasoning, tool record, and markdown
+    const reasoningIdx = children.findIndex(
+      (el) => el.querySelector('[data-testid="reasoning-block"]') || el.getAttribute('data-testid') === 'reasoning-block'
+    );
+    const toolIdx = children.findIndex(
+      (el) => el.querySelector('[data-testid="tool-record-tc1"]') || el.getAttribute('data-testid') === 'tool-record-tc1'
+    );
+    const markdownIdx = children.findIndex(
+      (el) => el.querySelector('[data-testid="markdown"]') || el.getAttribute('data-testid') === 'markdown'
+    );
+
+    // Reasoning should appear before tools, tools before text
+    expect(reasoningIdx).toBeGreaterThanOrEqual(0);
+    expect(toolIdx).toBeGreaterThan(reasoningIdx);
+    expect(markdownIdx).toBeGreaterThan(toolIdx);
   });
 });

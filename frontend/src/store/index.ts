@@ -1,14 +1,7 @@
 import { create } from 'zustand';
-import type { Conversation, Message } from '../lib/api';
+import type { Conversation, Message, ToolRecord } from '../lib/api';
 
-export interface ToolRecord {
-  toolCallId: string;
-  toolName: string;
-  arguments?: unknown;
-  status: 'running' | 'success' | 'error';
-  result?: unknown;
-  error?: string;
-}
+export type { ToolRecord };
 
 export type Theme = 'light' | 'dark';
 
@@ -52,6 +45,9 @@ export interface AppState {
   // Reasoning (during streaming)
   reasoningText: string;
 
+  // Turn content accumulation
+  turnContentSegments: string[];
+
   // Error
   copilotError: string | null;
 
@@ -78,6 +74,9 @@ export interface AppState {
 
   // Actions — Reasoning
   appendReasoningText: (delta: string) => void;
+
+  // Actions — Turn content segments
+  addTurnContentSegment: (content: string) => void;
 
   // Actions — Error
   setCopilotError: (error: string | null) => void;
@@ -126,6 +125,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   isStreaming: false,
   toolRecords: [],
   reasoningText: '',
+  turnContentSegments: [],
   copilotError: null,
 
   // Conversation actions
@@ -139,6 +139,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       isStreaming: false,
       toolRecords: [],
       reasoningText: '',
+      turnContentSegments: [],
       copilotError: null,
     }),
 
@@ -178,7 +179,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setIsStreaming: (streaming) => set({ isStreaming: streaming }),
 
   clearStreaming: () =>
-    set({ streamingText: '', isStreaming: false, toolRecords: [], reasoningText: '', copilotError: null }),
+    set({ streamingText: '', isStreaming: false, toolRecords: [], reasoningText: '', turnContentSegments: [], copilotError: null }),
 
   // Tool record actions
   addToolRecord: (record) =>
@@ -194,6 +195,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Reasoning actions
   appendReasoningText: (delta) =>
     set((state) => ({ reasoningText: state.reasoningText + delta })),
+
+  // Turn content segment actions
+  addTurnContentSegment: (content) =>
+    set((state) => ({ turnContentSegments: [...state.turnContentSegments, content] })),
 
   // Error actions
   setCopilotError: (error) => set({ copilotError: error }),

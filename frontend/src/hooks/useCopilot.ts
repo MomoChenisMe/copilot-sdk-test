@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { useAppStore } from '../store';
+import type { MessageMetadata } from '../lib/api';
 import type { WsMessage } from '../lib/ws-types';
 
 interface UseCopilotOptions {
@@ -17,9 +18,10 @@ export function useCopilot({ subscribe, send }: UseCopilotOptions) {
     appendReasoningText,
     setCopilotError,
     addMessage,
+    addTurnContentSegment,
   } = useAppStore();
 
-  // Track whether we received a copilot:message during the current streaming cycle
+  // Track whether we received a copilot:message with content during the current turn
   const receivedMessageRef = useRef(false);
 
   useEffect(() => {
@@ -36,16 +38,10 @@ export function useCopilot({ subscribe, send }: UseCopilotOptions) {
           const content = data.content as string | undefined;
           if (content) {
             receivedMessageRef.current = true;
-            addMessage({
-              id: (data.messageId as string) || crypto.randomUUID(),
-              conversationId: '',
-              role: 'assistant',
-              content,
-              metadata: null,
-              createdAt: new Date().toISOString(),
-            });
-            useAppStore.getState().setStreamingText('');
+            addTurnContentSegment(content);
           }
+          // Always clear streamingText when a message event arrives
+          useAppStore.getState().setStreamingText('');
           break;
         }
 
@@ -70,22 +66,53 @@ export function useCopilot({ subscribe, send }: UseCopilotOptions) {
           appendReasoningText(data.content as string);
           break;
 
-        case 'copilot:idle': {
-          // If SDK didn't send copilot:message but we have accumulated streamingText,
-          // convert it to a permanent message
-          if (!receivedMessageRef.current) {
-            const text = useAppStore.getState().streamingText;
-            if (text) {
-              addMessage({
-                id: crypto.randomUUID(),
-                conversationId: '',
-                role: 'assistant',
-                content: text,
-                metadata: null,
-                createdAt: new Date().toISOString(),
-              });
+        case 'copilot:reasoning': {
+          // Fallback: only use complete event if no deltas were accumulated
+          const currentReasoning = useAppStore.getState().reasoningText;
+          if (!currentReasoning) {
+            const content = data.content as string | undefined;
+            if (content) {
+              useAppStore.getState().appendReasoningText(content);
             }
           }
+          break;
+        }
+
+        case 'copilot:idle': {
+          const state = useAppStore.getState();
+
+          // Determine content: segments first, then streamingText fallback
+          let content = '';
+          if (state.turnContentSegments.length > 0) {
+            content = state.turnContentSegments.filter((s) => s).join('\n\n');
+          } else if (!receivedMessageRef.current && state.streamingText) {
+            content = state.streamingText;
+          }
+
+          // Build metadata if tools or reasoning exist
+          let metadata: MessageMetadata | null = null;
+          if (state.toolRecords.length > 0 || state.reasoningText) {
+            metadata = {};
+            if (state.toolRecords.length > 0) {
+              metadata.toolRecords = [...state.toolRecords];
+            }
+            if (state.reasoningText) {
+              metadata.reasoning = state.reasoningText;
+            }
+          }
+
+          // Create consolidated message if there's content or metadata
+          if (content || metadata) {
+            addMessage({
+              id: crypto.randomUUID(),
+              conversationId: '',
+              role: 'assistant',
+              content,
+              metadata,
+              createdAt: new Date().toISOString(),
+            });
+          }
+
           setIsStreaming(false);
           clearStreaming();
           receivedMessageRef.current = false;
@@ -110,6 +137,7 @@ export function useCopilot({ subscribe, send }: UseCopilotOptions) {
     appendReasoningText,
     setCopilotError,
     addMessage,
+    addTurnContentSegment,
   ]);
 
   const sendMessage = useCallback(
