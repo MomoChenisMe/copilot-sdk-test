@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { DEFAULT_SYSTEM_PROMPT } from './defaults.js';
 
 const UNSAFE_PATTERN = /[.]{2}|[/\\]|\0/;
 const SAFE_CHARS = /[^a-zA-Z0-9_-]/g;
@@ -20,6 +21,12 @@ export class PromptFileStore {
     fs.mkdirSync(path.join(this.basePath, 'memory'), { recursive: true });
     fs.mkdirSync(path.join(this.basePath, 'memory', 'projects'), { recursive: true });
     fs.mkdirSync(path.join(this.basePath, 'memory', 'solutions'), { recursive: true });
+
+    // Create SYSTEM_PROMPT.md with default content if it doesn't exist
+    const systemPromptPath = path.join(this.basePath, 'SYSTEM_PROMPT.md');
+    if (!fs.existsSync(systemPromptPath)) {
+      fs.writeFileSync(systemPromptPath, DEFAULT_SYSTEM_PROMPT);
+    }
 
     // Create empty files if they don't exist
     for (const file of ['PROFILE.md', 'AGENT.md', 'memory/preferences.md']) {

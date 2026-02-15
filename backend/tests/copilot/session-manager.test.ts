@@ -146,6 +146,41 @@ describe('SessionManager', () => {
     });
   });
 
+  describe('skill config', () => {
+    it('should pass skillDirectories to session config', async () => {
+      await sessionManager.createSession({
+        model: 'gpt-5',
+        workingDirectory: '/tmp',
+        skillDirectories: ['/data/skills/my-skill', '/data/skills/other-skill'],
+      });
+
+      const config = mockClient.createSession.mock.calls[0][0];
+      expect(config.skillDirectories).toEqual(['/data/skills/my-skill', '/data/skills/other-skill']);
+    });
+
+    it('should pass disabledSkills to session config', async () => {
+      await sessionManager.createSession({
+        model: 'gpt-5',
+        workingDirectory: '/tmp',
+        disabledSkills: ['deprecated-skill'],
+      });
+
+      const config = mockClient.createSession.mock.calls[0][0];
+      expect(config.disabledSkills).toEqual(['deprecated-skill']);
+    });
+
+    it('should not include skillDirectories when not provided', async () => {
+      await sessionManager.createSession({
+        model: 'gpt-5',
+        workingDirectory: '/tmp',
+      });
+
+      const config = mockClient.createSession.mock.calls[0][0];
+      expect(config.skillDirectories).toBeUndefined();
+      expect(config.disabledSkills).toBeUndefined();
+    });
+  });
+
   describe('getOrCreateSession', () => {
     it('should create session when no sdkSessionId exists', async () => {
       const session = await sessionManager.getOrCreateSession({

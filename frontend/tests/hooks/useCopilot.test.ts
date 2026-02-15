@@ -473,7 +473,8 @@ describe('useCopilot', () => {
 
   // --- sendMessage (unchanged) ---
 
-  it('sendMessage should add user message and send ws message', () => {
+  it('sendMessage should add user message and send ws message with activePresets and disabledSkills', () => {
+    useAppStore.setState({ activePresets: ['code-review'], disabledSkills: ['old-skill'] });
     const { result } = renderHook(() => useCopilot({ subscribe, send }));
 
     act(() => {
@@ -486,7 +487,31 @@ describe('useCopilot', () => {
     expect(userMsg!.content).toBe('Hello AI');
     expect(send).toHaveBeenCalledWith({
       type: 'copilot:send',
-      data: { conversationId: 'conv-1', prompt: 'Hello AI' },
+      data: {
+        conversationId: 'conv-1',
+        prompt: 'Hello AI',
+        activePresets: ['code-review'],
+        disabledSkills: ['old-skill'],
+      },
+    });
+  });
+
+  it('sendMessage should default to empty arrays when no presets or skills', () => {
+    useAppStore.setState({ activePresets: [], disabledSkills: [] });
+    const { result } = renderHook(() => useCopilot({ subscribe, send }));
+
+    act(() => {
+      result.current.sendMessage('conv-1', 'Hello');
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      type: 'copilot:send',
+      data: {
+        conversationId: 'conv-1',
+        prompt: 'Hello',
+        activePresets: [],
+        disabledSkills: [],
+      },
     });
   });
 

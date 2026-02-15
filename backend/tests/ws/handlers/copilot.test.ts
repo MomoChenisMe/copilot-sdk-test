@@ -83,6 +83,7 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
           model: 'gpt-5',
           cwd: '/tmp',
           activePresets: [],
+          disabledSkills: [],
         });
       });
     });
@@ -123,7 +124,34 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
           model: 'gpt-5',
           cwd: '/tmp',
           activePresets: ['code-review', 'devops'],
+          disabledSkills: [],
         });
+      });
+    });
+
+    it('should pass disabledSkills to streamManager.startStream', async () => {
+      handle({
+        type: 'copilot:send',
+        data: { conversationId: 'conv-1', prompt: 'Hello', disabledSkills: ['old-skill'] },
+      });
+
+      await vi.waitFor(() => {
+        expect(mockStreamManager.startStream).toHaveBeenCalledWith('conv-1', expect.objectContaining({
+          disabledSkills: ['old-skill'],
+        }));
+      });
+    });
+
+    it('should default disabledSkills to empty array when not provided', async () => {
+      handle({
+        type: 'copilot:send',
+        data: { conversationId: 'conv-1', prompt: 'Hello' },
+      });
+
+      await vi.waitFor(() => {
+        expect(mockStreamManager.startStream).toHaveBeenCalledWith('conv-1', expect.objectContaining({
+          disabledSkills: [],
+        }));
       });
     });
 

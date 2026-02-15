@@ -502,6 +502,77 @@ describe('StreamManager', () => {
     });
   });
 
+  // === skillStore integration ===
+  describe('startStream with skillStore', () => {
+    it('should pass skillDirectories from skillStore to session', async () => {
+      const mockSkillStore = {
+        getSkillDirectories: vi.fn().mockReturnValue(['/data/skills/a', '/data/skills/b']),
+      };
+
+      StreamManager.resetInstance();
+      const smSkills = StreamManager.getInstance({
+        sessionManager: mockSessionManager as any,
+        repo: mockRepo as any,
+        skillStore: mockSkillStore as any,
+      });
+
+      await smSkills.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+      });
+
+      expect(mockSkillStore.getSkillDirectories).toHaveBeenCalled();
+      expect(mockSessionManager.getOrCreateSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          skillDirectories: ['/data/skills/a', '/data/skills/b'],
+        }),
+      );
+    });
+
+    it('should pass disabledSkills when provided in options', async () => {
+      StreamManager.resetInstance();
+      const smDisabled = StreamManager.getInstance({
+        sessionManager: mockSessionManager as any,
+        repo: mockRepo as any,
+      });
+
+      await smDisabled.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+        disabledSkills: ['old-skill'],
+      });
+
+      expect(mockSessionManager.getOrCreateSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          disabledSkills: ['old-skill'],
+        }),
+      );
+    });
+
+    it('should not pass skillDirectories when no skillStore provided', async () => {
+      StreamManager.resetInstance();
+      const smNoSkills = StreamManager.getInstance({
+        sessionManager: mockSessionManager as any,
+        repo: mockRepo as any,
+      });
+
+      await smNoSkills.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+      });
+
+      const opts = mockSessionManager.getOrCreateSession.mock.calls[0][0];
+      expect(opts.skillDirectories).toBeUndefined();
+      expect(opts.disabledSkills).toBeUndefined();
+    });
+  });
+
   // === 10.2 PromptComposer integration ===
   describe('startStream with promptComposer', () => {
     it('should call promptComposer.compose with activePresets and pass systemMessage to session', async () => {

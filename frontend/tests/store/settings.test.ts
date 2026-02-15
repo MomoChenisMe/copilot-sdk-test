@@ -15,13 +15,14 @@ const localStorageMock = (() => {
 })();
 Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock });
 
-describe('Store: settings (activePresets + settingsOpen)', () => {
+describe('Store: settings (activePresets + disabledSkills + settingsOpen)', () => {
   beforeEach(() => {
     localStorageMock.clear();
     (localStorageMock.getItem as ReturnType<typeof vi.fn>).mockClear();
     (localStorageMock.setItem as ReturnType<typeof vi.fn>).mockClear();
     useAppStore.setState({
       activePresets: [],
+      disabledSkills: [],
       settingsOpen: false,
     });
   });
@@ -69,6 +70,32 @@ describe('Store: settings (activePresets + settingsOpen)', () => {
       expect(localStorageMock.setItem).toHaveBeenCalledWith(
         'ai-terminal:activePresets',
         JSON.stringify([]),
+      );
+    });
+  });
+
+  // === disabledSkills ===
+  describe('disabledSkills', () => {
+    it('should initialize with empty array', () => {
+      expect(useAppStore.getState().disabledSkills).toEqual([]);
+    });
+
+    it('should toggle a skill to disabled (add)', () => {
+      useAppStore.getState().toggleSkill('my-skill');
+      expect(useAppStore.getState().disabledSkills).toEqual(['my-skill']);
+    });
+
+    it('should toggle a skill back to enabled (remove)', () => {
+      useAppStore.setState({ disabledSkills: ['my-skill', 'other'] });
+      useAppStore.getState().toggleSkill('my-skill');
+      expect(useAppStore.getState().disabledSkills).toEqual(['other']);
+    });
+
+    it('should persist disabledSkills to localStorage on toggle', () => {
+      useAppStore.getState().toggleSkill('skill-x');
+      expect(localStorageMock.setItem).toHaveBeenCalledWith(
+        'ai-terminal:disabledSkills',
+        JSON.stringify(['skill-x']),
       );
     });
   });

@@ -58,6 +58,58 @@
     "copilot": "Copilot",
     "terminal": "終端機"
   },
+  "settings": {
+    "title": "設定",
+    "close": "關閉",
+    "loading": "載入中...",
+    "save": "儲存",
+    "tabs": {
+      "systemPrompt": "系統提示詞",
+      "profile": "個人檔案",
+      "agent": "Agent 規則",
+      "presets": "預設模板",
+      "memory": "記憶",
+      "skills": "技能"
+    },
+    "toast": {
+      "saved": "已儲存",
+      "saveFailed": "儲存失敗",
+      "deleted": "已刪除",
+      "deleteFailed": "刪除失敗",
+      "reset": "已重置為預設",
+      "resetFailed": "重置失敗"
+    },
+    "systemPrompt": {
+      "resetToDefault": "重置為預設",
+      "resetConfirm": "確定要重置為預設系統提示詞嗎？您目前的變更將會遺失。"
+    },
+    "memory": {
+      "preferences": "偏好設定",
+      "projects": "專案",
+      "solutions": "解決方案"
+    },
+    "deleteDialog": {
+      "message": "確定要刪除此項目嗎？",
+      "cancel": "取消",
+      "confirm": "刪除"
+    },
+    "skills": {
+      "empty": "尚無技能。建立一個開始使用。",
+      "newSkill": "新增技能",
+      "name": "技能名稱",
+      "description": "描述",
+      "content": "內容",
+      "create": "建立",
+      "edit": "編輯",
+      "preview": "預覽",
+      "delete": "刪除",
+      "deleteConfirm": "確定要刪除此技能嗎？",
+      "namePlaceholder": "例如 code-review",
+      "descriptionPlaceholder": "簡述此技能的用途...",
+      "contentPlaceholder": "在此撰寫您的 SKILL.md 內容...",
+      "nameInvalid": "名稱不可包含 ..、/、\\ 或特殊字元"
+    }
+  },
   "sidebar": {
     "conversations": "對話紀錄",
     "new": "新對話",

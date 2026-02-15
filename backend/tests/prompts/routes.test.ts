@@ -34,6 +34,55 @@ describe('prompts routes', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  // --- System Prompt ---
+
+  describe('GET /api/prompts/system-prompt', () => {
+    it('should return system prompt content', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), 'My system prompt');
+      const res = await fetch(`${baseUrl}/api/prompts/system-prompt`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.content).toBe('My system prompt');
+    });
+
+    it('should return default content when system prompt has not been customized', async () => {
+      // ensureDirectories creates SYSTEM_PROMPT.md with default content
+      const res = await fetch(`${baseUrl}/api/prompts/system-prompt`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.content).toContain('Identity & Role');
+    });
+  });
+
+  describe('PUT /api/prompts/system-prompt', () => {
+    it('should update system prompt content', async () => {
+      const res = await fetch(`${baseUrl}/api/prompts/system-prompt`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'Updated system prompt' }),
+      });
+      expect(res.status).toBe(200);
+      expect(fs.readFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), 'utf-8')).toBe('Updated system prompt');
+    });
+  });
+
+  describe('POST /api/prompts/system-prompt/reset', () => {
+    it('should reset to default system prompt', async () => {
+      // First write custom content
+      fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), 'Custom content');
+
+      const res = await fetch(`${baseUrl}/api/prompts/system-prompt/reset`, {
+        method: 'POST',
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.content).toContain('Identity & Role');
+      // Verify file was actually updated
+      const fileContent = fs.readFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), 'utf-8');
+      expect(fileContent).toContain('Identity & Role');
+    });
+  });
+
   // --- Profile ---
 
   describe('GET /api/prompts/profile', () => {

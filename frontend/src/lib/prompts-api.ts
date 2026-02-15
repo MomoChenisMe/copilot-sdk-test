@@ -1,4 +1,4 @@
-import { apiGet, apiPut, apiDelete } from './api';
+import { apiGet, apiPut, apiDelete, apiPost } from './api';
 
 export interface PromptContent {
   content: string;
@@ -23,6 +23,10 @@ export interface MemoryItemList {
 }
 
 export const promptsApi = {
+  getSystemPrompt: () => apiGet<PromptContent>('/api/prompts/system-prompt'),
+  putSystemPrompt: (content: string) => apiPut<{ ok: true }>('/api/prompts/system-prompt', { content }),
+  resetSystemPrompt: () => apiPost<PromptContent>('/api/prompts/system-prompt/reset'),
+
   getProfile: () => apiGet<PromptContent>('/api/prompts/profile'),
   putProfile: (content: string) => apiPut<{ ok: true }>('/api/prompts/profile', { content }),
 
@@ -33,6 +37,23 @@ export const promptsApi = {
   getPreset: (name: string) => apiGet<PromptContent>(`/api/prompts/presets/${name}`),
   putPreset: (name: string, content: string) => apiPut<{ ok: true }>(`/api/prompts/presets/${name}`, { content }),
   deletePreset: (name: string) => apiDelete<{ ok: true }>(`/api/prompts/presets/${name}`),
+};
+
+export interface SkillItem {
+  name: string;
+  description: string;
+  content: string;
+}
+
+export interface SkillList {
+  skills: SkillItem[];
+}
+
+export const skillsApi = {
+  list: () => apiGet<SkillList>('/api/skills'),
+  get: (name: string) => apiGet<SkillItem>(`/api/skills/${name}`),
+  put: (name: string, description: string, content: string) => apiPut<{ ok: true }>(`/api/skills/${name}`, { description, content }),
+  delete: (name: string) => apiDelete<{ ok: true }>(`/api/skills/${name}`),
 };
 
 export const memoryApi = {

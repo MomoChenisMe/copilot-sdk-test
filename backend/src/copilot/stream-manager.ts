@@ -79,6 +79,7 @@ export interface StreamManagerDeps {
   repo: ConversationRepository;
   maxConcurrency?: number;
   promptComposer?: PromptComposer;
+  skillStore?: { getSkillDirectories(): string[] };
 }
 
 export interface StartStreamOptions {
@@ -87,6 +88,7 @@ export interface StartStreamOptions {
   model: string;
   cwd: string;
   activePresets?: string[];
+  disabledSkills?: string[];
 }
 
 export class StreamManager extends EventEmitter {
@@ -97,6 +99,7 @@ export class StreamManager extends EventEmitter {
   private sessionManager: SessionManager;
   private repo: ConversationRepository;
   private promptComposer?: PromptComposer;
+  private skillStore?: { getSkillDirectories(): string[] };
 
   private constructor(deps: StreamManagerDeps) {
     super();
@@ -104,6 +107,7 @@ export class StreamManager extends EventEmitter {
     this.repo = deps.repo;
     this.maxConcurrency = deps.maxConcurrency ?? 3;
     this.promptComposer = deps.promptComposer;
+    this.skillStore = deps.skillStore;
   }
 
   static getInstance(deps?: StreamManagerDeps): StreamManager {
@@ -167,6 +171,14 @@ export class StreamManager extends EventEmitter {
         if (composed) {
           sessionOpts.systemMessage = { mode: 'append', content: composed };
         }
+      }
+
+      if (this.skillStore) {
+        sessionOpts.skillDirectories = this.skillStore.getSkillDirectories();
+      }
+
+      if (options.disabledSkills?.length) {
+        sessionOpts.disabledSkills = options.disabledSkills;
       }
 
       const session = await this.sessionManager.getOrCreateSession(sessionOpts);

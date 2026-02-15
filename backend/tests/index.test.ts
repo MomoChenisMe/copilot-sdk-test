@@ -26,6 +26,7 @@ vi.mock('../src/config.js', () => ({
     githubToken: undefined,
     githubClientId: undefined,
     promptsPath: '/tmp/test-prompts',
+    skillsPath: '/tmp/test-skills',
     maxPromptLength: 50000,
   })),
 }));
@@ -143,6 +144,21 @@ vi.mock('../src/prompts/routes.js', () => ({
 
 vi.mock('../src/prompts/memory-routes.js', () => ({
   createMemoryRoutes: vi.fn(() => vi.fn()),
+}));
+
+vi.mock('../src/skills/file-store.js', () => ({
+  SkillFileStore: vi.fn(() => ({
+    ensureDirectory: vi.fn(),
+    listSkills: vi.fn(() => []),
+    readSkill: vi.fn(() => null),
+    writeSkill: vi.fn(),
+    deleteSkill: vi.fn(),
+    getSkillDirectories: vi.fn(() => []),
+  })),
+}));
+
+vi.mock('../src/skills/routes.js', () => ({
+  createSkillsRoutes: vi.fn(() => vi.fn()),
 }));
 
 import { createApp } from '../src/index.js';

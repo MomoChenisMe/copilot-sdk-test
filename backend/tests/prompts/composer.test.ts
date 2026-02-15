@@ -21,7 +21,8 @@ describe('PromptComposer', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('should compose in order: PROFILE → AGENT → presets → preferences → .ai-terminal.md', () => {
+  it('should compose in order: SYSTEM_PROMPT → PROFILE → AGENT → presets → preferences → .ai-terminal.md', () => {
+    fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), 'System prompt content');
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile content');
     fs.writeFileSync(path.join(tmpDir, 'AGENT.md'), 'Agent content');
     fs.writeFileSync(path.join(tmpDir, 'presets', 'alpha.md'), 'Alpha preset');
@@ -29,10 +30,19 @@ describe('PromptComposer', () => {
 
     const result = composer.compose(['alpha']);
     const sections = result.split('\n\n---\n\n');
-    expect(sections[0]).toBe('Profile content');
-    expect(sections[1]).toBe('Agent content');
-    expect(sections[2]).toBe('Alpha preset');
-    expect(sections[3]).toBe('Preferences content');
+    expect(sections[0]).toBe('System prompt content');
+    expect(sections[1]).toBe('Profile content');
+    expect(sections[2]).toBe('Agent content');
+    expect(sections[3]).toBe('Alpha preset');
+    expect(sections[4]).toBe('Preferences content');
+  });
+
+  it('should skip SYSTEM_PROMPT when empty', () => {
+    fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
+    fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile content');
+
+    const result = composer.compose([]);
+    expect(result).toBe('Profile content');
   });
 
   it('should include presets in alphabetical order', () => {
@@ -44,7 +54,8 @@ describe('PromptComposer', () => {
   });
 
   it('should skip empty sections (no extra separators)', () => {
-    // Only PROFILE has content
+    // Clear SYSTEM_PROMPT so we only test non-system sections
+    fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile only');
     // AGENT.md is empty (created by ensureDirectories)
 
@@ -54,11 +65,13 @@ describe('PromptComposer', () => {
   });
 
   it('should return empty string when all sections are empty', () => {
+    fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
     const result = composer.compose([]);
     expect(result).toBe('');
   });
 
   it('should skip whitespace-only sections', () => {
+    fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), '   \n  ');
     fs.writeFileSync(path.join(tmpDir, 'AGENT.md'), 'Agent rules');
 
@@ -77,6 +90,7 @@ describe('PromptComposer', () => {
   });
 
   it('should include .ai-terminal.md from cwd when provided', () => {
+    fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
     const cwdDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cwd-'));
     fs.writeFileSync(path.join(cwdDir, '.ai-terminal.md'), 'Project rules');
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
@@ -89,6 +103,7 @@ describe('PromptComposer', () => {
   });
 
   it('should skip .ai-terminal.md when file does not exist', () => {
+    fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
 
     const result = composer.compose([], '/nonexistent-dir');

@@ -1,9 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
-import { promptsApi, memoryApi } from '../../lib/prompts-api';
-import type { PresetItem, MemoryItem } from '../../lib/prompts-api';
+import { promptsApi, memoryApi, skillsApi } from '../../lib/prompts-api';
+import type { PresetItem, MemoryItem, SkillItem } from '../../lib/prompts-api';
+import { useAppStore } from '../../store';
+import { Markdown } from '../shared/Markdown';
 
-type TabId = 'profile' | 'agent' | 'presets' | 'memory';
+const INVALID_NAME_RE = /[.]{2}|[/\\]|\0/;
+
+type TabId = 'system-prompt' | 'profile' | 'agent' | 'presets' | 'memory' | 'skills';
 
 interface SettingsPanelProps {
   open: boolean;
@@ -12,15 +17,18 @@ interface SettingsPanelProps {
   onTogglePreset: (name: string) => void;
 }
 
-const TABS: { id: TabId; label: string }[] = [
-  { id: 'profile', label: 'Profile' },
-  { id: 'agent', label: 'Agent' },
-  { id: 'presets', label: 'Presets' },
-  { id: 'memory', label: 'Memory' },
+const TABS: { id: TabId; labelKey: string }[] = [
+  { id: 'system-prompt', labelKey: 'settings.tabs.systemPrompt' },
+  { id: 'profile', labelKey: 'settings.tabs.profile' },
+  { id: 'agent', labelKey: 'settings.tabs.agent' },
+  { id: 'presets', labelKey: 'settings.tabs.presets' },
+  { id: 'memory', labelKey: 'settings.tabs.memory' },
+  { id: 'skills', labelKey: 'settings.tabs.skills' },
 ];
 
 export function SettingsPanel({ open, onClose, activePresets, onTogglePreset }: SettingsPanelProps) {
-  const [activeTab, setActiveTab] = useState<TabId>('profile');
+  const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState<TabId>('system-prompt');
 
   if (!open) return null;
 
@@ -40,51 +48,123 @@ export function SettingsPanel({ open, onClose, activePresets, onTogglePreset }: 
       >
         {/* Header */}
         <div className="h-12 flex items-center justify-between px-4 border-b border-border-subtle shrink-0">
-          <h2 className="text-sm font-semibold text-text-primary">Settings</h2>
+          <h2 className="text-sm font-semibold text-text-primary">{t('settings.title')}</h2>
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg hover:bg-bg-tertiary text-text-secondary"
-            aria-label="Close"
+            aria-label={t('settings.close')}
           >
             <X size={16} />
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-border-subtle" role="tablist">
+        <div className="flex overflow-x-auto border-b border-border-subtle" role="tablist">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               role="tab"
               aria-selected={activeTab === tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 py-2 text-xs font-medium transition-colors ${
+              className={`shrink-0 px-3 py-2 text-xs font-medium transition-colors ${
                 activeTab === tab.id
                   ? 'text-accent border-b-2 border-accent'
                   : 'text-text-secondary hover:text-text-primary'
               }`}
             >
-              {tab.label}
+              {t(tab.labelKey)}
             </button>
           ))}
         </div>
 
         {/* Tab content */}
         <div className="flex-1 overflow-y-auto p-4">
+          {activeTab === 'system-prompt' && <SystemPromptTab />}
           {activeTab === 'profile' && <ProfileTab />}
           {activeTab === 'agent' && <AgentTab />}
           {activeTab === 'presets' && (
             <PresetsTab activePresets={activePresets} onTogglePreset={onTogglePreset} />
           )}
           {activeTab === 'memory' && <MemoryTab />}
+          {activeTab === 'skills' && <SkillsTab />}
         </div>
       </div>
     </>
   );
 }
 
+// === System Prompt Tab ===
+function SystemPromptTab() {
+  const { t } = useTranslation();
+  const [content, setContent] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    promptsApi.getSystemPrompt().then((r) => {
+      setContent(r.content);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    try {
+      await promptsApi.putSystemPrompt(content);
+      setToast(t('settings.toast.saved'));
+      setTimeout(() => setToast(null), 2000);
+    } catch {
+      setToast(t('settings.toast.saveFailed'));
+      setTimeout(() => setToast(null), 2000);
+    }
+  }, [content, t]);
+
+  const handleReset = useCallback(async () => {
+    if (!window.confirm(t('settings.systemPrompt.resetConfirm'))) return;
+    try {
+      const result = await promptsApi.resetSystemPrompt();
+      setContent(result.content);
+      setToast(t('settings.toast.reset'));
+      setTimeout(() => setToast(null), 2000);
+    } catch {
+      setToast(t('settings.toast.resetFailed'));
+      setTimeout(() => setToast(null), 2000);
+    }
+  }, [t]);
+
+  if (loading) return <div className="text-text-secondary text-sm">{t('settings.loading')}</div>;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <textarea
+        data-testid="system-prompt-textarea"
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        className="w-full h-64 p-2 text-sm bg-bg-secondary border border-border rounded-lg resize-y font-mono text-text-primary"
+      />
+      <div className="flex items-center gap-2">
+        <button
+          data-testid="save-system-prompt"
+          onClick={handleSave}
+          className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
+        >
+          {t('settings.save')}
+        </button>
+        <button
+          data-testid="reset-system-prompt"
+          onClick={handleReset}
+          className="px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-bg-tertiary text-text-secondary"
+        >
+          {t('settings.systemPrompt.resetToDefault')}
+        </button>
+        {toast && <span className="text-xs text-text-secondary">{toast}</span>}
+      </div>
+    </div>
+  );
+}
+
 // === Profile Tab ===
 function ProfileTab() {
+  const { t } = useTranslation();
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
@@ -99,15 +179,15 @@ function ProfileTab() {
   const handleSave = useCallback(async () => {
     try {
       await promptsApi.putProfile(content);
-      setToast('已儲存');
+      setToast(t('settings.toast.saved'));
       setTimeout(() => setToast(null), 2000);
     } catch {
-      setToast('儲存失敗');
+      setToast(t('settings.toast.saveFailed'));
       setTimeout(() => setToast(null), 2000);
     }
-  }, [content]);
+  }, [content, t]);
 
-  if (loading) return <div className="text-text-secondary text-sm">Loading...</div>;
+  if (loading) return <div className="text-text-secondary text-sm">{t('settings.loading')}</div>;
 
   return (
     <div className="flex flex-col gap-3">
@@ -122,7 +202,7 @@ function ProfileTab() {
           onClick={handleSave}
           className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
         >
-          Save
+          {t('settings.save')}
         </button>
         {toast && <span className="text-xs text-text-secondary">{toast}</span>}
       </div>
@@ -132,6 +212,7 @@ function ProfileTab() {
 
 // === Agent Tab ===
 function AgentTab() {
+  const { t } = useTranslation();
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
@@ -146,15 +227,15 @@ function AgentTab() {
   const handleSave = useCallback(async () => {
     try {
       await promptsApi.putAgent(content);
-      setToast('已儲存');
+      setToast(t('settings.toast.saved'));
       setTimeout(() => setToast(null), 2000);
     } catch {
-      setToast('儲存失敗');
+      setToast(t('settings.toast.saveFailed'));
       setTimeout(() => setToast(null), 2000);
     }
-  }, [content]);
+  }, [content, t]);
 
-  if (loading) return <div className="text-text-secondary text-sm">Loading...</div>;
+  if (loading) return <div className="text-text-secondary text-sm">{t('settings.loading')}</div>;
 
   return (
     <div className="flex flex-col gap-3">
@@ -169,7 +250,7 @@ function AgentTab() {
           onClick={handleSave}
           className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
         >
-          Save
+          {t('settings.save')}
         </button>
         {toast && <span className="text-xs text-text-secondary">{toast}</span>}
       </div>
@@ -185,6 +266,7 @@ function PresetsTab({
   activePresets: string[];
   onTogglePreset: (name: string) => void;
 }) {
+  const { t } = useTranslation();
   const [presets, setPresets] = useState<PresetItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedPreset, setExpandedPreset] = useState<string | null>(null);
@@ -214,25 +296,25 @@ function PresetsTab({
       setPresets((prev) =>
         prev.map((p) => (p.name === expandedPreset ? { ...p, content: editContent } : p)),
       );
-      setToast('已儲存');
+      setToast(t('settings.toast.saved'));
       setTimeout(() => setToast(null), 2000);
     } catch {
-      setToast('儲存失敗');
+      setToast(t('settings.toast.saveFailed'));
       setTimeout(() => setToast(null), 2000);
     }
-  }, [expandedPreset, editContent]);
+  }, [expandedPreset, editContent, t]);
 
   const handleDeletePreset = useCallback(async (name: string) => {
     try {
       await promptsApi.deletePreset(name);
       setPresets((prev) => prev.filter((p) => p.name !== name));
     } catch {
-      setToast('刪除失敗');
+      setToast(t('settings.toast.deleteFailed'));
       setTimeout(() => setToast(null), 2000);
     }
-  }, []);
+  }, [t]);
 
-  if (loading) return <div className="text-text-secondary text-sm">Loading...</div>;
+  if (loading) return <div className="text-text-secondary text-sm">{t('settings.loading')}</div>;
 
   return (
     <div className="flex flex-col gap-2">
@@ -287,7 +369,7 @@ function PresetsTab({
                 onClick={handleSavePreset}
                 className="self-start px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
               >
-                Save
+                {t('settings.save')}
               </button>
             </div>
           )}
@@ -301,6 +383,7 @@ function PresetsTab({
 
 // === Memory Tab ===
 function MemoryTab() {
+  const { t } = useTranslation();
   const [prefsContent, setPrefsContent] = useState('');
   const [projects, setProjects] = useState<MemoryItem[]>([]);
   const [solutions, setSolutions] = useState<MemoryItem[]>([]);
@@ -326,13 +409,13 @@ function MemoryTab() {
   const handleSavePrefs = useCallback(async () => {
     try {
       await memoryApi.putPreferences(prefsContent);
-      setToast('已儲存');
+      setToast(t('settings.toast.saved'));
       setTimeout(() => setToast(null), 2000);
     } catch {
-      setToast('儲存失敗');
+      setToast(t('settings.toast.saveFailed'));
       setTimeout(() => setToast(null), 2000);
     }
-  }, [prefsContent]);
+  }, [prefsContent, t]);
 
   const handleDeleteConfirm = useCallback(async () => {
     if (!confirmDelete) return;
@@ -344,14 +427,14 @@ function MemoryTab() {
         await memoryApi.deleteSolution(confirmDelete.name);
         setSolutions((prev) => prev.filter((s) => s.name !== confirmDelete.name));
       }
-      setToast('已刪除');
+      setToast(t('settings.toast.deleted'));
       setTimeout(() => setToast(null), 2000);
     } catch {
-      setToast('刪除失敗');
+      setToast(t('settings.toast.deleteFailed'));
       setTimeout(() => setToast(null), 2000);
     }
     setConfirmDelete(null);
-  }, [confirmDelete]);
+  }, [confirmDelete, t]);
 
   const handleExpand = useCallback((key: string, content: string) => {
     if (expandedItem === key) {
@@ -371,21 +454,21 @@ function MemoryTab() {
         await memoryApi.putSolution(name, editContent);
         setSolutions((prev) => prev.map((s) => (s.name === name ? { ...s, content: editContent } : s)));
       }
-      setToast('已儲存');
+      setToast(t('settings.toast.saved'));
       setTimeout(() => setToast(null), 2000);
     } catch {
-      setToast('儲存失敗');
+      setToast(t('settings.toast.saveFailed'));
       setTimeout(() => setToast(null), 2000);
     }
-  }, [editContent]);
+  }, [editContent, t]);
 
-  if (loading) return <div className="text-text-secondary text-sm">Loading...</div>;
+  if (loading) return <div className="text-text-secondary text-sm">{t('settings.loading')}</div>;
 
   return (
     <div className="flex flex-col gap-4">
       {/* Preferences */}
       <section>
-        <h3 className="text-xs font-semibold text-text-secondary uppercase mb-2">Preferences</h3>
+        <h3 className="text-xs font-semibold text-text-secondary uppercase mb-2">{t('settings.memory.preferences')}</h3>
         <textarea
           data-testid="memory-preferences"
           value={prefsContent}
@@ -397,13 +480,13 @@ function MemoryTab() {
           onClick={handleSavePrefs}
           className="mt-2 px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
         >
-          Save
+          {t('settings.save')}
         </button>
       </section>
 
       {/* Projects */}
       <section>
-        <h3 className="text-xs font-semibold text-text-secondary uppercase mb-2">Projects</h3>
+        <h3 className="text-xs font-semibold text-text-secondary uppercase mb-2">{t('settings.memory.projects')}</h3>
         {projects.map((item) => (
           <div key={item.name} className="border border-border rounded-lg mb-2 overflow-hidden">
             <div className="flex items-center gap-2 px-3 py-2">
@@ -433,7 +516,7 @@ function MemoryTab() {
                   onClick={() => handleSaveItem('project', item.name)}
                   className="self-start px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
                 >
-                  Save
+                  {t('settings.save')}
                 </button>
               </div>
             )}
@@ -443,7 +526,7 @@ function MemoryTab() {
 
       {/* Solutions */}
       <section>
-        <h3 className="text-xs font-semibold text-text-secondary uppercase mb-2">Solutions</h3>
+        <h3 className="text-xs font-semibold text-text-secondary uppercase mb-2">{t('settings.memory.solutions')}</h3>
         {solutions.map((item) => (
           <div key={item.name} className="border border-border rounded-lg mb-2 overflow-hidden">
             <div className="flex items-center gap-2 px-3 py-2">
@@ -473,7 +556,7 @@ function MemoryTab() {
                   onClick={() => handleSaveItem('solution', item.name)}
                   className="self-start px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
                 >
-                  Save
+                  {t('settings.save')}
                 </button>
               </div>
             )}
@@ -485,21 +568,299 @@ function MemoryTab() {
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" data-testid="delete-confirm-dialog">
           <div className="bg-bg-primary rounded-xl border border-border p-6 shadow-lg max-w-sm mx-4">
-            <p className="text-sm text-text-primary mb-4">確定要刪除此項目嗎？</p>
+            <p className="text-sm text-text-primary mb-4">{t('settings.deleteDialog.message')}</p>
             <div className="flex gap-2 justify-end">
               <button
                 data-testid="delete-cancel"
                 onClick={() => setConfirmDelete(null)}
                 className="px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-bg-tertiary"
               >
-                取消
+                {t('settings.deleteDialog.cancel')}
               </button>
               <button
                 data-testid="delete-confirm"
                 onClick={handleDeleteConfirm}
                 className="px-3 py-1.5 text-xs font-medium bg-error text-white rounded-lg hover:bg-error/90"
               >
-                刪除
+                {t('settings.deleteDialog.confirm')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && <span className="text-xs text-text-secondary">{toast}</span>}
+    </div>
+  );
+}
+
+// === Skills Tab ===
+function SkillsTab() {
+  const { t } = useTranslation();
+  const disabledSkills = useAppStore((s) => s.disabledSkills);
+  const toggleSkill = useAppStore((s) => s.toggleSkill);
+  const [skills, setSkills] = useState<SkillItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newDescription, setNewDescription] = useState('');
+  const [newContent, setNewContent] = useState('');
+  const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
+  const [editDescription, setEditDescription] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [toast, setToast] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+
+  const nameError = newName.trim() !== '' && INVALID_NAME_RE.test(newName.trim());
+
+  useEffect(() => {
+    skillsApi.list().then((r) => {
+      setSkills(r.skills);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+
+  const handleCreate = useCallback(async () => {
+    if (!newName.trim() || INVALID_NAME_RE.test(newName.trim())) return;
+    try {
+      await skillsApi.put(newName.trim(), newDescription, newContent);
+      setSkills((prev) => [...prev, { name: newName.trim(), description: newDescription, content: newContent }]);
+      setNewName('');
+      setNewDescription('');
+      setNewContent('');
+      setShowCreate(false);
+      setToast(t('settings.toast.saved'));
+      setTimeout(() => setToast(null), 2000);
+    } catch {
+      setToast(t('settings.toast.saveFailed'));
+      setTimeout(() => setToast(null), 2000);
+    }
+  }, [newName, newDescription, newContent, t]);
+
+  const handleExpand = useCallback((name: string, description: string, content: string) => {
+    if (expandedSkill === name) {
+      setExpandedSkill(null);
+    } else {
+      setExpandedSkill(name);
+      setEditDescription(description);
+      setEditContent(content);
+      setShowPreview(false);
+    }
+  }, [expandedSkill]);
+
+  const handleSave = useCallback(async () => {
+    if (!expandedSkill) return;
+    try {
+      await skillsApi.put(expandedSkill, editDescription, editContent);
+      setSkills((prev) => prev.map((s) => (s.name === expandedSkill ? { ...s, description: editDescription, content: editContent } : s)));
+      setToast(t('settings.toast.saved'));
+      setTimeout(() => setToast(null), 2000);
+    } catch {
+      setToast(t('settings.toast.saveFailed'));
+      setTimeout(() => setToast(null), 2000);
+    }
+  }, [expandedSkill, editDescription, editContent, t]);
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!confirmDelete) return;
+    try {
+      await skillsApi.delete(confirmDelete);
+      setSkills((prev) => prev.filter((s) => s.name !== confirmDelete));
+      setToast(t('settings.toast.deleted'));
+      setTimeout(() => setToast(null), 2000);
+    } catch {
+      setToast(t('settings.toast.deleteFailed'));
+      setTimeout(() => setToast(null), 2000);
+    }
+    setConfirmDelete(null);
+  }, [confirmDelete, t]);
+
+  if (loading) return <div className="text-text-secondary text-sm">{t('settings.loading')}</div>;
+
+  if (skills.length === 0 && !showCreate) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 text-center">
+        <p className="text-sm text-text-secondary mb-4">{t('settings.skills.empty')}</p>
+        <button
+          data-testid="new-skill-button"
+          onClick={() => setShowCreate(true)}
+          className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
+        >
+          {t('settings.skills.newSkill')}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {/* Skill list */}
+      {skills.map((skill) => (
+        <div key={skill.name} className="border border-border rounded-lg overflow-hidden">
+          <div className="flex items-center gap-2 px-3 py-2">
+            {/* Toggle switch — enabled means NOT in disabledSkills */}
+            <button
+              data-testid={`skill-toggle-${skill.name}`}
+              role="switch"
+              aria-checked={!disabledSkills.includes(skill.name)}
+              onClick={() => toggleSkill(skill.name)}
+              className={`shrink-0 w-8 h-4 rounded-full relative transition-colors ${
+                !disabledSkills.includes(skill.name) ? 'bg-accent' : 'bg-bg-tertiary'
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
+                  !disabledSkills.includes(skill.name) ? 'translate-x-4' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+
+            {/* Name + description + expand */}
+            <button
+              data-testid={`skill-expand-${skill.name}`}
+              onClick={() => handleExpand(skill.name, skill.description, skill.content)}
+              className="flex-1 text-left min-w-0"
+            >
+              <div className="text-sm text-text-primary hover:text-accent truncate">{skill.name}</div>
+              {skill.description && (
+                <div className="text-xs text-text-secondary truncate">{skill.description}</div>
+              )}
+            </button>
+
+            {/* Delete */}
+            <button
+              data-testid={`skill-delete-${skill.name}`}
+              onClick={() => setConfirmDelete(skill.name)}
+              className="shrink-0 p-1 text-text-secondary hover:text-error"
+            >
+              <X size={14} />
+            </button>
+          </div>
+
+          {/* Expanded edit area */}
+          {expandedSkill === skill.name && (
+            <div className="px-3 pb-3 flex flex-col gap-2 border-t border-border-subtle mt-0">
+              <label className="text-xs font-medium text-text-secondary mt-2">{t('settings.skills.description')}</label>
+              <input
+                type="text"
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                className="w-full p-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-primary"
+              />
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-text-secondary">{t('settings.skills.content')}</label>
+                <div className="flex gap-1 ml-auto">
+                  <button
+                    data-testid="skill-edit-button"
+                    onClick={() => setShowPreview(false)}
+                    className={`px-2 py-0.5 text-xs rounded ${!showPreview ? 'bg-accent text-white' : 'text-text-secondary hover:text-text-primary'}`}
+                  >
+                    {t('settings.skills.edit')}
+                  </button>
+                  <button
+                    data-testid="skill-preview-button"
+                    onClick={() => setShowPreview(true)}
+                    className={`px-2 py-0.5 text-xs rounded ${showPreview ? 'bg-accent text-white' : 'text-text-secondary hover:text-text-primary'}`}
+                  >
+                    {t('settings.skills.preview')}
+                  </button>
+                </div>
+              </div>
+              {showPreview ? (
+                <div data-testid="skill-preview-content" className="w-full min-h-[8rem] p-2 bg-bg-secondary border border-border rounded-lg overflow-auto">
+                  <Markdown content={editContent} />
+                </div>
+              ) : (
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  className="w-full h-32 p-2 text-sm bg-bg-secondary border border-border rounded-lg resize-y font-mono text-text-primary"
+                />
+              )}
+              <button
+                data-testid="save-skill"
+                onClick={handleSave}
+                className="self-start px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
+              >
+                {t('settings.save')}
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {/* New Skill button */}
+      <button
+        data-testid="new-skill-button"
+        onClick={() => setShowCreate(!showCreate)}
+        className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90 self-start"
+      >
+        {t('settings.skills.newSkill')}
+      </button>
+
+      {/* Create form */}
+      {showCreate && (
+        <div className="border border-border rounded-lg p-3 flex flex-col gap-2">
+          <label className="text-xs font-medium text-text-secondary">{t('settings.skills.name')}</label>
+          <input
+            data-testid="new-skill-name"
+            type="text"
+            placeholder={t('settings.skills.namePlaceholder')}
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            className={`w-full p-2 text-sm bg-bg-secondary border rounded-lg text-text-primary ${nameError ? 'border-error' : 'border-border'}`}
+          />
+          {nameError && (
+            <p data-testid="skill-name-error" className="text-xs text-error">{t('settings.skills.nameInvalid')}</p>
+          )}
+          <label className="text-xs font-medium text-text-secondary">{t('settings.skills.description')}</label>
+          <input
+            data-testid="new-skill-description"
+            type="text"
+            placeholder={t('settings.skills.descriptionPlaceholder')}
+            value={newDescription}
+            onChange={(e) => setNewDescription(e.target.value)}
+            className="w-full p-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-primary"
+          />
+          <label className="text-xs font-medium text-text-secondary">{t('settings.skills.content')}</label>
+          <textarea
+            data-testid="new-skill-content"
+            placeholder={t('settings.skills.contentPlaceholder')}
+            value={newContent}
+            onChange={(e) => setNewContent(e.target.value)}
+            className="w-full h-32 p-2 text-sm bg-bg-secondary border border-border rounded-lg resize-y font-mono text-text-primary"
+          />
+          <button
+            data-testid="create-skill-button"
+            onClick={handleCreate}
+            disabled={!newName.trim() || nameError}
+            className="self-start px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {t('settings.skills.create')}
+          </button>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" data-testid="skill-delete-dialog">
+          <div className="bg-bg-primary rounded-xl border border-border p-6 shadow-lg max-w-sm mx-4">
+            <p className="text-sm text-text-primary mb-4">{t('settings.skills.deleteConfirm')}</p>
+            <div className="flex gap-2 justify-end">
+              <button
+                data-testid="skill-delete-cancel"
+                onClick={() => setConfirmDelete(null)}
+                className="px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-bg-tertiary"
+              >
+                {t('settings.deleteDialog.cancel')}
+              </button>
+              <button
+                data-testid="skill-delete-confirm"
+                onClick={handleDeleteConfirm}
+                className="px-3 py-1.5 text-xs font-medium bg-error text-white rounded-lg hover:bg-error/90"
+              >
+                {t('settings.deleteDialog.confirm')}
               </button>
             </div>
           </div>

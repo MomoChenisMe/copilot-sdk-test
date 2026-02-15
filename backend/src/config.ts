@@ -12,6 +12,7 @@ const configSchema = z.object({
   githubClientId: z.string().optional(),
   maxConcurrency: z.coerce.number().int().positive().default(3),
   promptsPath: z.string().default('./data/prompts'),
+  skillsPath: z.string().default('./data/skills'),
   maxPromptLength: z.coerce.number().int().positive().default(50_000),
 });
 
@@ -29,6 +30,7 @@ export function loadConfig(): Config {
     githubClientId: process.env.GITHUB_CLIENT_ID,
     maxConcurrency: process.env.MAX_CONCURRENCY,
     promptsPath: process.env.PROMPTS_PATH,
+    skillsPath: process.env.SKILLS_PATH,
     maxPromptLength: process.env.MAX_PROMPT_LENGTH,
   });
 }

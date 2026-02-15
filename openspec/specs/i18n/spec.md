@@ -91,6 +91,11 @@
 - **WHEN** Sidebar 顯示對話的更新時間
 - **THEN** 時間描述（剛剛、X 分鐘前、X 小時前、X 天前）MUST 使用翻譯 key 搭配插值
 
+#### Scenario: Settings 面板文字
+
+- **WHEN** SettingsPanel 的任何分頁顯示
+- **THEN** 所有面板標題、tab 名稱、按鈕文字、toast 訊息、section 標題、對話框文字、placeholder MUST 使用 `t()` 函式取得翻譯，MUST NOT 包含硬編碼的中文或英文字串
+
 ### Requirement: 新增翻譯 key
 
 系統 SHALL 為新增的 UI 元件提供完整的 zh-TW 和 en 翻譯。
@@ -109,3 +114,32 @@
 
 - **WHEN** Sidebar 設定區渲染
 - **THEN** 翻譯檔案 MUST 包含 `sidebar.language`（"Language"/"語言"）和 `sidebar.logout`（"Log out"/"登出"）
+
+### Requirement: Settings 面板翻譯鍵
+
+系統 SHALL 為 SettingsPanel 的所有 UI 文字提供完整的 en 和 zh-TW 翻譯鍵，使用 `settings.*` 命名空間。
+
+#### Scenario: Settings 翻譯鍵完整性
+
+- **WHEN** SettingsPanel 被渲染
+- **THEN** 翻譯檔案 MUST 包含以下命名空間的所有 key：
+  - `settings.title` — 面板標題
+  - `settings.close` — 關閉按鈕 aria-label
+  - `settings.loading` — 載入中文字
+  - `settings.tabs.*` — 所有 tab 名稱（systemPrompt、profile、agent、presets、memory、skills）
+  - `settings.save` — 儲存按鈕
+  - `settings.toast.*` — 所有 toast 訊息（saved、saveFailed、deleted、deleteFailed、reset、resetFailed）
+  - `settings.systemPrompt.*` — 系統提示詞相關（resetToDefault、resetConfirm）
+  - `settings.memory.*` — 記憶區塊標題（preferences、projects、solutions）
+  - `settings.deleteDialog.*` — 刪除確認對話框（message、cancel、confirm）
+  - `settings.skills.*` — Skills 相關所有文字
+
+#### Scenario: 英文翻譯
+
+- **WHEN** 語言設定為 en
+- **THEN** `settings.title` MUST 為 "Settings"，`settings.save` MUST 為 "Save"，`settings.toast.saved` MUST 為 "Saved"
+
+#### Scenario: 繁體中文翻譯
+
+- **WHEN** 語言設定為 zh-TW
+- **THEN** `settings.title` MUST 為 "設定"，`settings.save` MUST 為 "儲存"，`settings.toast.saved` MUST 為 "已儲存"

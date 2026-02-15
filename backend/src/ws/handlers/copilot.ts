@@ -47,12 +47,14 @@ export function createCopilotHandler(
           void (async () => {
             try {
               const activePresets = (payload.activePresets as string[]) ?? [];
+              const disabledSkills = (payload.disabledSkills as string[]) ?? [];
               await streamManager.startStream(conversationId, {
                 prompt,
                 sdkSessionId: conversation.sdkSessionId,
                 model: conversation.model,
                 cwd: conversation.cwd,
                 activePresets,
+                disabledSkills,
               });
 
               // Auto-subscribe this connection to the stream

@@ -17,7 +17,11 @@ export class PromptComposer {
   compose(activePresets: string[], cwd?: string): string {
     const sections: string[] = [];
 
-    // 1. PROFILE.md
+    // 1. SYSTEM_PROMPT.md
+    const systemPrompt = this.store.readFile('SYSTEM_PROMPT.md');
+    if (systemPrompt.trim()) sections.push(systemPrompt);
+
+    // 2. PROFILE.md
     const profile = this.store.readFile('PROFILE.md');
     if (profile.trim()) sections.push(profile);
 

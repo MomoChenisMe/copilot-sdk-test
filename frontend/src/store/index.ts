@@ -56,6 +56,7 @@ export interface AppState {
 
   // Settings
   activePresets: string[];
+  disabledSkills: string[];
   settingsOpen: boolean;
 
   // Error
@@ -100,6 +101,7 @@ export interface AppState {
   // Actions — Settings
   togglePreset: (name: string) => void;
   removePreset: (name: string) => void;
+  toggleSkill: (name: string) => void;
   setSettingsOpen: (open: boolean) => void;
 
   // Actions — Error
@@ -153,6 +155,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   turnSegments: [],
   activeStreams: {},
   activePresets: [],
+  disabledSkills: [],
   settingsOpen: false,
   copilotError: null,
 
@@ -272,6 +275,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     const next = get().activePresets.filter((p) => p !== name);
     try { localStorage.setItem('ai-terminal:activePresets', JSON.stringify(next)); } catch { /* noop */ }
     set({ activePresets: next });
+  },
+
+  toggleSkill: (name) => {
+    const current = get().disabledSkills;
+    const next = current.includes(name)
+      ? current.filter((s) => s !== name)
+      : [...current, name];
+    try { localStorage.setItem('ai-terminal:disabledSkills', JSON.stringify(next)); } catch { /* noop */ }
+    set({ disabledSkills: next });
   },
 
   setSettingsOpen: (open) => set({ settingsOpen: open }),

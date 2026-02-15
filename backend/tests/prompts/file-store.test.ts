@@ -52,6 +52,7 @@ describe('PromptFileStore', () => {
 
       expect(fs.existsSync(path.join(tmpDir, 'PROFILE.md'))).toBe(true);
       expect(fs.existsSync(path.join(tmpDir, 'AGENT.md'))).toBe(true);
+      expect(fs.existsSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'))).toBe(true);
       expect(fs.existsSync(path.join(tmpDir, 'presets'))).toBe(true);
       expect(fs.existsSync(path.join(tmpDir, 'memory'))).toBe(true);
       expect(fs.existsSync(path.join(tmpDir, 'memory', 'preferences.md'))).toBe(true);
@@ -59,11 +60,25 @@ describe('PromptFileStore', () => {
       expect(fs.existsSync(path.join(tmpDir, 'memory', 'solutions'))).toBe(true);
     });
 
+    it('should create SYSTEM_PROMPT.md with default content when not exists', () => {
+      store.ensureDirectories();
+      const content = fs.readFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), 'utf-8');
+      expect(content.length).toBeGreaterThan(0);
+      expect(content).toContain('Identity & Role');
+    });
+
     it('should not overwrite existing files', () => {
       store.ensureDirectories();
       fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'existing content');
       store.ensureDirectories();
       expect(fs.readFileSync(path.join(tmpDir, 'PROFILE.md'), 'utf-8')).toBe('existing content');
+    });
+
+    it('should not overwrite existing SYSTEM_PROMPT.md', () => {
+      store.ensureDirectories();
+      fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), 'custom system prompt');
+      store.ensureDirectories();
+      expect(fs.readFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), 'utf-8')).toBe('custom system prompt');
     });
 
     it('should be idempotent (no error when called twice)', () => {

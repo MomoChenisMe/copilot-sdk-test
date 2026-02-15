@@ -26,6 +26,9 @@ const { mockMemoryApi } = vi.hoisted(() => {
 
 vi.mock('../../../src/lib/prompts-api', () => ({
   promptsApi: {
+    getSystemPrompt: vi.fn().mockResolvedValue({ content: '' }),
+    putSystemPrompt: vi.fn().mockResolvedValue({ ok: true }),
+    resetSystemPrompt: vi.fn().mockResolvedValue({ content: '' }),
     getProfile: vi.fn().mockResolvedValue({ content: '' }),
     putProfile: vi.fn().mockResolvedValue({ ok: true }),
     getAgent: vi.fn().mockResolvedValue({ content: '' }),
@@ -128,7 +131,7 @@ describe('SettingsPanel - Memory Tab', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('delete-confirm-dialog')).toBeTruthy();
-      expect(screen.getByText('確定要刪除此項目嗎？')).toBeTruthy();
+      expect(screen.getByText('Are you sure you want to delete this item?')).toBeTruthy();
     });
   });
 

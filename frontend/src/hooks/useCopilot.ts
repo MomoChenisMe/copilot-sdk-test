@@ -247,7 +247,11 @@ export function useCopilot({ subscribe, send }: UseCopilotOptions) {
         createdAt: new Date().toISOString(),
       });
 
-      send({ type: 'copilot:send', data: { conversationId, prompt } });
+      const { activePresets, disabledSkills } = useAppStore.getState();
+      send({
+        type: 'copilot:send',
+        data: { conversationId, prompt, activePresets, disabledSkills },
+      });
     },
     [send, clearStreaming, setIsStreaming, addMessage],
   );

@@ -14,6 +14,8 @@ export interface CreateSessionOptions {
   model: string;
   workingDirectory: string;
   systemMessage?: SystemMessage;
+  skillDirectories?: string[];
+  disabledSkills?: string[];
 }
 
 export interface ResumeSessionOptions {
@@ -25,6 +27,8 @@ export interface GetOrCreateSessionOptions {
   model: string;
   workingDirectory: string;
   systemMessage?: SystemMessage;
+  skillDirectories?: string[];
+  disabledSkills?: string[];
 }
 
 export class SessionManager {
@@ -44,6 +48,14 @@ export class SessionManager {
 
     if (options.systemMessage) {
       sessionConfig.systemMessage = options.systemMessage;
+    }
+
+    if (options.skillDirectories) {
+      sessionConfig.skillDirectories = options.skillDirectories;
+    }
+
+    if (options.disabledSkills) {
+      sessionConfig.disabledSkills = options.disabledSkills;
     }
 
     const session = await client.createSession(sessionConfig as any);
@@ -80,6 +92,8 @@ export class SessionManager {
       model: options.model,
       workingDirectory: options.workingDirectory,
       systemMessage: options.systemMessage,
+      skillDirectories: options.skillDirectories,
+      disabledSkills: options.disabledSkills,
     });
   }
 

@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
-import { promptsApi, memoryApi } from '../../src/lib/prompts-api';
+import { promptsApi, memoryApi, skillsApi } from '../../src/lib/prompts-api';
 
 function mockResponse(data: unknown, ok = true, status = 200) {
   return {
@@ -18,6 +18,42 @@ function mockResponse(data: unknown, ok = true, status = 200) {
 describe('promptsApi', () => {
   beforeEach(() => {
     mockFetch.mockReset();
+  });
+
+  describe('systemPrompt', () => {
+    it('getSystemPrompt calls GET /api/prompts/system-prompt', async () => {
+      mockFetch.mockResolvedValue(mockResponse({ content: '# System Prompt' }));
+
+      const result = await promptsApi.getSystemPrompt();
+
+      expect(mockFetch).toHaveBeenCalledWith('/api/prompts/system-prompt', expect.objectContaining({
+        credentials: 'same-origin',
+      }));
+      expect(result).toEqual({ content: '# System Prompt' });
+    });
+
+    it('putSystemPrompt calls PUT /api/prompts/system-prompt with content', async () => {
+      mockFetch.mockResolvedValue(mockResponse({ ok: true }));
+
+      await promptsApi.putSystemPrompt('Updated system prompt');
+
+      expect(mockFetch).toHaveBeenCalledWith('/api/prompts/system-prompt', expect.objectContaining({
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'Updated system prompt' }),
+      }));
+    });
+
+    it('resetSystemPrompt calls POST /api/prompts/system-prompt/reset', async () => {
+      mockFetch.mockResolvedValue(mockResponse({ content: '# Default Prompt' }));
+
+      const result = await promptsApi.resetSystemPrompt();
+
+      expect(mockFetch).toHaveBeenCalledWith('/api/prompts/system-prompt/reset', expect.objectContaining({
+        method: 'POST',
+      }));
+      expect(result).toEqual({ content: '# Default Prompt' });
+    });
   });
 
   describe('profile', () => {
@@ -218,5 +254,55 @@ describe('memoryApi', () => {
         method: 'DELETE',
       }));
     });
+  });
+});
+
+describe('skillsApi', () => {
+  beforeEach(() => {
+    mockFetch.mockReset();
+  });
+
+  it('list calls GET /api/skills', async () => {
+    const data = { skills: [{ name: 'my-skill', description: 'A skill', content: '# Skill' }] };
+    mockFetch.mockResolvedValue(mockResponse(data));
+
+    const result = await skillsApi.list();
+
+    expect(mockFetch).toHaveBeenCalledWith('/api/skills', expect.objectContaining({
+      credentials: 'same-origin',
+    }));
+    expect(result).toEqual(data);
+  });
+
+  it('get calls GET /api/skills/:name', async () => {
+    mockFetch.mockResolvedValue(mockResponse({ name: 'my-skill', description: 'A skill', content: '# Skill' }));
+
+    const result = await skillsApi.get('my-skill');
+
+    expect(mockFetch).toHaveBeenCalledWith('/api/skills/my-skill', expect.objectContaining({
+      credentials: 'same-origin',
+    }));
+    expect(result).toEqual({ name: 'my-skill', description: 'A skill', content: '# Skill' });
+  });
+
+  it('put calls PUT /api/skills/:name with description and content', async () => {
+    mockFetch.mockResolvedValue(mockResponse({ ok: true }));
+
+    await skillsApi.put('my-skill', 'Updated description', '# Updated Skill');
+
+    expect(mockFetch).toHaveBeenCalledWith('/api/skills/my-skill', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ description: 'Updated description', content: '# Updated Skill' }),
+    }));
+  });
+
+  it('delete calls DELETE /api/skills/:name', async () => {
+    mockFetch.mockResolvedValue(mockResponse({ ok: true }));
+
+    await skillsApi.delete('old-skill');
+
+    expect(mockFetch).toHaveBeenCalledWith('/api/skills/old-skill', expect.objectContaining({
+      method: 'DELETE',
+    }));
   });
 });

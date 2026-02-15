@@ -58,6 +58,58 @@
     "copilot": "Copilot",
     "terminal": "Terminal"
   },
+  "settings": {
+    "title": "Settings",
+    "close": "Close",
+    "loading": "Loading...",
+    "save": "Save",
+    "tabs": {
+      "systemPrompt": "System Prompt",
+      "profile": "Profile",
+      "agent": "Agent",
+      "presets": "Presets",
+      "memory": "Memory",
+      "skills": "Skills"
+    },
+    "toast": {
+      "saved": "Saved",
+      "saveFailed": "Save failed",
+      "deleted": "Deleted",
+      "deleteFailed": "Delete failed",
+      "reset": "Reset to default",
+      "resetFailed": "Reset failed"
+    },
+    "systemPrompt": {
+      "resetToDefault": "Reset to Default",
+      "resetConfirm": "Are you sure you want to reset to the default system prompt? Your current changes will be lost."
+    },
+    "memory": {
+      "preferences": "Preferences",
+      "projects": "Projects",
+      "solutions": "Solutions"
+    },
+    "deleteDialog": {
+      "message": "Are you sure you want to delete this item?",
+      "cancel": "Cancel",
+      "confirm": "Delete"
+    },
+    "skills": {
+      "empty": "No skills yet. Create one to get started.",
+      "newSkill": "New Skill",
+      "name": "Skill Name",
+      "description": "Description",
+      "content": "Content",
+      "create": "Create",
+      "edit": "Edit",
+      "preview": "Preview",
+      "delete": "Delete",
+      "deleteConfirm": "Are you sure you want to delete this skill?",
+      "namePlaceholder": "e.g. code-review",
+      "descriptionPlaceholder": "Brief description of what this skill does...",
+      "contentPlaceholder": "Write your SKILL.md content here...",
+      "nameInvalid": "Name must not contain .., /, \\ or special characters"
+    }
+  },
   "sidebar": {
     "conversations": "Conversations",
     "new": "New Chat",
