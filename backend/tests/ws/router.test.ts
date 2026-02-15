@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { createRouter, registerHandler } from '../../src/ws/router.js';
-import type { WsMessage } from '../../src/ws/types.js';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { createRouter, registerHandler, notifyDisconnect } from '../../src/ws/router.js';
+import type { WsMessage, WsHandlerObject } from '../../src/ws/types.js';
 
 describe('WS router', () => {
   let router: ReturnType<typeof createRouter>;
@@ -58,5 +58,68 @@ describe('WS router', () => {
 
     expect(sent).toHaveLength(1);
     expect(sent[0].type).toBe('error');
+  });
+
+  it('should route messages to object-style handler with onMessage', () => {
+    const received: WsMessage[] = [];
+    const handler: WsHandlerObject = {
+      onMessage: (msg, s) => {
+        received.push(msg);
+        s({ type: 'obj:ack' });
+      },
+    };
+    registerHandler('obj', handler);
+
+    router({ type: 'obj:test' }, send);
+
+    expect(received).toHaveLength(1);
+    expect(received[0].type).toBe('obj:test');
+    expect(sent).toEqual([{ type: 'obj:ack' }]);
+  });
+});
+
+describe('WS router disconnect notification', () => {
+  it('should call onDisconnect on all handlers that have it', () => {
+    const calls: string[] = [];
+    const handler1: WsHandlerObject = {
+      onMessage: () => {},
+      onDisconnect: () => { calls.push('handler1'); },
+    };
+    const handler2: WsHandlerObject = {
+      onMessage: () => {},
+      onDisconnect: () => { calls.push('handler2'); },
+    };
+    registerHandler('dc1', handler1);
+    registerHandler('dc2', handler2);
+
+    const sent: WsMessage[] = [];
+    notifyDisconnect((msg) => sent.push(msg));
+
+    expect(calls).toContain('handler1');
+    expect(calls).toContain('handler2');
+  });
+
+  it('should skip plain function handlers without onDisconnect', () => {
+    registerHandler('plainfn', (_msg, _send) => {});
+    // Should not throw
+    expect(() => notifyDisconnect(() => {})).not.toThrow();
+  });
+
+  it('should not stop if one handler onDisconnect throws', () => {
+    const calls: string[] = [];
+    const badHandler: WsHandlerObject = {
+      onMessage: () => {},
+      onDisconnect: () => { throw new Error('boom'); },
+    };
+    const goodHandler: WsHandlerObject = {
+      onMessage: () => {},
+      onDisconnect: () => { calls.push('good'); },
+    };
+    registerHandler('bad', badHandler);
+    registerHandler('good', goodHandler);
+
+    // Should not throw even though badHandler.onDisconnect throws
+    expect(() => notifyDisconnect(() => {})).not.toThrow();
+    expect(calls).toContain('good');
   });
 });

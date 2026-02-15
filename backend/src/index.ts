@@ -19,7 +19,12 @@ import { registerHandler } from './ws/router.js';
 import { createCopilotHandler } from './ws/handlers/copilot.js';
 import { createTerminalHandler } from './ws/handlers/terminal.js';
 import { createCwdHandler } from './ws/handlers/cwd.js';
+import { StreamManager } from './copilot/stream-manager.js';
 import { setupGracefulShutdown } from './utils/graceful-shutdown.js';
+import { PromptFileStore } from './prompts/file-store.js';
+import { PromptComposer } from './prompts/composer.js';
+import { createPromptsRoutes } from './prompts/routes.js';
+import { createMemoryRoutes } from './prompts/memory-routes.js';
 
 const log = createLogger('main');
 
@@ -34,6 +39,10 @@ export function createApp() {
   const sessionStore = new SessionStore();
   const passwordHash = bcrypt.hashSync(config.webPassword, 10);
   const authMiddleware = createAuthMiddleware(sessionStore);
+
+  // Prompts file store
+  const promptStore = new PromptFileStore(config.promptsPath);
+  promptStore.ensureDirectories();
 
   // Copilot SDK
   const clientManager = new ClientManager({
@@ -53,6 +62,8 @@ export function createApp() {
   app.use('/api/conversations', authMiddleware, createConversationRoutes(repo));
   app.use('/api/copilot', authMiddleware, createModelsRoute(clientManager));
   app.use('/api/copilot/auth', authMiddleware, createCopilotAuthRoutes(clientManager));
+  app.use('/api/prompts', authMiddleware, createPromptsRoutes(promptStore));
+  app.use('/api/memory', authMiddleware, createMemoryRoutes(promptStore));
 
   // Serve static files in production
   if (config.nodeEnv === 'production') {
@@ -68,8 +79,17 @@ export function createApp() {
   const httpServer = createServer(app);
   const wss = createWsServer(httpServer, sessionStore);
 
+  // StreamManager for background streaming
+  const promptComposer = new PromptComposer(promptStore, config.maxPromptLength);
+  const streamManager = StreamManager.getInstance({
+    sessionManager,
+    repo,
+    maxConcurrency: config.maxConcurrency,
+    promptComposer,
+  });
+
   // Register WS handlers
-  registerHandler('copilot', createCopilotHandler(sessionManager, repo));
+  registerHandler('copilot', createCopilotHandler(streamManager, repo));
   registerHandler('terminal', createTerminalHandler(config.defaultCwd));
   registerHandler('cwd', createCwdHandler((newCwd) => {
     log.info({ cwd: newCwd }, 'Working directory changed');
@@ -77,6 +97,9 @@ export function createApp() {
 
   // Graceful shutdown
   setupGracefulShutdown([
+    async () => {
+      await streamManager.shutdownAll();
+    },
     async () => {
       await clientManager.stop();
     },

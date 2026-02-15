@@ -15,7 +15,7 @@ export function createCopilotAuthRoutes(clientManager: ClientManager): Router {
       res.json({
         isAuthenticated: status.isAuthenticated,
         method: status.authType,
-        login: status.login,
+        login: 'login' in status ? status.login : undefined,
       });
     } catch {
       res.json({ isAuthenticated: false });

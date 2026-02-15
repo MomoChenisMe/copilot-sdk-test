@@ -12,6 +12,7 @@ import { TabBar } from './TabBar';
 import { Sidebar } from './Sidebar';
 import { ChatView } from '../copilot/ChatView';
 import { TerminalView } from '../terminal/TerminalView';
+import { SettingsPanel } from '../settings/SettingsPanel';
 
 type ActiveTab = 'copilot' | 'terminal';
 
@@ -19,7 +20,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   const { t } = useTranslation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>('copilot');
-  const [cwd, setCwd] = useState('/home');
+  const [cwd] = useState('/home');
 
   const { status, send, subscribe } = useWebSocket(onLogout);
   const {
@@ -56,6 +57,10 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   const getInitialTheme = useAppStore((s) => s.getInitialTheme);
   const language = useAppStore((s) => s.language);
   const setLanguage = useAppStore((s) => s.setLanguage);
+  const settingsOpen = useAppStore((s) => s.settingsOpen);
+  const setSettingsOpen = useAppStore((s) => s.setSettingsOpen);
+  const activePresets = useAppStore((s) => s.activePresets);
+  const togglePreset = useAppStore((s) => s.togglePreset);
 
   // Initialize theme from localStorage on mount
   useEffect(() => {
@@ -143,6 +148,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         onThemeToggle={toggleTheme}
         onHomeClick={handleHomeClick}
         onNewChat={handleNewConversation}
+        onSettingsClick={() => setSettingsOpen(!settingsOpen)}
       />
 
       <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
@@ -169,6 +175,13 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
           />
         </div>
       </div>
+
+      <SettingsPanel
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        activePresets={activePresets}
+        onTogglePreset={togglePreset}
+      />
 
       <Sidebar
         open={sidebarOpen}

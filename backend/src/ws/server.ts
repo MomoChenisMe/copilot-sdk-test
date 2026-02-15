@@ -3,7 +3,7 @@ import type { Server as HttpServer, IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { parse as parseCookie } from 'cookie';
 import type { SessionStore } from '../auth/session.js';
-import { createRouter } from './router.js';
+import { createRouter, notifyDisconnect } from './router.js';
 import { createLogger } from '../utils/logger.js';
 import type { WsMessage } from './types.js';
 
@@ -42,7 +42,7 @@ export function createWsServer(httpServer: HttpServer, sessionStore: SessionStor
     });
   });
 
-  const HEARTBEAT_TIMEOUT = 60_000; // 60 seconds
+  const HEARTBEAT_TIMEOUT = 180_000; // 180 seconds
 
   wss.on('connection', (ws: WebSocket) => {
     log.info('Client connected');
@@ -72,16 +72,15 @@ export function createWsServer(httpServer: HttpServer, sessionStore: SessionStor
         return;
       }
 
-      // Track ping activity for heartbeat
-      if (message.type === 'ping') {
-        lastPing = Date.now();
-      }
+      // All incoming messages reset heartbeat timer (not just ping)
+      lastPing = Date.now();
 
       router(message, (msg) => send(ws, msg));
     });
 
     ws.on('close', () => {
       clearInterval(heartbeatInterval);
+      notifyDisconnect((msg) => send(ws, msg));
       log.info('Client disconnected');
     });
 

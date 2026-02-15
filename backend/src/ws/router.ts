@@ -1,4 +1,4 @@
-import type { WsMessage, WsHandler } from './types.js';
+import type { WsMessage, WsHandler, SendFn } from './types.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('ws-router');
@@ -9,8 +9,28 @@ export function registerHandler(prefix: string, handler: WsHandler) {
   handlers.set(prefix, handler);
 }
 
+function invokeHandler(handler: WsHandler, message: WsMessage, send: SendFn): void {
+  if (typeof handler === 'function') {
+    handler(message, send);
+  } else {
+    handler.onMessage(message, send);
+  }
+}
+
+export function notifyDisconnect(send: SendFn): void {
+  for (const [prefix, handler] of handlers) {
+    if (typeof handler !== 'function' && handler.onDisconnect) {
+      try {
+        handler.onDisconnect(send);
+      } catch (err) {
+        log.error({ err, prefix }, 'Handler onDisconnect error');
+      }
+    }
+  }
+}
+
 export function createRouter() {
-  return (message: WsMessage, send: (msg: WsMessage) => void): void => {
+  return (message: WsMessage, send: SendFn): void => {
     const { type } = message;
 
     // Built-in: ping/pong
@@ -25,7 +45,7 @@ export function createRouter() {
 
     const handler = handlers.get(prefix);
     if (handler) {
-      handler(message, send);
+      invokeHandler(handler, message, send);
       return;
     }
 

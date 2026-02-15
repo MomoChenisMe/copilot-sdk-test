@@ -25,6 +25,20 @@ export async function apiGet<T>(path: string): Promise<T> {
   return res.json();
 }
 
+export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+    credentials: 'same-origin',
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ error: res.statusText }));
+    throw new ApiError(res.status, data.error ?? 'Request failed');
+  }
+  return res.json();
+}
+
 export async function apiDelete<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'DELETE',

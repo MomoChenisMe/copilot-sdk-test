@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef, useMemo } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useAppStore } from '../store';
 import type { MessageMetadata } from '../lib/api';
 import type { WsMessage } from '../lib/ws-types';
@@ -21,6 +21,9 @@ export function useCopilot({ subscribe, send }: UseCopilotOptions) {
     addTurnContentSegment,
     addTurnSegment,
     updateToolInTurnSegments,
+    setActiveStreams,
+    updateStreamStatus,
+    removeStream,
   } = useAppStore();
 
   // Track whether we received a copilot:message with content during the current turn
@@ -133,6 +136,23 @@ export function useCopilot({ subscribe, send }: UseCopilotOptions) {
           break;
         }
 
+        case 'copilot:stream-status': {
+          const conversationId = data.conversationId as string;
+          const subscribed = data.subscribed as boolean;
+          if (subscribed) {
+            updateStreamStatus(conversationId, 'running');
+          } else {
+            removeStream(conversationId);
+          }
+          break;
+        }
+
+        case 'copilot:active-streams': {
+          const streamIds = data.streamIds as string[];
+          setActiveStreams(streamIds);
+          break;
+        }
+
         case 'copilot:idle': {
           const state = useAppStore.getState();
 
@@ -171,6 +191,12 @@ export function useCopilot({ subscribe, send }: UseCopilotOptions) {
             });
           }
 
+          // Remove from active streams (stream completed)
+          const activeConvId = useAppStore.getState().activeConversationId;
+          if (activeConvId) {
+            removeStream(activeConvId);
+          }
+
           setIsStreaming(false);
           clearStreaming();
           receivedMessageRef.current = false;
@@ -199,6 +225,9 @@ export function useCopilot({ subscribe, send }: UseCopilotOptions) {
     addTurnContentSegment,
     addTurnSegment,
     updateToolInTurnSegments,
+    setActiveStreams,
+    updateStreamStatus,
+    removeStream,
   ]);
 
   const sendMessage = useCallback(
@@ -224,7 +253,8 @@ export function useCopilot({ subscribe, send }: UseCopilotOptions) {
   );
 
   const abortMessage = useCallback(() => {
-    send({ type: 'copilot:abort' });
+    const conversationId = useAppStore.getState().activeConversationId;
+    send({ type: 'copilot:abort', data: { conversationId } });
   }, [send]);
 
   return { sendMessage, abortMessage };

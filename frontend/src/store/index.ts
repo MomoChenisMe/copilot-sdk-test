@@ -51,6 +51,13 @@ export interface AppState {
   // Turn segments (ordered interleaved segments)
   turnSegments: TurnSegment[];
 
+  // Active streams (background streaming)
+  activeStreams: Record<string, string>;
+
+  // Settings
+  activePresets: string[];
+  settingsOpen: boolean;
+
   // Error
   copilotError: string | null;
 
@@ -84,6 +91,16 @@ export interface AppState {
   // Actions — Turn segments
   addTurnSegment: (segment: TurnSegment) => void;
   updateToolInTurnSegments: (toolCallId: string, updates: Partial<TurnSegment & { type: 'tool' }>) => void;
+
+  // Actions — Active streams
+  setActiveStreams: (streamIds: string[]) => void;
+  updateStreamStatus: (conversationId: string, status: string) => void;
+  removeStream: (conversationId: string) => void;
+
+  // Actions — Settings
+  togglePreset: (name: string) => void;
+  removePreset: (name: string) => void;
+  setSettingsOpen: (open: boolean) => void;
 
   // Actions — Error
   setCopilotError: (error: string | null) => void;
@@ -134,6 +151,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   reasoningText: '',
   turnContentSegments: [],
   turnSegments: [],
+  activeStreams: {},
+  activePresets: [],
+  settingsOpen: false,
   copilotError: null,
 
   // Conversation actions
@@ -219,6 +239,42 @@ export const useAppStore = create<AppState>((set, get) => ({
         s.type === 'tool' && s.toolCallId === toolCallId ? { ...s, ...updates } : s,
       ),
     })),
+
+  // Active streams actions
+  setActiveStreams: (streamIds) =>
+    set({
+      activeStreams: Object.fromEntries(streamIds.map((id) => [id, 'running'])),
+    }),
+
+  updateStreamStatus: (conversationId, status) =>
+    set((state) => ({
+      activeStreams: { ...state.activeStreams, [conversationId]: status },
+    })),
+
+  removeStream: (conversationId) =>
+    set((state) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { [conversationId]: _, ...rest } = state.activeStreams;
+      return { activeStreams: rest };
+    }),
+
+  // Settings actions
+  togglePreset: (name) => {
+    const current = get().activePresets;
+    const next = current.includes(name)
+      ? current.filter((p) => p !== name)
+      : [...current, name];
+    try { localStorage.setItem('ai-terminal:activePresets', JSON.stringify(next)); } catch { /* noop */ }
+    set({ activePresets: next });
+  },
+
+  removePreset: (name) => {
+    const next = get().activePresets.filter((p) => p !== name);
+    try { localStorage.setItem('ai-terminal:activePresets', JSON.stringify(next)); } catch { /* noop */ }
+    set({ activePresets: next });
+  },
+
+  setSettingsOpen: (open) => set({ settingsOpen: open }),
 
   // Error actions
   setCopilotError: (error) => set({ copilotError: error }),

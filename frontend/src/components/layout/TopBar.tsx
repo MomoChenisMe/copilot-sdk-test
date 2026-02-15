@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Sun, Moon, Menu, Plus } from 'lucide-react';
+import { Sun, Moon, Menu, Plus, Settings } from 'lucide-react';
 import type { WsStatus } from '../../lib/ws-types';
 import type { Theme } from '../../store';
 import { ConnectionBadge } from '../shared/ConnectionBadge';
@@ -12,9 +12,10 @@ interface TopBarProps {
   onThemeToggle: () => void;
   onHomeClick: () => void;
   onNewChat: () => void;
+  onSettingsClick?: () => void;
 }
 
-export function TopBar({ title, status, theme, onMenuClick, onThemeToggle, onHomeClick, onNewChat }: TopBarProps) {
+export function TopBar({ title, status, theme, onMenuClick, onThemeToggle, onHomeClick, onNewChat, onSettingsClick }: TopBarProps) {
   const { t } = useTranslation();
   return (
     <header className="h-12 flex items-center gap-2 px-4 bg-bg-primary border-b border-border-subtle shrink-0">
@@ -46,8 +47,17 @@ export function TopBar({ title, status, theme, onMenuClick, onThemeToggle, onHom
         </span>
       </button>
 
-      {/* Right: Theme + Connection */}
+      {/* Right: Settings + Theme + Connection */}
       <div className="flex items-center gap-1">
+        {onSettingsClick && (
+          <button
+            onClick={onSettingsClick}
+            className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
+            aria-label={t('topBar.settings', 'Settings')}
+          >
+            <Settings size={18} />
+          </button>
+        )}
         <button
           onClick={onThemeToggle}
           className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors text-text-secondary"

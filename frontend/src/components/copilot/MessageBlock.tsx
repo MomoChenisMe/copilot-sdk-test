@@ -40,48 +40,51 @@ export function MessageBlock({ message }: MessageBlockProps) {
   const renderContent = () => {
     // New path: ordered turnSegments rendering
     if (turnSegments && turnSegments.length > 0) {
-      const hasReasoningSegment = turnSegments.some(s => s.type === 'reasoning');
+      // Canonical order: reasoning first, then tools/text in original order
+      const reasoningSegments = turnSegments.filter(s => s.type === 'reasoning');
+      const nonReasoningSegments = turnSegments.filter(s => s.type !== 'reasoning');
 
       return (
         <>
           {/* Legacy fallback: turnSegments has no reasoning entry but metadata.reasoning exists */}
-          {!hasReasoningSegment && reasoning && (
+          {reasoningSegments.length === 0 && reasoning && (
             <ReasoningBlock text={reasoning} isStreaming={false} />
           )}
-          {turnSegments.map((segment, index) => {
-        switch (segment.type) {
-          case 'text':
-            return (
-              <div key={`text-${index}`} className="text-sm leading-relaxed">
-                <Markdown content={segment.content} />
-              </div>
-            );
-          case 'tool': {
-            const toolSeg = segment as TurnSegment & { type: 'tool' };
-            const isInlineTool = INLINE_RESULT_TOOLS.includes(toolSeg.toolName);
-            const showResult = isInlineTool &&
-              toolSeg.status !== 'running' &&
-              (toolSeg.result != null || toolSeg.error != null);
-            const resultValue = toolSeg.result ?? toolSeg.error;
-            return (
-              <div key={`tool-${toolSeg.toolCallId}`}>
-                <ToolRecordErrorBoundary>
-                  <ToolRecord record={toolSeg} />
-                </ToolRecordErrorBoundary>
-                {showResult && (
-                  <ToolResultBlock result={resultValue} toolName={toolSeg.toolName} status={toolSeg.status} />
-                )}
-              </div>
-            );
-          }
-          case 'reasoning':
-            return (
-              <ReasoningBlock key={`reasoning-${index}`} text={segment.content} isStreaming={false} />
-            );
-          default:
-            return null;
-        }
-      })}
+          {/* Always render reasoning first */}
+          {reasoningSegments.map((segment, index) => (
+            <ReasoningBlock key={`reasoning-${index}`} text={segment.content} isStreaming={false} />
+          ))}
+          {/* Then tools and text in their original order */}
+          {nonReasoningSegments.map((segment, index) => {
+            switch (segment.type) {
+              case 'text':
+                return (
+                  <div key={`text-${index}`} className="text-sm leading-relaxed">
+                    <Markdown content={segment.content} />
+                  </div>
+                );
+              case 'tool': {
+                const toolSeg = segment as TurnSegment & { type: 'tool' };
+                const isInlineTool = INLINE_RESULT_TOOLS.includes(toolSeg.toolName);
+                const showResult = isInlineTool &&
+                  toolSeg.status !== 'running' &&
+                  (toolSeg.result != null || toolSeg.error != null);
+                const resultValue = toolSeg.result ?? toolSeg.error;
+                return (
+                  <div key={`tool-${toolSeg.toolCallId}`}>
+                    <ToolRecordErrorBoundary>
+                      <ToolRecord record={toolSeg} />
+                    </ToolRecordErrorBoundary>
+                    {showResult && (
+                      <ToolResultBlock result={resultValue} toolName={toolSeg.toolName} status={toolSeg.status} />
+                    )}
+                  </div>
+                );
+              }
+              default:
+                return null;
+            }
+          })}
         </>
       );
     }

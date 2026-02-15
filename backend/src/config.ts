@@ -10,6 +10,9 @@ const configSchema = z.object({
   dbPath: z.string().default('./data/conversations.db'),
   githubToken: z.string().optional(),
   githubClientId: z.string().optional(),
+  maxConcurrency: z.coerce.number().int().positive().default(3),
+  promptsPath: z.string().default('./data/prompts'),
+  maxPromptLength: z.coerce.number().int().positive().default(50_000),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -24,5 +27,8 @@ export function loadConfig(): Config {
     dbPath: process.env.DB_PATH,
     githubToken: process.env.GITHUB_TOKEN,
     githubClientId: process.env.GITHUB_CLIENT_ID,
+    maxConcurrency: process.env.MAX_CONCURRENCY,
+    promptsPath: process.env.PROMPTS_PATH,
+    maxPromptLength: process.env.MAX_PROMPT_LENGTH,
   });
 }

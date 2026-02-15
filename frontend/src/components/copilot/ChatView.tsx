@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Sparkles, Plus } from 'lucide-react';
+import { Sparkles, Plus, X } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { MessageBlock } from './MessageBlock';
 import { StreamingText } from './StreamingText';
@@ -40,6 +40,8 @@ export function ChatView({
   const reasoningText = useAppStore((s) => s.reasoningText);
   const turnSegments = useAppStore((s) => s.turnSegments);
   const copilotError = useAppStore((s) => s.copilotError);
+  const activePresets = useAppStore((s) => s.activePresets);
+  const removePreset = useAppStore((s) => s.removePreset);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAutoScrolling = useRef(true);
@@ -101,6 +103,26 @@ export function ChatView({
             <div className="mb-2">
               <ModelSelector currentModel={currentModel} onSelect={onModelChange} />
             </div>
+            {activePresets.length > 0 && (
+              <div data-testid="preset-pills" className="mb-2 flex gap-1.5 overflow-x-auto whitespace-nowrap">
+                {activePresets.map((name) => (
+                  <span
+                    key={name}
+                    data-testid={`preset-pill-${name}`}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-accent-soft text-accent border border-accent/20"
+                  >
+                    {name}
+                    <button
+                      data-testid={`preset-pill-remove-${name}`}
+                      onClick={() => removePreset(name)}
+                      className="hover:text-error"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
             <Input
               onSend={onSend}
               onAbort={onAbort}
@@ -213,6 +235,26 @@ export function ChatView({
           <div className="mb-2">
             <ModelSelector currentModel={currentModel} onSelect={onModelChange} />
           </div>
+          {activePresets.length > 0 && (
+            <div data-testid="preset-pills" className="mb-2 flex gap-1.5 overflow-x-auto whitespace-nowrap">
+              {activePresets.map((name) => (
+                <span
+                  key={name}
+                  data-testid={`preset-pill-${name}`}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-accent-soft text-accent border border-accent/20"
+                >
+                  {name}
+                  <button
+                    data-testid={`preset-pill-remove-${name}`}
+                    onClick={() => removePreset(name)}
+                    className="hover:text-error"
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
           <Input
             onSend={onSend}
             onAbort={onAbort}

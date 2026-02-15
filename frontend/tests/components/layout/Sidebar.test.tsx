@@ -187,4 +187,52 @@ describe('Sidebar', () => {
     const sidebar = container.querySelector('[data-testid="sidebar-panel"]');
     expect(sidebar?.className).toContain('shadow-lg');
   });
+
+  // --- Stream indicator tests ---
+
+  it('shows pulse dot for conversations with running streams', () => {
+    const { container } = render(
+      <Sidebar {...defaultProps} activeStreams={{ 'conv-2': 'running' }} />,
+    );
+    const dot = container.querySelector('[data-testid="stream-indicator-conv-2"]');
+    expect(dot).toBeTruthy();
+    expect(dot!.className).toContain('animate-pulse');
+    expect(dot!.className).toContain('bg-accent');
+  });
+
+  it('does not show dot for conversations without active streams', () => {
+    const { container } = render(
+      <Sidebar {...defaultProps} activeStreams={{}} />,
+    );
+    const dot = container.querySelector('[data-testid="stream-indicator-conv-1"]');
+    expect(dot).toBeNull();
+  });
+
+  it('shows red dot for conversations with error streams', () => {
+    const { container } = render(
+      <Sidebar {...defaultProps} activeStreams={{ 'conv-1': 'error' }} />,
+    );
+    const dot = container.querySelector('[data-testid="stream-indicator-conv-1"]');
+    expect(dot).toBeTruthy();
+    expect(dot!.className).toContain('bg-error');
+  });
+
+  it('does not show dot for idle streams', () => {
+    const { container } = render(
+      <Sidebar {...defaultProps} activeStreams={{ 'conv-1': 'idle' }} />,
+    );
+    const dot = container.querySelector('[data-testid="stream-indicator-conv-1"]');
+    expect(dot).toBeNull();
+  });
+
+  it('shows multiple dots for multiple running streams', () => {
+    const { container } = render(
+      <Sidebar
+        {...defaultProps}
+        activeStreams={{ 'conv-1': 'running', 'conv-2': 'running', 'conv-3': 'running' }}
+      />,
+    );
+    const dots = container.querySelectorAll('[data-testid^="stream-indicator-"]');
+    expect(dots.length).toBe(3);
+  });
 });

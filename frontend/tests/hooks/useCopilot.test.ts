@@ -489,4 +489,96 @@ describe('useCopilot', () => {
       data: { conversationId: 'conv-1', prompt: 'Hello AI' },
     });
   });
+
+  // --- Background streaming: copilot:stream-status ---
+
+  it('should update store activeStreams on copilot:stream-status (subscribed)', () => {
+    useAppStore.setState({ activeStreams: {} });
+    renderHook(() => useCopilot({ subscribe, send }));
+
+    act(() => {
+      emit({
+        type: 'copilot:stream-status',
+        data: { conversationId: 'conv-1', subscribed: true },
+      });
+    });
+
+    expect(useAppStore.getState().activeStreams['conv-1']).toBe('running');
+  });
+
+  it('should remove stream from store on copilot:stream-status (unsubscribed)', () => {
+    useAppStore.setState({ activeStreams: { 'conv-1': 'running' } });
+    renderHook(() => useCopilot({ subscribe, send }));
+
+    act(() => {
+      emit({
+        type: 'copilot:stream-status',
+        data: { conversationId: 'conv-1', subscribed: false },
+      });
+    });
+
+    expect(useAppStore.getState().activeStreams['conv-1']).toBeUndefined();
+  });
+
+  // --- Background streaming: copilot:active-streams ---
+
+  it('should update store activeStreams on copilot:active-streams', () => {
+    useAppStore.setState({ activeStreams: {} });
+    renderHook(() => useCopilot({ subscribe, send }));
+
+    act(() => {
+      emit({
+        type: 'copilot:active-streams',
+        data: { streamIds: ['conv-1', 'conv-2'] },
+      });
+    });
+
+    expect(useAppStore.getState().activeStreams).toEqual({
+      'conv-1': 'running',
+      'conv-2': 'running',
+    });
+  });
+
+  it('should clear activeStreams when copilot:active-streams returns empty', () => {
+    useAppStore.setState({ activeStreams: { 'conv-1': 'running' } });
+    renderHook(() => useCopilot({ subscribe, send }));
+
+    act(() => {
+      emit({
+        type: 'copilot:active-streams',
+        data: { streamIds: [] },
+      });
+    });
+
+    expect(useAppStore.getState().activeStreams).toEqual({});
+  });
+
+  // --- Background streaming: abortMessage with conversationId ---
+
+  it('abortMessage should include conversationId in payload', () => {
+    useAppStore.setState({ activeConversationId: 'conv-1' });
+    const { result } = renderHook(() => useCopilot({ subscribe, send }));
+
+    act(() => {
+      result.current.abortMessage();
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      type: 'copilot:abort',
+      data: { conversationId: 'conv-1' },
+    });
+  });
+
+  // --- Background streaming: idle updates activeStreams ---
+
+  it('should remove stream from activeStreams on copilot:idle', () => {
+    useAppStore.setState({ activeStreams: { 'conv-1': 'running' }, activeConversationId: 'conv-1' });
+    renderHook(() => useCopilot({ subscribe, send }));
+
+    act(() => {
+      emit({ type: 'copilot:idle' });
+    });
+
+    expect(useAppStore.getState().activeStreams['conv-1']).toBeUndefined();
+  });
 });

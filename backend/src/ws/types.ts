@@ -3,4 +3,11 @@ export interface WsMessage {
   data?: unknown;
 }
 
-export type WsHandler = (message: WsMessage, send: (msg: WsMessage) => void) => void;
+export type SendFn = (msg: WsMessage) => void;
+
+export interface WsHandlerObject {
+  onMessage: (message: WsMessage, send: SendFn) => void;
+  onDisconnect?: (send: SendFn) => void;
+}
+
+export type WsHandler = ((message: WsMessage, send: SendFn) => void) | WsHandlerObject;

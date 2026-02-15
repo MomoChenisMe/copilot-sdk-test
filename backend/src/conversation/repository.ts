@@ -12,8 +12,6 @@ export class ConversationRepository {
 
   create(input: CreateConversationInput): Conversation {
     const id = randomUUID();
-    const now = new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
-
     this.db
       .prepare(
         `INSERT INTO conversations (id, model, cwd, created_at, updated_at)

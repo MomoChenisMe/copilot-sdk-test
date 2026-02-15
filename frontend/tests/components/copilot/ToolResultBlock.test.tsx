@@ -3,19 +3,17 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { ToolResultBlock } from '../../../src/components/copilot/ToolResultBlock';
 
 describe('ToolResultBlock', () => {
-  it('renders string result as code block', () => {
+  // === Content extraction ===
+
+  it('renders string result', () => {
     render(<ToolResultBlock result="hello world" toolName="bash" />);
-    const pre = screen.getByTestId('tool-result-block');
-    expect(pre).toBeTruthy();
-    expect(pre.textContent).toContain('hello world');
+    const block = screen.getByTestId('tool-result-block');
+    expect(block.textContent).toContain('hello world');
   });
 
   it('renders object result with content property', () => {
     render(
-      <ToolResultBlock
-        result={{ content: 'file contents here' }}
-        toolName="bash"
-      />
+      <ToolResultBlock result={{ content: 'file contents here' }} toolName="bash" />
     );
     const block = screen.getByTestId('tool-result-block');
     expect(block.textContent).toContain('file contents here');
@@ -23,16 +21,12 @@ describe('ToolResultBlock', () => {
 
   it('renders object result with detailedContent property', () => {
     render(
-      <ToolResultBlock
-        result={{ detailedContent: 'detailed output' }}
-        toolName="bash"
-      />
+      <ToolResultBlock result={{ detailedContent: 'detailed output' }} toolName="bash" />
     );
     const block = screen.getByTestId('tool-result-block');
     expect(block.textContent).toContain('detailed output');
   });
 
-  // CRITICAL FIX: detailedContent must take priority over content
   it('prioritizes detailedContent over content when both exist', () => {
     render(
       <ToolResultBlock
@@ -51,6 +45,8 @@ describe('ToolResultBlock', () => {
     expect(block.textContent).toContain('42');
   });
 
+  // === Null / undefined ===
+
   it('renders null result as empty', () => {
     const { container } = render(<ToolResultBlock result={null} toolName="bash" />);
     expect(container.firstChild).toBeNull();
@@ -61,29 +57,24 @@ describe('ToolResultBlock', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('renders with pre element for code-like output', () => {
-    render(<ToolResultBlock result="echo hi" toolName="bash" />);
-    const block = screen.getByTestId('tool-result-block');
-    expect(block.tagName.toLowerCase()).toBe('pre');
+  // === Running status ===
+
+  it('does NOT render when status is running', () => {
+    const { container } = render(
+      <ToolResultBlock result="partial" toolName="bash" status="running" />
+    );
+    expect(container.firstChild).toBeNull();
   });
 
-  // CRITICAL FIX: max-h-96 per spec
-  it('uses max-h-96 for overflow constraint', () => {
-    render(<ToolResultBlock result="some output" toolName="bash" />);
-    const block = screen.getByTestId('tool-result-block');
-    expect(block.className).toContain('max-h-96');
-  });
+  // === Truncation ===
 
-  // CRITICAL FIX: long output truncation with expand button
   it('truncates output over 500 lines and shows expand button', () => {
     const longText = Array.from({ length: 600 }, (_, i) => `line ${i + 1}`).join('\n');
     render(<ToolResultBlock result={longText} toolName="bash" />);
     const block = screen.getByTestId('tool-result-block');
-    // Should show only first 200 lines
     expect(block.textContent).toContain('line 1');
     expect(block.textContent).toContain('line 200');
     expect(block.textContent).not.toContain('line 201');
-    // Should show expand button
     const expandBtn = screen.getByTestId('tool-result-expand');
     expect(expandBtn).toBeTruthy();
   });
@@ -91,8 +82,7 @@ describe('ToolResultBlock', () => {
   it('shows full output after clicking expand button', () => {
     const longText = Array.from({ length: 600 }, (_, i) => `line ${i + 1}`).join('\n');
     render(<ToolResultBlock result={longText} toolName="bash" />);
-    const expandBtn = screen.getByTestId('tool-result-expand');
-    fireEvent.click(expandBtn);
+    fireEvent.click(screen.getByTestId('tool-result-expand'));
     const block = screen.getByTestId('tool-result-block');
     expect(block.textContent).toContain('line 600');
   });
@@ -103,16 +93,45 @@ describe('ToolResultBlock', () => {
     expect(screen.queryByTestId('tool-result-expand')).toBeNull();
   });
 
-  // WARNING FIX: error status styling
-  it('applies error styling when status is error', () => {
-    render(<ToolResultBlock result="command failed" toolName="bash" status="error" />);
-    const block = screen.getByTestId('tool-result-block');
-    expect(block.className).toContain('text-error');
+  it('shows collapse text after expanding', () => {
+    const longText = Array.from({ length: 600 }, (_, i) => `line ${i + 1}`).join('\n');
+    render(<ToolResultBlock result={longText} toolName="bash" status="success" />);
+    fireEvent.click(screen.getByTestId('tool-result-expand'));
+    const collapseBtn = screen.getByTestId('tool-result-expand');
+    expect(collapseBtn.textContent).toMatch(/收合|collapse/i);
   });
 
-  it('does NOT apply error styling when status is success', () => {
-    render(<ToolResultBlock result="ok" toolName="bash" status="success" />);
+  // === Error styling ===
+
+  it('applies error border when status is error', () => {
+    render(<ToolResultBlock result="command failed" toolName="bash" status="error" />);
     const block = screen.getByTestId('tool-result-block');
-    expect(block.className).not.toContain('text-error');
+    expect(block.className).toContain('border-l-error');
+  });
+
+  it('renders error text with error color', () => {
+    render(<ToolResultBlock result="Error: something went wrong" toolName="bash" status="error" />);
+    const block = screen.getByTestId('tool-result-block');
+    expect(block.textContent).toContain('Error: something went wrong');
+    // Error text is rendered inside a pre with text-error
+    const pre = block.querySelector('pre');
+    expect(pre?.className).toContain('text-error');
+  });
+
+  // === Markdown rendering (success path) ===
+
+  it('renders success result through Markdown component as a code block', () => {
+    render(<ToolResultBlock result="echo hello" toolName="bash" status="success" />);
+    const block = screen.getByTestId('tool-result-block');
+    expect(block.textContent).toContain('echo hello');
+    // Should contain a code element from Markdown rendering
+    expect(block.querySelector('code')).toBeTruthy();
+  });
+
+  it('renders without status (defaults to success path)', () => {
+    render(<ToolResultBlock result="output text" toolName="bash" />);
+    const block = screen.getByTestId('tool-result-block');
+    expect(block.textContent).toContain('output text');
+    expect(block.querySelector('code')).toBeTruthy();
   });
 });

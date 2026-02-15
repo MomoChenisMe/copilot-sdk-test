@@ -1,8 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import http from 'node:http';
 import { WebSocket } from 'ws';
 import { SessionStore } from '../../src/auth/session.js';
 import { createWsServer } from '../../src/ws/server.js';
+
+const __dirname2 = dirname(fileURLToPath(import.meta.url));
 
 describe('WebSocket server', () => {
   let httpServer: http.Server;
@@ -84,5 +89,34 @@ describe('WebSocket server', () => {
     expect(parsed.type).toBe('pong');
 
     ws.close();
+  });
+});
+
+describe('ws/server heartbeat constants', () => {
+  const serverSource = readFileSync(
+    resolve(__dirname2, '../../src/ws/server.ts'),
+    'utf-8',
+  );
+
+  it('should set HEARTBEAT_TIMEOUT to 180 seconds', () => {
+    expect(serverSource).toContain('180_000');
+    expect(serverSource).not.toMatch(/HEARTBEAT_TIMEOUT\s*=\s*60_000/);
+  });
+
+  it('should reset heartbeat timer on all incoming WS messages, not just ping', () => {
+    // lastPing = Date.now() should be called unconditionally for every message,
+    // not only inside the `if (message.type === 'ping')` block
+    const msgHandlerMatch = serverSource.match(/ws\.on\('message'[\s\S]*?\n {4}\}\);/);
+    expect(msgHandlerMatch).toBeTruthy();
+    const handler = msgHandlerMatch![0];
+
+    const lastPingIdx = handler.indexOf('lastPing = Date.now()');
+    const pingCheckIdx = handler.indexOf("message.type === 'ping'");
+
+    expect(lastPingIdx).toBeGreaterThan(-1);
+    // If ping check still exists, lastPing update must come BEFORE it
+    if (pingCheckIdx > -1) {
+      expect(lastPingIdx).toBeLessThan(pingCheckIdx);
+    }
   });
 });

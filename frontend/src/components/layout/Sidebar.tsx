@@ -8,6 +8,7 @@ interface SidebarProps {
   onClose: () => void;
   conversations: Conversation[];
   activeConversationId: string | null;
+  activeStreams?: Record<string, string>;
   onSelect: (id: string) => void;
   onCreate: () => void;
   onDelete: (id: string) => void;
@@ -42,6 +43,7 @@ export function Sidebar({
   onClose,
   conversations,
   activeConversationId,
+  activeStreams = {},
   onSelect,
   onCreate,
   onDelete,
@@ -86,6 +88,8 @@ export function Sidebar({
 
   const renderConversationItem = (conv: Conversation) => {
     const isActive = conv.id === activeConversationId;
+    const streamStatus = activeStreams[conv.id];
+    const showIndicator = streamStatus === 'running' || streamStatus === 'error';
     return (
       <div
         key={conv.id}
@@ -95,6 +99,15 @@ export function Sidebar({
         }`}
         onClick={() => onSelect(conv.id)}
       >
+        {/* Stream indicator */}
+        {showIndicator && (
+          <span
+            data-testid={`stream-indicator-${conv.id}`}
+            className={`w-2 h-2 rounded-full flex-shrink-0 ${
+              streamStatus === 'error' ? 'bg-error' : 'bg-accent animate-pulse'
+            }`}
+          />
+        )}
         {/* Title + time */}
         <div className="flex-1 min-w-0">
           {editingId === conv.id ? (

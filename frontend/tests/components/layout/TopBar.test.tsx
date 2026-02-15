@@ -83,4 +83,19 @@ describe('TopBar', () => {
     expect(screen.queryByRole('button', { name: /language/i })).toBeNull();
     expect(screen.queryByTestId('model-name')).toBeNull();
   });
+
+  // === Settings gear button ===
+  it('renders settings gear button', () => {
+    render(<TopBar {...defaultProps} onSettingsClick={vi.fn()} />);
+    const settingsBtn = screen.getByRole('button', { name: /settings/i });
+    expect(settingsBtn).toBeTruthy();
+  });
+
+  it('calls onSettingsClick when settings button is clicked', () => {
+    const onSettingsClick = vi.fn();
+    render(<TopBar {...defaultProps} onSettingsClick={onSettingsClick} />);
+    const settingsBtn = screen.getByRole('button', { name: /settings/i });
+    fireEvent.click(settingsBtn);
+    expect(onSettingsClick).toHaveBeenCalledOnce();
+  });
 });

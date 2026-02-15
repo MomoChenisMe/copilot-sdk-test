@@ -5,15 +5,26 @@ import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('copilot-session');
 
+export interface SystemMessage {
+  mode: 'append' | 'replace';
+  content: string;
+}
+
 export interface CreateSessionOptions {
   model: string;
   workingDirectory: string;
+  systemMessage?: SystemMessage;
+}
+
+export interface ResumeSessionOptions {
+  systemMessage?: SystemMessage;
 }
 
 export interface GetOrCreateSessionOptions {
   sdkSessionId: string | null;
   model: string;
   workingDirectory: string;
+  systemMessage?: SystemMessage;
 }
 
 export class SessionManager {
@@ -24,36 +35,51 @@ export class SessionManager {
 
     log.info({ model: options.model, cwd: options.workingDirectory }, 'Creating SDK session');
 
-    const session = await client.createSession({
+    const sessionConfig: Record<string, unknown> = {
       model: options.model,
       workingDirectory: options.workingDirectory,
       infiniteSessions: { enabled: true },
       onPermissionRequest: autoApprovePermission,
-    });
+    };
+
+    if (options.systemMessage) {
+      sessionConfig.systemMessage = options.systemMessage;
+    }
+
+    const session = await client.createSession(sessionConfig as any);
 
     log.info({ sessionId: session.sessionId }, 'SDK session created');
     return session;
   }
 
-  async resumeSession(sdkSessionId: string): Promise<CopilotSession> {
+  async resumeSession(sdkSessionId: string, options?: ResumeSessionOptions): Promise<CopilotSession> {
     const client = await this.clientManager.getClient();
 
     log.info({ sessionId: sdkSessionId }, 'Resuming SDK session');
 
-    const session = await client.resumeSession(sdkSessionId, {
+    const resumeConfig: Record<string, unknown> = {
       onPermissionRequest: autoApprovePermission,
-    });
+    };
+
+    if (options?.systemMessage) {
+      resumeConfig.systemMessage = options.systemMessage;
+    }
+
+    const session = await client.resumeSession(sdkSessionId, resumeConfig as any);
 
     return session;
   }
 
   async getOrCreateSession(options: GetOrCreateSessionOptions): Promise<CopilotSession> {
     if (options.sdkSessionId) {
-      return this.resumeSession(options.sdkSessionId);
+      return this.resumeSession(options.sdkSessionId, {
+        systemMessage: options.systemMessage,
+      });
     }
     return this.createSession({
       model: options.model,
       workingDirectory: options.workingDirectory,
+      systemMessage: options.systemMessage,
     });
   }
 

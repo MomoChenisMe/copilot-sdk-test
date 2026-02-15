@@ -65,6 +65,27 @@ describe('SessionManager', () => {
       expect(config.infiniteSessions).toEqual({ enabled: true });
     });
 
+    it('should pass systemMessage when provided', async () => {
+      await sessionManager.createSession({
+        model: 'gpt-5',
+        workingDirectory: '/home/user',
+        systemMessage: { mode: 'append', content: 'Custom system prompt' },
+      });
+
+      const config = mockClient.createSession.mock.calls[0][0];
+      expect(config.systemMessage).toEqual({ mode: 'append', content: 'Custom system prompt' });
+    });
+
+    it('should not include systemMessage when not provided', async () => {
+      await sessionManager.createSession({
+        model: 'gpt-5',
+        workingDirectory: '/home/user',
+      });
+
+      const config = mockClient.createSession.mock.calls[0][0];
+      expect(config.systemMessage).toBeUndefined();
+    });
+
     it('should set onPermissionRequest to auto-approve', async () => {
       await sessionManager.createSession({
         model: 'gpt-5',
@@ -86,6 +107,15 @@ describe('SessionManager', () => {
 
       expect(session.sessionId).toBe('sdk-session-123');
       expect(mockClient.resumeSession).toHaveBeenCalledWith('sdk-session-123', expect.any(Object));
+    });
+
+    it('should pass systemMessage when provided', async () => {
+      await sessionManager.resumeSession('sdk-session-123', {
+        systemMessage: { mode: 'append', content: 'Resume prompt' },
+      });
+
+      const resumeConfig = mockClient.resumeSession.mock.calls[0][1];
+      expect(resumeConfig.systemMessage).toEqual({ mode: 'append', content: 'Resume prompt' });
     });
   });
 

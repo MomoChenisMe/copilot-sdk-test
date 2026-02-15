@@ -182,6 +182,39 @@ describe('ChatView', () => {
     expect(screen.getByTestId('tool-tc1')).toBeTruthy();
   });
 
+  // --- Preset pills ---
+  it('renders active preset pills above input area', () => {
+    useAppStore.setState({
+      activeConversationId: 'conv-1',
+      activePresets: ['code-review', 'devops'],
+    });
+    render(<ChatView {...defaultProps} />);
+    expect(screen.getByTestId('preset-pill-code-review')).toBeTruthy();
+    expect(screen.getByTestId('preset-pill-devops')).toBeTruthy();
+  });
+
+  it('does not render preset area when no active presets', () => {
+    useAppStore.setState({
+      activeConversationId: 'conv-1',
+      activePresets: [],
+    });
+    render(<ChatView {...defaultProps} />);
+    expect(screen.queryByTestId('preset-pills')).toBeNull();
+  });
+
+  it('calls removePreset when clicking X on preset pill', () => {
+    const removePreset = vi.fn();
+    useAppStore.setState({
+      activeConversationId: 'conv-1',
+      activePresets: ['code-review'],
+      removePreset,
+    });
+    render(<ChatView {...defaultProps} />);
+    const removeBtn = screen.getByTestId('preset-pill-remove-code-review');
+    fireEvent.click(removeBtn);
+    expect(removePreset).toHaveBeenCalledWith('code-review');
+  });
+
   it('renders streaming block without turnSegments (fallback to old rendering)', () => {
     useAppStore.setState({
       activeConversationId: 'conv-1',

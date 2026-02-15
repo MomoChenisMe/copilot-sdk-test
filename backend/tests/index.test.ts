@@ -25,6 +25,8 @@ vi.mock('../src/config.js', () => ({
     dbPath: ':memory:',
     githubToken: undefined,
     githubClientId: undefined,
+    promptsPath: '/tmp/test-prompts',
+    maxPromptLength: 50000,
   })),
 }));
 
@@ -117,6 +119,30 @@ vi.mock('../src/ws/handlers/cwd.js', () => ({
 
 vi.mock('../src/utils/graceful-shutdown.js', () => ({
   setupGracefulShutdown: vi.fn(),
+}));
+
+vi.mock('../src/prompts/file-store.js', () => ({
+  PromptFileStore: vi.fn(() => ({
+    ensureDirectories: vi.fn(),
+    readFile: vi.fn(() => ''),
+    writeFile: vi.fn(),
+    deleteFile: vi.fn(),
+    listFiles: vi.fn(() => []),
+  })),
+}));
+
+vi.mock('../src/prompts/composer.js', () => ({
+  PromptComposer: vi.fn(() => ({
+    compose: vi.fn(() => ''),
+  })),
+}));
+
+vi.mock('../src/prompts/routes.js', () => ({
+  createPromptsRoutes: vi.fn(() => vi.fn()),
+}));
+
+vi.mock('../src/prompts/memory-routes.js', () => ({
+  createMemoryRoutes: vi.fn(() => vi.fn()),
 }));
 
 import { createApp } from '../src/index.js';
