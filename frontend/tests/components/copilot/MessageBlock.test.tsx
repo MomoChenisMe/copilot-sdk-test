@@ -404,6 +404,57 @@ describe('MessageBlock', () => {
     expect(screen.queryByTestId('tool-result-bash')).toBeNull();
   });
 
+  // --- Legacy reasoning fallback in turnSegments path (Task 5.1-5.2) ---
+
+  it('renders reasoning from metadata.reasoning when turnSegments has no reasoning entry', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'assistant',
+          content: 'Legacy text',
+          metadata: {
+            reasoning: 'Legacy thinking process...',
+            turnSegments: [
+              { type: 'tool', toolCallId: 'tc1', toolName: 'bash', status: 'success', result: 'ok' },
+              { type: 'text', content: 'Legacy text' },
+            ],
+            toolRecords: [
+              { toolCallId: 'tc1', toolName: 'bash', status: 'success', result: 'ok' },
+            ],
+          },
+        })}
+      />
+    );
+
+    // Should render ReasoningBlock from metadata.reasoning fallback
+    const reasoning = screen.getByTestId('reasoning-block');
+    expect(reasoning).toBeTruthy();
+    expect(reasoning.textContent).toContain('Legacy thinking process...');
+    expect(reasoning.getAttribute('data-streaming')).toBe('false');
+  });
+
+  it('does not double-render reasoning when both turnSegments and metadata.reasoning have it', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'assistant',
+          content: 'Answer',
+          metadata: {
+            reasoning: 'Thinking about it...',
+            turnSegments: [
+              { type: 'reasoning', content: 'Thinking about it...' },
+              { type: 'text', content: 'Answer' },
+            ],
+          },
+        })}
+      />
+    );
+
+    // Should render exactly ONE reasoning block, not two
+    const reasoningBlocks = screen.getAllByTestId('reasoning-block');
+    expect(reasoningBlocks).toHaveLength(1);
+  });
+
   // WARNING FIX: bash tool with error status should also show ToolResultBlock
   it('renders ToolResultBlock for bash tool with error status and error field', () => {
     render(

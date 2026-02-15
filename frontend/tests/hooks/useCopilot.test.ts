@@ -183,6 +183,7 @@ describe('useCopilot', () => {
     act(() => {
       // Simulate a full turn: reasoning + tools + message
       emit({ type: 'copilot:reasoning_delta', data: { content: 'Thinking about it...' } });
+      emit({ type: 'copilot:reasoning', data: { content: 'Thinking about it...' } });
       emit({ type: 'copilot:tool_start', data: { toolCallId: 'tc1', toolName: 'bash', arguments: { command: 'echo hi' } } });
       emit({ type: 'copilot:tool_end', data: { toolCallId: 'tc1', success: true, result: { content: 'hi' } } });
       emit({ type: 'copilot:message', data: { messageId: 'm1', content: 'Here is the result' } });
@@ -197,10 +198,14 @@ describe('useCopilot', () => {
     expect(msg).toBeTruthy();
     expect(msg!.content).toBe('Here is the result');
 
-    const metadata = msg!.metadata as { toolRecords?: unknown[]; reasoning?: string };
+    const metadata = msg!.metadata as { toolRecords?: unknown[]; reasoning?: string; turnSegments?: any[] };
     expect(metadata).toBeTruthy();
     expect(metadata.toolRecords).toHaveLength(1);
     expect(metadata.reasoning).toBe('Thinking about it...');
+    // turnSegments should include reasoning + tool + text = 3 segments
+    expect(metadata.turnSegments).toBeTruthy();
+    expect(metadata.turnSegments!.length).toBeGreaterThanOrEqual(3);
+    expect(metadata.turnSegments![0].type).toBe('reasoning');
   });
 
   it('should NOT create message on copilot:idle when no content and no metadata', () => {
@@ -337,7 +342,7 @@ describe('useCopilot', () => {
     expect((segs[0] as any).result).toBe('output');
   });
 
-  it('should push reasoning turn segment on copilot:reasoning', () => {
+  it('should push reasoning turn segment on copilot:reasoning (no prior deltas)', () => {
     renderHook(() => useCopilot({ subscribe, send }));
 
     act(() => {
@@ -347,6 +352,24 @@ describe('useCopilot', () => {
     const segs = useAppStore.getState().turnSegments;
     expect(segs).toHaveLength(1);
     expect(segs[0]).toEqual({ type: 'reasoning', content: 'Thinking...' });
+  });
+
+  it('should add reasoning to turnSegments on copilot:reasoning after deltas', () => {
+    renderHook(() => useCopilot({ subscribe, send }));
+
+    act(() => {
+      emit({ type: 'copilot:reasoning_delta', data: { content: 'Let me ' } });
+      emit({ type: 'copilot:reasoning_delta', data: { content: 'think...' } });
+      emit({ type: 'copilot:reasoning', data: { content: 'Let me think...' } });
+    });
+
+    const state = useAppStore.getState();
+    // reasoningText should be from deltas
+    expect(state.reasoningText).toBe('Let me think...');
+    // turnSegments should have a reasoning entry with accumulated text
+    const reasoningSegs = state.turnSegments.filter((s) => s.type === 'reasoning');
+    expect(reasoningSegs).toHaveLength(1);
+    expect(reasoningSegs[0].content).toBe('Let me think...');
   });
 
   it('should include turnSegments in idle metadata', () => {
@@ -382,6 +405,57 @@ describe('useCopilot', () => {
     });
 
     expect(useAppStore.getState().turnSegments).toEqual([]);
+  });
+
+  // --- messageId dedup ---
+
+  it('should skip duplicate copilot:message with same messageId', () => {
+    renderHook(() => useCopilot({ subscribe, send }));
+
+    act(() => {
+      emit({ type: 'copilot:message', data: { messageId: 'msg-1', content: 'Hello' } });
+      emit({ type: 'copilot:message', data: { messageId: 'msg-1', content: 'Hello' } });
+    });
+
+    expect(useAppStore.getState().turnContentSegments).toEqual(['Hello']);
+    expect(useAppStore.getState().turnSegments).toHaveLength(1);
+  });
+
+  it('should allow copilot:message with undefined messageId (no dedup)', () => {
+    renderHook(() => useCopilot({ subscribe, send }));
+
+    act(() => {
+      emit({ type: 'copilot:message', data: { content: 'First' } });
+      emit({ type: 'copilot:message', data: { content: 'Second' } });
+    });
+
+    expect(useAppStore.getState().turnContentSegments).toEqual(['First', 'Second']);
+  });
+
+  it('should filter replayed messages across turns using persistent dedup', () => {
+    renderHook(() => useCopilot({ subscribe, send }));
+
+    // Turn 1: send messageId 'A'
+    act(() => {
+      emit({ type: 'copilot:message', data: { messageId: 'A', content: 'Turn 1' } });
+      emit({ type: 'copilot:idle' });
+    });
+
+    const turn1Msgs = useAppStore.getState().messages.filter((m) => m.role === 'assistant');
+    expect(turn1Msgs).toHaveLength(1);
+    expect(turn1Msgs[0].content).toBe('Turn 1');
+
+    // Turn 2: replayed messageId 'A' should be SKIPPED (persistent dedup)
+    // New messageId 'B' should pass through
+    act(() => {
+      emit({ type: 'copilot:message', data: { messageId: 'A', content: 'Turn 1' } }); // replay — filtered
+      emit({ type: 'copilot:message', data: { messageId: 'B', content: 'Turn 2' } }); // new — passes
+      emit({ type: 'copilot:idle' });
+    });
+
+    const turn2Msgs = useAppStore.getState().messages.filter((m) => m.role === 'assistant');
+    expect(turn2Msgs).toHaveLength(2);
+    expect(turn2Msgs[1].content).toBe('Turn 2');
   });
 
   // --- copilot:error (unchanged) ---

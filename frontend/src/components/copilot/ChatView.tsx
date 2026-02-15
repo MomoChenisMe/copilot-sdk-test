@@ -142,6 +142,10 @@ export function ChatView({
                   {/* Render turnSegments if available, otherwise fallback */}
                   {turnSegments.length > 0 ? (
                     <>
+                      {/* Mid-stream: reasoning_delta accumulated but reasoning complete not yet arrived */}
+                      {!turnSegments.some(s => s.type === 'reasoning') && reasoningText && (
+                        <ReasoningBlock text={reasoningText} isStreaming={isStreaming} />
+                      )}
                       {turnSegments.map((segment, index) => {
                         switch (segment.type) {
                           case 'reasoning':

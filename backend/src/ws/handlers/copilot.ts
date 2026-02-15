@@ -64,9 +64,21 @@ export function createCopilotHandler(
   repo: ConversationRepository,
 ): WsHandler {
   let activeSession: CopilotSession | null = null;
-  let relay: EventRelay | null = null;
   let activeConversationId: string | null = null;
   let accumulation = createEmptyAccumulation();
+
+  // Persistent dedup sets — survive across turns to filter replayed/duplicated events.
+  // Event IDs are globally unique (UUIDs), so these never need to be reset.
+  const seenMessageIds = new Set<string>();
+  const seenToolCallIds = new Set<string>();
+  const seenReasoningIds = new Set<string>();
+
+  // Stable relay: single instance for handler lifetime with mutable send callback.
+  // This prevents listener accumulation from creating new EventRelay each turn.
+  let currentSendFn: ((msg: WsMessage) => void) | null = null;
+  const relay = new EventRelay((msg) => {
+    if (currentSendFn) currentSendFn(msg);
+  });
 
   return (message: WsMessage, send: (msg: WsMessage) => void): void => {
     const { type, data } = message;
@@ -93,20 +105,37 @@ export function createCopilotHandler(
           return;
         }
 
-        // Reset accumulation state for new turn
+        // Reset accumulation state for new turn (dedup sets persist to filter replays)
         accumulation = createEmptyAccumulation();
 
         // Save user message
         repo.addMessage(conversationId, { role: 'user', content: prompt });
         activeConversationId = conversationId;
 
-        // Build accumulatingSend: intercept events for accumulation, then forward
+        // Build accumulatingSend: intercept events for accumulation + dedup, then forward
         const accumulatingSend = (msg: WsMessage) => {
           const msgData = (msg.data ?? {}) as Record<string, unknown>;
 
           switch (msg.type) {
+            case 'copilot:delta': {
+              const messageId = msgData.messageId as string | undefined;
+              if (messageId && seenMessageIds.has(messageId)) {
+                return; // Skip replayed delta for already-seen messageId
+              }
+              break;
+            }
             case 'copilot:message': {
               const content = (msgData.content as string) ?? '';
+              const messageId = msgData.messageId as string | undefined;
+
+              // Dedup: skip replayed/duplicated messages
+              if (messageId && seenMessageIds.has(messageId)) {
+                return;
+              }
+              if (messageId) {
+                seenMessageIds.add(messageId);
+              }
+
               if (content) {
                 accumulation.contentSegments.push(content);
                 accumulation.turnSegments.push({ type: 'text', content });
@@ -114,8 +143,18 @@ export function createCopilotHandler(
               break;
             }
             case 'copilot:tool_start': {
+              const toolCallId = msgData.toolCallId as string;
+
+              // Dedup: skip replayed/duplicated tool_start
+              if (toolCallId && seenToolCallIds.has(toolCallId)) {
+                return;
+              }
+              if (toolCallId) {
+                seenToolCallIds.add(toolCallId);
+              }
+
               const toolRecord: ToolRecord = {
-                toolCallId: msgData.toolCallId as string,
+                toolCallId,
                 toolName: msgData.toolName as string,
                 arguments: msgData.arguments,
                 status: 'running',
@@ -133,13 +172,16 @@ export function createCopilotHandler(
             case 'copilot:tool_end': {
               const toolCallId = msgData.toolCallId as string;
               const success = msgData.success as boolean;
-              // Update tool record
+
+              // Skip if corresponding tool_start was filtered (no record in accumulation)
               const record = accumulation.toolRecords.find((r) => r.toolCallId === toolCallId);
-              if (record) {
-                record.status = success ? 'success' : 'error';
-                if (success) record.result = msgData.result;
-                else record.error = msgData.error as string;
-              }
+              if (!record) return;
+
+              // Update tool record
+              record.status = success ? 'success' : 'error';
+              if (success) record.result = msgData.result;
+              else record.error = msgData.error as string;
+
               // Update turn segment
               const segment = accumulation.turnSegments.find(
                 (s) => s.type === 'tool' && s.toolCallId === toolCallId,
@@ -151,11 +193,40 @@ export function createCopilotHandler(
               }
               break;
             }
-            case 'copilot:reasoning':
             case 'copilot:reasoning_delta': {
+              const reasoningId = msgData.reasoningId as string | undefined;
+
+              // Dedup: skip replayed reasoning deltas (complete event already processed)
+              if (reasoningId && seenReasoningIds.has(reasoningId)) {
+                return;
+              }
+
               const content = (msgData.content as string) ?? '';
               if (content) {
                 accumulation.reasoningText += content;
+              }
+              break;
+            }
+            case 'copilot:reasoning': {
+              const reasoningId = msgData.reasoningId as string | undefined;
+
+              // Dedup: skip replayed/duplicated reasoning complete
+              if (reasoningId && seenReasoningIds.has(reasoningId)) {
+                return;
+              }
+              if (reasoningId) {
+                seenReasoningIds.add(reasoningId);
+              }
+
+              const content = (msgData.content as string) ?? '';
+              if (content && !accumulation.reasoningText) {
+                accumulation.reasoningText = content;
+              }
+              if (accumulation.reasoningText) {
+                accumulation.turnSegments.push({
+                  type: 'reasoning',
+                  content: accumulation.reasoningText,
+                });
               }
               break;
             }
@@ -164,7 +235,7 @@ export function createCopilotHandler(
               if (activeConversationId) {
                 persistAccumulated(repo, activeConversationId, accumulation);
               }
-              // Reset for next turn
+              // Reset accumulation for next turn (dedup sets persist)
               accumulation = createEmptyAccumulation();
               break;
             }
@@ -173,6 +244,9 @@ export function createCopilotHandler(
           // Always forward to frontend
           send(msg);
         };
+
+        // Update the stable relay's send callback
+        currentSendFn = accumulatingSend;
 
         // Get or create SDK session (async)
         void (async () => {
@@ -190,9 +264,7 @@ export function createCopilotHandler(
               repo.update(conversationId, { sdkSessionId: session.sessionId });
             }
 
-            // Set up event relay
-            if (relay) relay.detach();
-            relay = new EventRelay(accumulatingSend);
+            // Attach relay to session (detaches from previous session internally)
             relay.attach(session);
 
             // Send the message

@@ -40,7 +40,15 @@ export function MessageBlock({ message }: MessageBlockProps) {
   const renderContent = () => {
     // New path: ordered turnSegments rendering
     if (turnSegments && turnSegments.length > 0) {
-      return turnSegments.map((segment, index) => {
+      const hasReasoningSegment = turnSegments.some(s => s.type === 'reasoning');
+
+      return (
+        <>
+          {/* Legacy fallback: turnSegments has no reasoning entry but metadata.reasoning exists */}
+          {!hasReasoningSegment && reasoning && (
+            <ReasoningBlock text={reasoning} isStreaming={false} />
+          )}
+          {turnSegments.map((segment, index) => {
         switch (segment.type) {
           case 'text':
             return (
@@ -73,7 +81,9 @@ export function MessageBlock({ message }: MessageBlockProps) {
           default:
             return null;
         }
-      });
+      })}
+        </>
+      );
     }
 
     // Fallback: old rendering order (reasoning → tools → text)

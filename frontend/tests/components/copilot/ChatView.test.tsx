@@ -162,6 +162,26 @@ describe('ChatView', () => {
     expect(screen.getByTestId('streaming-text')).toBeTruthy();
   });
 
+  it('renders reasoning during streaming when turnSegments has no reasoning entry yet', () => {
+    useAppStore.setState({
+      activeConversationId: 'conv-1',
+      isStreaming: true,
+      reasoningText: 'Mid-stream thinking...',
+      turnSegments: [
+        { type: 'tool', toolCallId: 'tc1', toolName: 'bash', status: 'running' },
+      ],
+      streamingText: '',
+    });
+    render(<ChatView {...defaultProps} />);
+
+    // Should render reasoning from reasoningText even though turnSegments has no reasoning entry
+    expect(screen.getByTestId('reasoning')).toBeTruthy();
+    expect(screen.getByTestId('reasoning').textContent).toBe('Mid-stream thinking...');
+
+    // Should also render tool from turnSegments
+    expect(screen.getByTestId('tool-tc1')).toBeTruthy();
+  });
+
   it('renders streaming block without turnSegments (fallback to old rendering)', () => {
     useAppStore.setState({
       activeConversationId: 'conv-1',
