@@ -59,6 +59,23 @@ export function createUploadRoutes(uploadDir: string): Router {
     res.json({ files: result });
   });
 
+  // Serve uploaded file by ID prefix
+  router.get('/:id', (req, res) => {
+    const id = req.params.id;
+    try {
+      const files = fs.readdirSync(uploadDir);
+      const match = files.find((f) => f.startsWith(id));
+      if (!match) {
+        res.status(404).json({ error: 'File not found' });
+        return;
+      }
+      const filePath = path.join(uploadDir, match);
+      res.sendFile(filePath);
+    } catch {
+      res.status(404).json({ error: 'File not found' });
+    }
+  });
+
   // Error handling for multer
   router.use((err: any, _req: any, res: any, next: any) => {
     if (err instanceof multer.MulterError) {

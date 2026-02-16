@@ -131,6 +131,56 @@ describe('SessionManager', () => {
       expect(msgId).toBe('msg-1');
       expect(mockSession.send).toHaveBeenCalledWith({ prompt: 'Hello AI' });
     });
+
+    it('should send files as SDK attachments with type "file"', async () => {
+      const session = await sessionManager.createSession({
+        model: 'gpt-5',
+        workingDirectory: '/tmp',
+      });
+
+      const files = [
+        { id: 'f1', originalName: 'photo.png', mimeType: 'image/png', size: 1024, path: '/uploads/f1-photo.png' },
+      ];
+
+      await sessionManager.sendMessage(session, 'Look at this', files);
+
+      expect(mockSession.send).toHaveBeenCalledWith({
+        prompt: 'Look at this',
+        attachments: [
+          { type: 'file', path: '/uploads/f1-photo.png', displayName: 'photo.png' },
+        ],
+      });
+    });
+
+    it('should handle multiple file attachments', async () => {
+      const session = await sessionManager.createSession({
+        model: 'gpt-5',
+        workingDirectory: '/tmp',
+      });
+
+      const files = [
+        { id: 'f1', originalName: 'a.png', mimeType: 'image/png', size: 100, path: '/uploads/f1-a.png' },
+        { id: 'f2', originalName: 'b.txt', mimeType: 'text/plain', size: 200, path: '/uploads/f2-b.txt' },
+      ];
+
+      await sessionManager.sendMessage(session, 'Two files', files);
+
+      const sendArg = mockSession.send.mock.calls[0][0];
+      expect(sendArg.attachments).toHaveLength(2);
+      expect(sendArg.attachments[0]).toEqual({ type: 'file', path: '/uploads/f1-a.png', displayName: 'a.png' });
+      expect(sendArg.attachments[1]).toEqual({ type: 'file', path: '/uploads/f2-b.txt', displayName: 'b.txt' });
+    });
+
+    it('should not include attachments when no files provided', async () => {
+      const session = await sessionManager.createSession({
+        model: 'gpt-5',
+        workingDirectory: '/tmp',
+      });
+
+      await sessionManager.sendMessage(session, 'No files');
+
+      expect(mockSession.send).toHaveBeenCalledWith({ prompt: 'No files' });
+    });
   });
 
   describe('abortMessage', () => {

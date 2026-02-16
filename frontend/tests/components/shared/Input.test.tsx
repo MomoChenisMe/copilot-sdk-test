@@ -194,6 +194,40 @@ describe('Input', () => {
       expect(onSlashCommand).toHaveBeenCalledWith(slashCommands[0]);
     });
 
+    it('selects highlighted command on Tab key (same as Enter)', () => {
+      const onSlashCommand = vi.fn();
+      render(
+        <Input
+          {...defaultProps}
+          slashCommands={slashCommands}
+          onSlashCommand={onSlashCommand}
+        />,
+      );
+      const textarea = screen.getByPlaceholderText('Message AI Terminal...');
+      fireEvent.change(textarea, { target: { value: '/' } });
+      // Menu should be open
+      expect(screen.getByRole('listbox')).toBeTruthy();
+      // Press Tab to select the first (highlighted) command
+      fireEvent.keyDown(textarea, { key: 'Tab' });
+      expect(onSlashCommand).toHaveBeenCalledWith(slashCommands[0]);
+    });
+
+    it('selects skill command on Tab key and inserts into textarea', () => {
+      const onSlashCommand = vi.fn();
+      render(
+        <Input
+          {...defaultProps}
+          slashCommands={slashCommands}
+          onSlashCommand={onSlashCommand}
+        />,
+      );
+      const textarea = screen.getByPlaceholderText('Message AI Terminal...') as HTMLTextAreaElement;
+      fireEvent.change(textarea, { target: { value: '/code' } });
+      // Only code-review should be visible, press Tab
+      fireEvent.keyDown(textarea, { key: 'Tab' });
+      expect(textarea.value).toBe('/code-review ');
+    });
+
     it('inserts skill name into textarea for skill command selection', () => {
       const onSlashCommand = vi.fn();
       render(

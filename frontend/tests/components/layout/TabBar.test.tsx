@@ -150,13 +150,23 @@ describe('TabBar', () => {
       expect(screen.getByTestId('chevron-down-icon')).toBeTruthy();
     });
 
-    it('should open ConversationPopover when tab title area is clicked', () => {
+    it('should open ConversationPopover when chevron is clicked', () => {
+      const tabId = openTabAndGetId('conv-1', 'Chat 1');
+      render(<TabBar {...defaultProps} conversations={[{ id: 'conv-1', title: 'Chat 1' }]} />);
+      const chevron = screen.getByTestId(`tab-chevron-${tabId}`);
+      fireEvent.click(chevron);
+      // Popover should be open — check for search input
+      expect(screen.getByPlaceholderText(/搜尋|Search/i)).toBeTruthy();
+    });
+
+    it('should switch tab (not open popover) when clicking tab title text', () => {
       const tabId = openTabAndGetId('conv-1', 'Chat 1');
       render(<TabBar {...defaultProps} conversations={[{ id: 'conv-1', title: 'Chat 1' }]} />);
       const titleArea = screen.getByTestId(`tab-title-${tabId}`);
       fireEvent.click(titleArea);
-      // Popover should be open — check for search input
-      expect(screen.getByPlaceholderText(/搜尋|Search/i)).toBeTruthy();
+      // Click on title text should bubble up to button and call onSelectTab
+      // (no stopPropagation on title anymore)
+      expect(defaultProps.onSelectTab).toHaveBeenCalledWith(tabId);
     });
 
     it('should call onSwitchConversation when a conversation is selected from popover', () => {
@@ -171,8 +181,8 @@ describe('TabBar', () => {
           ]}
         />,
       );
-      // Open popover
-      fireEvent.click(screen.getByTestId(`tab-title-${tabId}`));
+      // Open popover via chevron
+      fireEvent.click(screen.getByTestId(`tab-chevron-${tabId}`));
       // Select a different conversation
       fireEvent.click(screen.getByText('Chat 2'));
       expect(defaultProps.onSwitchConversation).toHaveBeenCalledWith(tabId, 'conv-2');

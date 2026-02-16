@@ -14,9 +14,10 @@ interface InputProps {
   slashCommands?: SlashCommand[];
   onSlashCommand?: (command: SlashCommand) => void;
   enableAttachments?: boolean;
+  placeholder?: string;
 }
 
-export function Input({ onSend, onAbort, isStreaming, disabled, slashCommands, onSlashCommand, enableAttachments }: InputProps) {
+export function Input({ onSend, onAbort, isStreaming, disabled, slashCommands, onSlashCommand, enableAttachments, placeholder }: InputProps) {
   const { t } = useTranslation();
   const [text, setText] = useState('');
   const [showSlashMenu, setShowSlashMenu] = useState(false);
@@ -24,6 +25,7 @@ export function Input({ onSend, onAbort, isStreaming, disabled, slashCommands, o
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [attachments, setAttachments] = useState<AttachedFile[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const highlightRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const adjustHeight = useCallback(() => {
@@ -144,8 +146,8 @@ export function Input({ onSend, onAbort, isStreaming, disabled, slashCommands, o
   const handleSlashSelect = useCallback(
     (command: SlashCommand) => {
       setShowSlashMenu(false);
-      if (command.type === 'skill') {
-        // Insert /skill-name with trailing space
+      if (command.type === 'skill' || command.type === 'sdk') {
+        // Insert /command-name with trailing space
         setText(`/${command.name} `);
       } else {
         // Builtin command — fire callback and clear
@@ -169,6 +171,18 @@ export function Input({ onSend, onAbort, isStreaming, disabled, slashCommands, o
     setShowSlashMenu(false);
   }, [text, isStreaming, onSend, enableAttachments, attachments]);
 
+  // Sync highlight overlay scroll with textarea
+  const handleTextareaScroll = useCallback(() => {
+    if (highlightRef.current && textareaRef.current) {
+      highlightRef.current.scrollTop = textareaRef.current.scrollTop;
+    }
+  }, []);
+
+  // Detect slash command prefix for highlight (e.g. "/brainstorming some args")
+  const slashHighlight = slashCommands && /^\/(\S+)\s/.test(text)
+    ? text.match(/^(\/\S+)(.*)$/s)
+    : null;
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (showSlashMenu) {
       const filtered = getFilteredCommands();
@@ -182,7 +196,7 @@ export function Input({ onSend, onAbort, isStreaming, disabled, slashCommands, o
         setSelectedIndex((prev) => Math.max(prev - 1, 0));
         return;
       }
-      if (e.key === 'Enter') {
+      if (e.key === 'Enter' || e.key === 'Tab') {
         e.preventDefault();
         if (filtered[selectedIndex]) {
           handleSlashSelect(filtered[selectedIndex]);
@@ -222,18 +236,36 @@ export function Input({ onSend, onAbort, isStreaming, disabled, slashCommands, o
           <AttachmentPreview files={attachments} onRemove={removeAttachment} />
         </div>
       )}
-      <textarea
-        ref={textareaRef}
-        value={text}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        onPaste={handlePaste}
-        placeholder={t('input.placeholder')}
-        disabled={disabled}
-        rows={1}
-        className="w-full resize-none bg-transparent text-text-primary px-4 pt-3 pb-10 text-sm placeholder:text-text-muted focus:outline-none overflow-y-auto"
-        style={{ maxHeight: '200px' }}
-      />
+      <div className="relative">
+        {/* Highlight overlay for slash command coloring */}
+        {slashHighlight && (
+          <div
+            ref={highlightRef}
+            data-testid="input-highlight-overlay"
+            className="absolute inset-0 w-full px-4 pt-3 pb-10 text-sm pointer-events-none overflow-hidden whitespace-pre-wrap break-words"
+            style={{ maxHeight: '200px' }}
+            aria-hidden="true"
+          >
+            <span className="text-accent font-medium">{slashHighlight[1]}</span>
+            <span className="text-text-primary">{slashHighlight[2]}</span>
+          </div>
+        )}
+        <textarea
+          ref={textareaRef}
+          value={text}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          onScroll={handleTextareaScroll}
+          placeholder={placeholder ?? t('input.placeholder')}
+          disabled={disabled}
+          rows={1}
+          className={`w-full resize-none bg-transparent px-4 pt-3 pb-10 text-sm placeholder:text-text-muted focus:outline-none overflow-y-auto ${
+            slashHighlight ? 'text-transparent selection:bg-accent/20' : 'text-text-primary'
+          }`}
+          style={{ maxHeight: '200px', caretColor: slashHighlight ? 'var(--color-text-primary)' : undefined }}
+        />
+      </div>
       <div className="absolute bottom-2 right-2 flex items-center gap-1">
         {enableAttachments && (
           <>

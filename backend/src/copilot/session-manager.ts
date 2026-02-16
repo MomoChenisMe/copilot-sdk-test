@@ -114,7 +114,7 @@ export class SessionManager {
     log.info({ sessionId: session.sessionId, promptLength: prompt.length, filesCount: files?.length ?? 0 }, 'Sending message');
     const sendOptions: Record<string, unknown> = { prompt };
     if (files && files.length > 0) {
-      sendOptions.files = files.map((f) => ({ path: f.path, mimeType: f.mimeType }));
+      sendOptions.attachments = files.map((f) => ({ type: 'file', path: f.path, displayName: f.originalName }));
     }
     return session.send(sendOptions as any);
   }

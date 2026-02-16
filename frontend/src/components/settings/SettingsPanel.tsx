@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X } from 'lucide-react';
+import { X, Globe, LogOut } from 'lucide-react';
 import { promptsApi, memoryApi, skillsApi } from '../../lib/prompts-api';
 import type { PresetItem, MemoryItem, SkillItem } from '../../lib/prompts-api';
 import { useAppStore } from '../../store';
@@ -8,16 +8,20 @@ import { Markdown } from '../shared/Markdown';
 
 const INVALID_NAME_RE = /[.]{2}|[/\\]|\0/;
 
-type TabId = 'system-prompt' | 'profile' | 'agent' | 'presets' | 'memory' | 'skills';
+type TabId = 'general' | 'system-prompt' | 'profile' | 'agent' | 'presets' | 'memory' | 'skills';
 
 interface SettingsPanelProps {
   open: boolean;
   onClose: () => void;
   activePresets: string[];
   onTogglePreset: (name: string) => void;
+  onLanguageToggle?: () => void;
+  language?: string;
+  onLogout?: () => void;
 }
 
 const TABS: { id: TabId; labelKey: string }[] = [
+  { id: 'general', labelKey: 'settings.tabs.general' },
   { id: 'system-prompt', labelKey: 'settings.tabs.systemPrompt' },
   { id: 'profile', labelKey: 'settings.tabs.profile' },
   { id: 'agent', labelKey: 'settings.tabs.agent' },
@@ -26,7 +30,7 @@ const TABS: { id: TabId; labelKey: string }[] = [
   { id: 'skills', labelKey: 'settings.tabs.skills' },
 ];
 
-export function SettingsPanel({ open, onClose, activePresets, onTogglePreset }: SettingsPanelProps) {
+export function SettingsPanel({ open, onClose, activePresets, onTogglePreset, onLanguageToggle, language, onLogout }: SettingsPanelProps) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabId>('system-prompt');
 
@@ -79,6 +83,9 @@ export function SettingsPanel({ open, onClose, activePresets, onTogglePreset }: 
 
         {/* Tab content */}
         <div className="flex-1 overflow-y-auto p-4">
+          {activeTab === 'general' && (
+            <GeneralTab language={language} onLanguageToggle={onLanguageToggle} onLogout={onLogout} />
+          )}
           {activeTab === 'system-prompt' && <SystemPromptTab />}
           {activeTab === 'profile' && <ProfileTab />}
           {activeTab === 'agent' && <AgentTab />}
@@ -90,6 +97,49 @@ export function SettingsPanel({ open, onClose, activePresets, onTogglePreset }: 
         </div>
       </div>
     </>
+  );
+}
+
+// === General Tab ===
+function GeneralTab({
+  language,
+  onLanguageToggle,
+  onLogout,
+}: {
+  language?: string;
+  onLanguageToggle?: () => void;
+  onLogout?: () => void;
+}) {
+  const { t } = useTranslation();
+  const displayLang = language === 'zh-TW' ? '繁體中文' : 'English';
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Language */}
+      <section>
+        <h3 className="text-xs font-semibold text-text-secondary uppercase mb-2">{t('settings.general.language')}</h3>
+        <button
+          data-testid="language-toggle"
+          onClick={onLanguageToggle}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:bg-bg-tertiary transition-colors text-sm text-text-primary"
+        >
+          <Globe size={16} />
+          {displayLang}
+        </button>
+      </section>
+
+      {/* Logout */}
+      <section>
+        <button
+          data-testid="logout-button"
+          onClick={onLogout}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-error/30 text-error hover:bg-error/10 transition-colors text-sm"
+        >
+          <LogOut size={16} />
+          {t('settings.general.logout')}
+        </button>
+      </section>
+    </div>
   );
 }
 

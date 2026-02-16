@@ -1,12 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { FolderOpen } from 'lucide-react';
+import { FolderOpen, Sparkles, TerminalSquare } from 'lucide-react';
 
 interface CwdSelectorProps {
   currentCwd: string;
   onCwdChange: (newCwd: string) => void;
+  mode?: 'copilot' | 'terminal';
+  onModeChange?: (mode: 'copilot' | 'terminal') => void;
 }
 
-export function CwdSelector({ currentCwd, onCwdChange }: CwdSelectorProps) {
+export function CwdSelector({ currentCwd, onCwdChange, mode, onModeChange }: CwdSelectorProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(currentCwd);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -71,14 +73,44 @@ export function CwdSelector({ currentCwd, onCwdChange }: CwdSelectorProps) {
   }
 
   return (
-    <button
-      data-testid="cwd-selector"
-      onClick={handleClick}
-      title={currentCwd}
-      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary bg-bg-tertiary rounded-lg hover:bg-bg-secondary transition-colors truncate max-w-56"
-    >
-      <FolderOpen size={12} className="shrink-0" />
-      <span className="truncate">{displayPath}</span>
-    </button>
+    <div className="inline-flex items-center gap-1.5">
+      <button
+        data-testid="cwd-selector"
+        onClick={handleClick}
+        title={currentCwd}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary bg-bg-tertiary rounded-lg hover:bg-bg-secondary transition-colors truncate max-w-56"
+      >
+        <FolderOpen size={12} className="shrink-0" />
+        <span className="truncate">{displayPath}</span>
+      </button>
+      {mode && onModeChange && (
+        <div className="inline-flex rounded-lg border border-border overflow-hidden">
+          <button
+            data-testid="mode-toggle-copilot"
+            onClick={() => onModeChange('copilot')}
+            className={`flex items-center gap-1 px-2 py-1.5 text-xs font-medium transition-colors ${
+              mode === 'copilot'
+                ? 'bg-accent text-white'
+                : 'bg-bg-tertiary text-text-secondary hover:bg-bg-secondary'
+            }`}
+          >
+            <Sparkles size={12} />
+            AI
+          </button>
+          <button
+            data-testid="mode-toggle-terminal"
+            onClick={() => onModeChange('terminal')}
+            className={`flex items-center gap-1 px-2 py-1.5 text-xs font-medium transition-colors ${
+              mode === 'terminal'
+                ? 'bg-accent text-white'
+                : 'bg-bg-tertiary text-text-secondary hover:bg-bg-secondary'
+            }`}
+          >
+            <TerminalSquare size={12} />
+            Bash
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

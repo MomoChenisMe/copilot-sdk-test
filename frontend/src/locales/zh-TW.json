@@ -45,7 +45,8 @@
     "skills": "技能",
     "clearDesc": "清除對話",
     "settingsDesc": "開啟設定",
-    "newDesc": "新對話"
+    "newDesc": "新對話",
+    "copilot": "Copilot"
   },
   "cwd": {
     "label": "工作目錄",
@@ -86,12 +87,17 @@
     "loading": "載入中...",
     "save": "儲存",
     "tabs": {
+      "general": "一般",
       "systemPrompt": "系統提示詞",
       "profile": "個人檔案",
       "agent": "Agent 規則",
       "presets": "預設模板",
       "memory": "記憶",
       "skills": "技能"
+    },
+    "general": {
+      "language": "語言",
+      "logout": "登出"
     },
     "toast": {
       "saved": "已儲存",
@@ -135,6 +141,12 @@
       "systemBadge": "系統",
       "cannotModifyBuiltin": "內建技能無法修改或刪除"
     }
+  },
+  "terminal": {
+    "placeholder": "$ 輸入命令...",
+    "modeAI": "AI",
+    "modeBash": "Bash",
+    "exitCode": "exit {{code}}"
   },
   "sidebar": {
     "conversations": "對話紀錄",

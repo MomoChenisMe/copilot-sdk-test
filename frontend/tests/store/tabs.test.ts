@@ -380,6 +380,59 @@ describe('disabledSkills localStorage restore', () => {
   });
 });
 
+describe('SDK commands store', () => {
+  beforeEach(() => {
+    useAppStore.setState({ sdkCommands: [], sdkCommandsLoaded: false });
+  });
+
+  it('should have empty sdkCommands by default', () => {
+    expect(useAppStore.getState().sdkCommands).toEqual([]);
+    expect(useAppStore.getState().sdkCommandsLoaded).toBe(false);
+  });
+
+  it('setSdkCommands should update sdkCommands', () => {
+    const cmds = [
+      { name: 'explain', description: 'Explain code' },
+      { name: 'fix', description: 'Fix code' },
+    ];
+    useAppStore.getState().setSdkCommands(cmds);
+    expect(useAppStore.getState().sdkCommands).toEqual(cmds);
+  });
+
+  it('setSdkCommandsLoaded should update loaded flag', () => {
+    useAppStore.getState().setSdkCommandsLoaded(true);
+    expect(useAppStore.getState().sdkCommandsLoaded).toBe(true);
+  });
+});
+
+describe('Tab mode (copilot/terminal)', () => {
+  beforeEach(() => {
+    useAppStore.setState({ tabs: {}, tabOrder: [], activeTabId: null });
+  });
+
+  it('openTab should default mode to copilot', () => {
+    const tabId = openTabAndGetId('conv-1', 'Chat 1');
+    expect(useAppStore.getState().tabs[tabId].mode).toBe('copilot');
+  });
+
+  it('setTabMode should change tab mode', () => {
+    const tabId = openTabAndGetId('conv-1', 'Chat 1');
+    useAppStore.getState().setTabMode(tabId, 'terminal');
+    expect(useAppStore.getState().tabs[tabId].mode).toBe('terminal');
+  });
+
+  it('setTabMode should toggle back to copilot', () => {
+    const tabId = openTabAndGetId('conv-1', 'Chat 1');
+    useAppStore.getState().setTabMode(tabId, 'terminal');
+    useAppStore.getState().setTabMode(tabId, 'copilot');
+    expect(useAppStore.getState().tabs[tabId].mode).toBe('copilot');
+  });
+
+  it('setTabMode should not throw for non-existent tab', () => {
+    expect(() => useAppStore.getState().setTabMode('nonexistent', 'terminal')).not.toThrow();
+  });
+});
+
 describe('Tab soft limit', () => {
   it('openTab should set tabLimitWarning when reaching 15 tabs', () => {
     for (let i = 0; i < 15; i++) {

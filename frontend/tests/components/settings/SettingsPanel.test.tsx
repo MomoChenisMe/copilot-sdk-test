@@ -58,6 +58,9 @@ describe('SettingsPanel', () => {
     onClose: vi.fn(),
     activePresets: ['code-review'] as string[],
     onTogglePreset: vi.fn(),
+    onLanguageToggle: vi.fn(),
+    language: 'en',
+    onLogout: vi.fn(),
   };
 
   beforeEach(() => {
@@ -76,9 +79,10 @@ describe('SettingsPanel', () => {
       expect(screen.queryByTestId('settings-panel')).toBeNull();
     });
 
-    it('should render all 6 tab buttons using i18n keys', () => {
+    it('should render all 7 tab buttons using i18n keys', () => {
       render(<SettingsPanel {...defaultProps} />);
       // Tab names should come from t('settings.tabs.*') — en.json values
+      expect(screen.getByRole('tab', { name: /general/i })).toBeTruthy();
       expect(screen.getByRole('tab', { name: /system prompt/i })).toBeTruthy();
       expect(screen.getByRole('tab', { name: /profile/i })).toBeTruthy();
       expect(screen.getByRole('tab', { name: /agent/i })).toBeTruthy();
@@ -195,6 +199,44 @@ describe('SettingsPanel', () => {
       expect(screen.getByText('Are you sure you want to delete this item?')).toBeTruthy();
       expect(screen.getByText('Cancel')).toBeTruthy();
       expect(screen.getByText('Delete')).toBeTruthy();
+    });
+  });
+
+  // === General Tab ===
+  describe('General tab', () => {
+    it('should render language toggle button showing current language', () => {
+      render(<SettingsPanel {...defaultProps} language="en" />);
+      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
+      expect(screen.getByTestId('language-toggle')).toBeTruthy();
+      expect(screen.getByTestId('language-toggle').textContent).toContain('English');
+    });
+
+    it('should call onLanguageToggle when language button is clicked', () => {
+      const onLanguageToggle = vi.fn();
+      render(<SettingsPanel {...defaultProps} onLanguageToggle={onLanguageToggle} />);
+      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
+      fireEvent.click(screen.getByTestId('language-toggle'));
+      expect(onLanguageToggle).toHaveBeenCalledOnce();
+    });
+
+    it('should render logout button', () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
+      expect(screen.getByTestId('logout-button')).toBeTruthy();
+    });
+
+    it('should call onLogout when logout button is clicked', () => {
+      const onLogout = vi.fn();
+      render(<SettingsPanel {...defaultProps} onLogout={onLogout} />);
+      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
+      fireEvent.click(screen.getByTestId('logout-button'));
+      expect(onLogout).toHaveBeenCalledOnce();
+    });
+
+    it('should display zh-TW label when language is zh-TW', () => {
+      render(<SettingsPanel {...defaultProps} language="zh-TW" />);
+      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
+      expect(screen.getByTestId('language-toggle').textContent).toContain('繁體中文');
     });
   });
 

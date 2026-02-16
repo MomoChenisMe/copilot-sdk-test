@@ -64,4 +64,40 @@ describe('SlashCommandMenu', () => {
     expect(screen.getByText('Commands')).toBeTruthy();
     expect(screen.queryByText('Skills')).toBeNull();
   });
+
+  it('renders SDK commands section when sdk type commands present', () => {
+    const withSdk: SlashCommand[] = [
+      ...commands,
+      { name: 'explain', description: 'Explain code', type: 'sdk' },
+      { name: 'fix', description: 'Fix code', type: 'sdk' },
+    ];
+    render(<SlashCommandMenu {...defaultProps} commands={withSdk} />);
+    expect(screen.getByText('Commands')).toBeTruthy();
+    expect(screen.getByText('Skills')).toBeTruthy();
+    expect(screen.getByText('Copilot')).toBeTruthy();
+    expect(screen.getByText('/explain')).toBeTruthy();
+    expect(screen.getByText('/fix')).toBeTruthy();
+  });
+
+  it('hides SDK section header when no sdk commands match filter', () => {
+    const withSdk: SlashCommand[] = [
+      ...commands,
+      { name: 'explain', description: 'Explain code', type: 'sdk' },
+    ];
+    render(<SlashCommandMenu {...defaultProps} commands={withSdk} filter="clear" />);
+    expect(screen.getByText('Commands')).toBeTruthy();
+    expect(screen.queryByText('Copilot')).toBeNull();
+  });
+
+  it('correctly indexes across all three sections for selectedIndex', () => {
+    const withSdk: SlashCommand[] = [
+      { name: 'clear', description: 'Clear', type: 'builtin' },
+      { name: 'review', description: 'Review', type: 'skill' },
+      { name: 'explain', description: 'Explain', type: 'sdk' },
+    ];
+    // selectedIndex=2 should select the sdk command (3rd item: builtin=0, skill=1, sdk=2)
+    render(<SlashCommandMenu {...defaultProps} commands={withSdk} selectedIndex={2} />);
+    const items = screen.getAllByRole('option');
+    expect(items[2].getAttribute('aria-selected')).toBe('true');
+  });
 });

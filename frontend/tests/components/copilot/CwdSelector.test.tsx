@@ -87,4 +87,61 @@ describe('CwdSelector', () => {
     expect(pill.className).toContain('text-xs');
     expect(pill.className).toContain('rounded-lg');
   });
+
+  // --- Mode toggle (F7) ---
+
+  it('renders AI/Bash mode toggle buttons when mode and onModeChange are provided', () => {
+    render(
+      <CwdSelector
+        {...defaultProps}
+        mode="copilot"
+        onModeChange={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId('mode-toggle-copilot')).toBeTruthy();
+    expect(screen.getByTestId('mode-toggle-terminal')).toBeTruthy();
+  });
+
+  it('highlights copilot button when mode is copilot', () => {
+    render(
+      <CwdSelector
+        {...defaultProps}
+        mode="copilot"
+        onModeChange={vi.fn()}
+      />
+    );
+    const copilotBtn = screen.getByTestId('mode-toggle-copilot');
+    expect(copilotBtn.className).toContain('bg-accent');
+  });
+
+  it('highlights terminal button when mode is terminal', () => {
+    render(
+      <CwdSelector
+        {...defaultProps}
+        mode="terminal"
+        onModeChange={vi.fn()}
+      />
+    );
+    const terminalBtn = screen.getByTestId('mode-toggle-terminal');
+    expect(terminalBtn.className).toContain('bg-accent');
+  });
+
+  it('calls onModeChange when clicking mode buttons', () => {
+    const onModeChange = vi.fn();
+    render(
+      <CwdSelector
+        {...defaultProps}
+        mode="copilot"
+        onModeChange={onModeChange}
+      />
+    );
+    fireEvent.click(screen.getByTestId('mode-toggle-terminal'));
+    expect(onModeChange).toHaveBeenCalledWith('terminal');
+  });
+
+  it('does NOT render mode toggle when mode/onModeChange not provided', () => {
+    render(<CwdSelector {...defaultProps} />);
+    expect(screen.queryByTestId('mode-toggle-copilot')).toBeNull();
+    expect(screen.queryByTestId('mode-toggle-terminal')).toBeNull();
+  });
 });

@@ -39,8 +39,15 @@ export function createCopilotHandler(
             return;
           }
 
-          // Save user message
-          repo.addMessage(conversationId, { role: 'user', content: prompt });
+          // Save user message (with attachment metadata if files present)
+          const files = (payload.files as Array<{ id: string; originalName: string; mimeType: string; size: number; path: string }>) ?? undefined;
+          const userMsg: Record<string, unknown> = { role: 'user', content: prompt };
+          if (files && files.length > 0) {
+            userMsg.metadata = {
+              attachments: files.map((f) => ({ id: f.id, originalName: f.originalName, mimeType: f.mimeType, size: f.size })),
+            };
+          }
+          repo.addMessage(conversationId, userMsg);
           lastConversationId = conversationId;
 
           // Delegate to StreamManager
@@ -48,7 +55,6 @@ export function createCopilotHandler(
             try {
               const activePresets = (payload.activePresets as string[]) ?? [];
               const disabledSkills = (payload.disabledSkills as string[]) ?? [];
-              const files = (payload.files as Array<{ id: string; originalName: string; mimeType: string; size: number; path: string }>) ?? undefined;
               await streamManager.startStream(conversationId, {
                 prompt,
                 sdkSessionId: conversation.sdkSessionId,

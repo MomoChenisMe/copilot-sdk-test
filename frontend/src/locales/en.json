@@ -45,7 +45,8 @@
     "skills": "Skills",
     "clearDesc": "Clear conversation",
     "settingsDesc": "Open settings",
-    "newDesc": "New conversation"
+    "newDesc": "New conversation",
+    "copilot": "Copilot"
   },
   "cwd": {
     "label": "Working Directory",
@@ -86,12 +87,17 @@
     "loading": "Loading...",
     "save": "Save",
     "tabs": {
+      "general": "General",
       "systemPrompt": "System Prompt",
       "profile": "Profile",
       "agent": "Agent",
       "presets": "Presets",
       "memory": "Memory",
       "skills": "Skills"
+    },
+    "general": {
+      "language": "Language",
+      "logout": "Logout"
     },
     "toast": {
       "saved": "Saved",
@@ -135,6 +141,12 @@
       "systemBadge": "System",
       "cannotModifyBuiltin": "Built-in skills cannot be modified or deleted"
     }
+  },
+  "terminal": {
+    "placeholder": "$ enter command...",
+    "modeAI": "AI",
+    "modeBash": "Bash",
+    "exitCode": "exit {{code}}"
   },
   "sidebar": {
     "conversations": "Conversations",

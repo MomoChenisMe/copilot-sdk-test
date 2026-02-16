@@ -4,6 +4,14 @@ import { useTabCopilot } from '../../src/hooks/useTabCopilot';
 import { useAppStore } from '../../src/store';
 import type { WsMessage } from '../../src/lib/ws-types';
 
+// Mock conversationApi for auto-title tests
+vi.mock('../../src/lib/api', () => ({
+  conversationApi: {
+    update: vi.fn().mockResolvedValue({}),
+  },
+}));
+import { conversationApi } from '../../src/lib/api';
+
 // Helper: open a tab and return its generated tabId
 function openTabAndGetId(conversationId: string, title: string): string {
   useAppStore.getState().openTab(conversationId, title);
@@ -214,6 +222,87 @@ describe('useTabCopilot', () => {
         });
       }).not.toThrow();
       expect(send).not.toHaveBeenCalled();
+    });
+  });
+
+  // --- Conversation auto-title ---
+  describe('conversation auto-title', () => {
+    beforeEach(() => {
+      vi.mocked(conversationApi.update).mockClear();
+    });
+
+    it('should auto-title conversation from first message (truncated to 50 chars)', () => {
+      const { result } = renderHook(() => useTabCopilot({ subscribe, send }));
+      const longMessage = 'A'.repeat(80);
+      act(() => {
+        result.current.sendMessage(tabIdA, longMessage);
+      });
+      expect(conversationApi.update).toHaveBeenCalledWith('conv-A', { title: 'A'.repeat(50) });
+      // Tab title should also be updated
+      expect(useAppStore.getState().tabs[tabIdA].title).toBe('A'.repeat(50));
+    });
+
+    it('should auto-title with full text when under 50 chars', () => {
+      const { result } = renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        result.current.sendMessage(tabIdA, 'Hello World');
+      });
+      expect(conversationApi.update).toHaveBeenCalledWith('conv-A', { title: 'Hello World' });
+      expect(useAppStore.getState().tabs[tabIdA].title).toBe('Hello World');
+    });
+
+    it('should NOT auto-title on second message', () => {
+      // Pre-populate tab with one message
+      useAppStore.getState().addTabMessage(tabIdA, {
+        id: 'existing-1',
+        conversationId: 'conv-A',
+        role: 'user',
+        content: 'first message',
+        metadata: null,
+        createdAt: new Date().toISOString(),
+      });
+      const { result } = renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        result.current.sendMessage(tabIdA, 'second message');
+      });
+      expect(conversationApi.update).not.toHaveBeenCalled();
+    });
+
+    it('should fallback to "New Chat" when first message is whitespace-only', () => {
+      const { result } = renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        result.current.sendMessage(tabIdA, '   ');
+      });
+      expect(conversationApi.update).toHaveBeenCalledWith('conv-A', { title: 'New Chat' });
+    });
+  });
+
+  // --- Attachment metadata in user messages ---
+  describe('attachment metadata', () => {
+    it('should include attachments in user message metadata when files are provided', () => {
+      const { result } = renderHook(() => useTabCopilot({ subscribe, send }));
+      const files = [
+        { id: 'f1', originalName: 'photo.png', mimeType: 'image/png', size: 1024, path: '/uploads/f1-photo.png' },
+        { id: 'f2', originalName: 'doc.pdf', mimeType: 'application/pdf', size: 2048, path: '/uploads/f2-doc.pdf' },
+      ];
+      act(() => {
+        result.current.sendMessage(tabIdA, 'See attached', files);
+      });
+      const msg = useAppStore.getState().tabs[tabIdA].messages[0];
+      expect(msg.role).toBe('user');
+      expect((msg.metadata as any).attachments).toEqual([
+        { id: 'f1', originalName: 'photo.png', mimeType: 'image/png', size: 1024 },
+        { id: 'f2', originalName: 'doc.pdf', mimeType: 'application/pdf', size: 2048 },
+      ]);
+    });
+
+    it('should NOT include attachments in metadata when no files are provided', () => {
+      const { result } = renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        result.current.sendMessage(tabIdA, 'no files');
+      });
+      const msg = useAppStore.getState().tabs[tabIdA].messages[0];
+      expect(msg.metadata).toBeNull();
     });
   });
 

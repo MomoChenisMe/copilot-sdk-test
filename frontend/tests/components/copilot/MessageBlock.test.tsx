@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MessageBlock } from '../../../src/components/copilot/MessageBlock';
+import { useAppStore } from '../../../src/store';
 import type { Message } from '../../../src/lib/api';
 
 // Mock Markdown component
@@ -453,6 +454,292 @@ describe('MessageBlock', () => {
     // Should render exactly ONE reasoning block, not two
     const reasoningBlocks = screen.getAllByTestId('reasoning-block');
     expect(reasoningBlocks).toHaveLength(1);
+  });
+
+  // --- User message attachment thumbnails ---
+
+  it('renders image thumbnails in user bubble when metadata.attachments has images', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'user',
+          content: 'See image',
+          metadata: {
+            attachments: [
+              { id: 'f1', originalName: 'photo.png', mimeType: 'image/png', size: 1024 },
+            ],
+          },
+        })}
+      />
+    );
+
+    const img = screen.getByAltText('photo.png');
+    expect(img).toBeTruthy();
+    expect(img.getAttribute('src')).toBe('/api/upload/f1');
+  });
+
+  it('renders multiple image thumbnails', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'user',
+          content: 'Two images',
+          metadata: {
+            attachments: [
+              { id: 'f1', originalName: 'a.png', mimeType: 'image/png', size: 100 },
+              { id: 'f2', originalName: 'b.jpg', mimeType: 'image/jpeg', size: 200 },
+            ],
+          },
+        })}
+      />
+    );
+
+    expect(screen.getByAltText('a.png')).toBeTruthy();
+    expect(screen.getByAltText('b.jpg')).toBeTruthy();
+  });
+
+  it('renders non-image attachments as file name badge', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'user',
+          content: 'With PDF',
+          metadata: {
+            attachments: [
+              { id: 'f1', originalName: 'doc.pdf', mimeType: 'application/pdf', size: 5000 },
+            ],
+          },
+        })}
+      />
+    );
+
+    expect(screen.queryByRole('img')).toBeNull();
+    expect(screen.getByText('doc.pdf')).toBeTruthy();
+  });
+
+  it('renders mixed attachments (images + files)', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'user',
+          content: 'Mixed',
+          metadata: {
+            attachments: [
+              { id: 'f1', originalName: 'photo.png', mimeType: 'image/png', size: 100 },
+              { id: 'f2', originalName: 'data.csv', mimeType: 'text/csv', size: 200 },
+            ],
+          },
+        })}
+      />
+    );
+
+    expect(screen.getByAltText('photo.png')).toBeTruthy();
+    expect(screen.getByText('data.csv')).toBeTruthy();
+  });
+
+  it('does NOT render attachment area when no attachments', () => {
+    const { container } = render(
+      <MessageBlock message={makeMessage({ role: 'user', content: 'No files' })} />
+    );
+
+    expect(container.querySelectorAll('img')).toHaveLength(0);
+  });
+
+  // --- Command badge rendering (F6) ---
+
+  it('renders /command prefix as an accent-colored badge in user bubble', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'user',
+          content: '/brainstorming help me design a login page',
+        })}
+      />
+    );
+
+    const badge = screen.getByTestId('command-badge');
+    expect(badge).toBeTruthy();
+    expect(badge.textContent).toBe('/brainstorming');
+    expect(screen.getByText('help me design a login page')).toBeTruthy();
+  });
+
+  it('does NOT render command badge when message has no slash prefix', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'user',
+          content: 'just a regular message',
+        })}
+      />
+    );
+
+    expect(screen.queryByTestId('command-badge')).toBeNull();
+  });
+
+  it('renders command badge only (no remaining text) when message is just a command', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'user',
+          content: '/clear',
+        })}
+      />
+    );
+
+    const badge = screen.getByTestId('command-badge');
+    expect(badge).toBeTruthy();
+    expect(badge.textContent).toBe('/clear');
+  });
+
+  // --- Collapsible skill description (F8) ---
+
+  it('renders collapsible skill description when command matches a skill', () => {
+    useAppStore.setState({
+      skills: [
+        { name: 'brainstorming', description: 'Brainstorm ideas collaboratively', content: '...', builtin: false },
+      ],
+    });
+
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'user',
+          content: '/brainstorming help me design a login',
+        })}
+      />
+    );
+
+    const details = screen.getByTestId('skill-details');
+    expect(details).toBeTruthy();
+    expect(details.textContent).toContain('Brainstorm ideas collaboratively');
+  });
+
+  it('does NOT render skill details when command does not match any skill', () => {
+    useAppStore.setState({
+      skills: [
+        { name: 'brainstorming', description: 'Brainstorm ideas', content: '...', builtin: false },
+      ],
+    });
+
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'user',
+          content: '/clear',
+        })}
+      />
+    );
+
+    expect(screen.queryByTestId('skill-details')).toBeNull();
+  });
+
+  it('skill details is collapsed by default', () => {
+    useAppStore.setState({
+      skills: [
+        { name: 'brainstorming', description: 'Brainstorm ideas', content: '...', builtin: false },
+      ],
+    });
+
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'user',
+          content: '/brainstorming test',
+        })}
+      />
+    );
+
+    const details = screen.getByTestId('skill-details') as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+  });
+
+  // --- Terminal output rendering (F7) ---
+
+  it('renders bash user message as $ command prompt', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({ role: 'user', content: 'ls -la', metadata: { bash: true } })}
+      />
+    );
+    const bashCmd = screen.getByTestId('bash-command');
+    expect(bashCmd).toBeTruthy();
+    expect(bashCmd.textContent).toContain('$');
+    expect(bashCmd.textContent).toContain('ls -la');
+  });
+
+  it('renders regular user message (non-bash) as chat bubble', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({ role: 'user', content: 'ls -la' })}
+      />
+    );
+    expect(screen.getByTestId('user-bubble')).toBeTruthy();
+    expect(screen.queryByTestId('bash-command')).toBeNull();
+  });
+
+  it('renders assistant message with monospace when metadata has exitCode', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'assistant',
+          content: 'file1.txt\nfile2.txt',
+          metadata: { exitCode: 0 },
+        })}
+      />
+    );
+
+    const pre = screen.getByTestId('terminal-output');
+    expect(pre).toBeTruthy();
+    expect(pre.textContent).toContain('file1.txt');
+  });
+
+  it('renders exit code badge for non-zero exit', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'assistant',
+          content: 'error output',
+          metadata: { exitCode: 1 },
+        })}
+      />
+    );
+
+    const exitBadge = screen.getByTestId('exit-code-badge');
+    expect(exitBadge).toBeTruthy();
+    expect(exitBadge.textContent).toContain('1');
+  });
+
+  it('renders success badge for exit code 0', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'assistant',
+          content: 'success output',
+          metadata: { exitCode: 0 },
+        })}
+      />
+    );
+
+    const badge = screen.getByTestId('exit-code-badge');
+    expect(badge).toBeTruthy();
+    expect(badge.textContent).toContain('✓');
+  });
+
+  it('renders success badge even when content is empty (e.g. cd command)', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'assistant',
+          content: '',
+          metadata: { exitCode: 0 },
+        })}
+      />
+    );
+
+    const badge = screen.getByTestId('exit-code-badge');
+    expect(badge).toBeTruthy();
+    expect(badge.textContent).toContain('✓');
+    expect(screen.queryByTestId('terminal-output')).toBeNull();
   });
 
   // WARNING FIX: bash tool with error status should also show ToolResultBlock

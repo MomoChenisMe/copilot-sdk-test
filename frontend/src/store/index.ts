@@ -15,6 +15,7 @@ export interface TabState {
   id: string;
   conversationId: string;
   title: string;
+  mode: 'copilot' | 'terminal';
   messages: Message[];
   streamingText: string;
   isStreaming: boolean;
@@ -75,6 +76,10 @@ export interface AppState {
   skills: SkillItem[];
   skillsLoaded: boolean;
 
+  // SDK commands cache
+  sdkCommands: Array<{ name: string; description: string }>;
+  sdkCommandsLoaded: boolean;
+
   // Settings
   activePresets: string[];
   disabledSkills: string[];
@@ -127,6 +132,10 @@ export interface AppState {
   setSkills: (skills: SkillItem[]) => void;
   setSkillsLoaded: (loaded: boolean) => void;
 
+  // Actions — SDK commands
+  setSdkCommands: (commands: Array<{ name: string; description: string }>) => void;
+  setSdkCommandsLoaded: (loaded: boolean) => void;
+
   // Actions — Settings
   togglePreset: (name: string) => void;
   removePreset: (name: string) => void;
@@ -166,6 +175,7 @@ export interface AppState {
   addTabTurnSegment: (tabId: string, segment: TurnSegment) => void;
   updateTabToolInTurnSegments: (tabId: string, toolCallId: string, updates: Partial<ToolRecord>) => void;
   setTabCopilotError: (tabId: string, error: string | null) => void;
+  setTabMode: (tabId: string, mode: 'copilot' | 'terminal') => void;
 }
 
 function readThemeFromStorage(): Theme {
@@ -216,6 +226,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeStreams: {},
   skills: [],
   skillsLoaded: false,
+  sdkCommands: [],
+  sdkCommandsLoaded: false,
   activePresets: [],
   disabledSkills: [],
   settingsOpen: false,
@@ -328,6 +340,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSkills: (skills) => set({ skills }),
   setSkillsLoaded: (loaded) => set({ skillsLoaded: loaded }),
 
+  // SDK commands actions
+  setSdkCommands: (commands) => set({ sdkCommands: commands }),
+  setSdkCommandsLoaded: (loaded) => set({ sdkCommandsLoaded: loaded }),
+
   // Settings actions
   togglePreset: (name) => {
     const current = get().activePresets;
@@ -386,6 +402,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       id: tabId,
       conversationId,
       title,
+      mode: 'copilot',
       messages: [],
       streamingText: '',
       isStreaming: false,
@@ -438,6 +455,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       ...tab,
       conversationId,
       title,
+      mode: 'copilot',
       messages: [],
       streamingText: '',
       isStreaming: false,
@@ -475,6 +493,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           id: tabId,
           conversationId,
           title: item.title,
+          mode: 'copilot',
           messages: [],
           streamingText: '',
           isStreaming: false,
@@ -621,6 +640,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       const tab = state.tabs[tabId];
       if (!tab) return state;
       return { tabs: { ...state.tabs, [tabId]: { ...tab, copilotError: error } } };
+    }),
+
+  setTabMode: (tabId, mode) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return { tabs: { ...state.tabs, [tabId]: { ...tab, mode } } };
     }),
 }));
 

@@ -81,10 +81,18 @@ export type TurnSegment =
   | { type: 'tool'; toolCallId: string; toolName: string; arguments?: unknown; status: 'running' | 'success' | 'error'; result?: unknown; error?: string }
   | { type: 'reasoning'; content: string };
 
+export interface AttachmentMeta {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+}
+
 export interface MessageMetadata {
   toolRecords?: ToolRecord[];
   reasoning?: string;
   turnSegments?: TurnSegment[];
+  attachments?: AttachmentMeta[];
 }
 
 // --- Conversation API ---
@@ -132,6 +140,27 @@ export const conversationApi = {
 
   search: (query: string) =>
     apiGet<SearchResult[]>(`/api/conversations/search?q=${encodeURIComponent(query)}`),
+};
+
+// --- Copilot API ---
+
+export interface SdkCommand {
+  name: string;
+  description: string;
+}
+
+export const copilotApi = {
+  listCommands: () => apiGet<SdkCommand[]>('/api/copilot/commands'),
+};
+
+// --- Config API ---
+
+export interface AppConfig {
+  defaultCwd: string;
+}
+
+export const configApi = {
+  get: () => apiGet<AppConfig>('/api/config'),
 };
 
 export class ApiError extends Error {

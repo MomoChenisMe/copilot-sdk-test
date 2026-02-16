@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 export interface SlashCommand {
   name: string;
   description: string;
-  type: 'builtin' | 'skill';
+  type: 'builtin' | 'skill' | 'sdk';
 }
 
 interface SlashCommandMenuProps {
@@ -31,6 +31,7 @@ export function SlashCommandMenu({
 
   const builtinCommands = filtered.filter((c) => c.type === 'builtin');
   const skillCommands = filtered.filter((c) => c.type === 'skill');
+  const sdkCommands = filtered.filter((c) => c.type === 'sdk');
 
   // Click outside to close
   useEffect(() => {
@@ -102,6 +103,30 @@ export function SlashCommandMenu({
             {t('slashCommand.skills', 'Skills')}
           </div>
           {skillCommands.map((cmd) => {
+            const idx = flatIndex++;
+            return (
+              <button
+                key={cmd.name}
+                role="option"
+                aria-selected={idx === selectedIndex}
+                onClick={() => onSelect(cmd)}
+                className={`w-full text-left px-3 py-2 flex items-center gap-2 transition-colors ${
+                  idx === selectedIndex ? 'bg-accent-soft text-accent' : 'hover:bg-bg-tertiary text-text-primary'
+                }`}
+              >
+                <span className="text-sm font-medium">/{cmd.name}</span>
+                <span className="text-xs text-text-muted truncate">{cmd.description}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {sdkCommands.length > 0 && (
+        <div>
+          <div className="px-3 py-1.5 text-xs font-semibold text-text-muted border-b border-border">
+            {t('slashCommand.copilot', 'Copilot')}
+          </div>
+          {sdkCommands.map((cmd) => {
             const idx = flatIndex++;
             return (
               <button

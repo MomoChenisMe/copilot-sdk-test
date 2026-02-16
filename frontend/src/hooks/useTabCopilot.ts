@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { useAppStore } from '../store';
+import { conversationApi } from '../lib/api';
 import type { MessageMetadata } from '../lib/api';
 import type { WsMessage } from '../lib/ws-types';
 
@@ -231,6 +232,9 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
 
       const conversationId = tab.conversationId;
 
+      // Auto-title: if this is the first message, set conversation title from prompt
+      const isFirstMessage = tab.messages.length === 0;
+
       state.clearTabStreaming(tabId);
       state.setTabIsStreaming(tabId, true);
 
@@ -238,13 +242,26 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
       const dedup = getDedup(conversationId);
       dedup.receivedMessage = false;
 
+      // Build user message metadata (include attachments if files present)
+      let userMetadata: MessageMetadata | null = null;
+      if (files && files.length > 0) {
+        userMetadata = {
+          attachments: files.map((f) => ({
+            id: f.id,
+            originalName: f.originalName,
+            mimeType: f.mimeType,
+            size: f.size,
+          })),
+        };
+      }
+
       // Add user message to tab
       state.addTabMessage(tabId, {
         id: crypto.randomUUID(),
         conversationId,
         role: 'user',
         content: prompt,
-        metadata: null,
+        metadata: userMetadata,
         createdAt: new Date().toISOString(),
       });
 
@@ -257,6 +274,13 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
         type: 'copilot:send',
         data,
       });
+
+      // Auto-title on first message
+      if (isFirstMessage) {
+        const title = prompt.slice(0, 50).trim() || 'New Chat';
+        useAppStore.getState().updateTabTitle(tabId, title);
+        conversationApi.update(conversationId, { title }).catch(() => {/* ignore */});
+      }
     },
     [send],
   );

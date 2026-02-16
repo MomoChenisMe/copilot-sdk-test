@@ -7,7 +7,6 @@ describe('TopBar', () => {
     title: 'Test Conversation',
     status: 'connected' as const,
     theme: 'light' as const,
-    onMenuClick: vi.fn(),
     onThemeToggle: vi.fn(),
     onHomeClick: vi.fn(),
   };
@@ -24,12 +23,9 @@ describe('TopBar', () => {
     expect(onHomeClick).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onMenuClick when hamburger is clicked', () => {
-    const onMenuClick = vi.fn();
-    render(<TopBar {...defaultProps} onMenuClick={onMenuClick} />);
-    const menuButton = screen.getByRole('button', { name: /menu/i });
-    fireEvent.click(menuButton);
-    expect(onMenuClick).toHaveBeenCalledTimes(1);
+  it('does NOT render hamburger menu button', () => {
+    render(<TopBar {...defaultProps} />);
+    expect(screen.queryByRole('button', { name: /menu/i })).toBeNull();
   });
 
   it('does not render new chat / Plus button', () => {
@@ -75,7 +71,6 @@ describe('TopBar', () => {
 
   it('does not render language toggle or model name', () => {
     render(<TopBar {...defaultProps} />);
-    // Language and model name are no longer in TopBar
     expect(screen.queryByRole('button', { name: /language/i })).toBeNull();
     expect(screen.queryByTestId('model-name')).toBeNull();
   });

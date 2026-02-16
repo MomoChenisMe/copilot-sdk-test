@@ -20,6 +20,7 @@ interface ChatViewProps {
   onNewConversation: () => void;
   onSend: (text: string, files?: import('../shared/AttachmentPreview').AttachedFile[]) => void;
   onAbort: () => void;
+  onBashSend?: (command: string) => void;
   isStreaming: boolean;
   disabled: boolean;
   currentModel: string;
@@ -35,6 +36,7 @@ export function ChatView({
   onNewConversation,
   onSend,
   onAbort,
+  onBashSend,
   isStreaming,
   disabled,
   currentModel,
@@ -66,6 +68,24 @@ export function ChatView({
   const removePreset = useAppStore((s) => s.removePreset);
   const skills = useAppStore((s) => s.skills);
   const disabledSkills = useAppStore((s) => s.disabledSkills);
+  const sdkCommands = useAppStore((s) => s.sdkCommands);
+  const setTabMode = useAppStore((s) => s.setTabMode);
+  const tabMode = tab?.mode ?? 'copilot';
+  const isTerminalMode = tabMode === 'terminal';
+
+  const handleModeChange = useCallback(
+    (mode: 'copilot' | 'terminal') => {
+      if (tabId) setTabMode(tabId, mode);
+    },
+    [tabId, setTabMode],
+  );
+
+  const handleTerminalSend = useCallback(
+    (text: string) => {
+      onBashSend?.(text);
+    },
+    [onBashSend],
+  );
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAutoScrolling = useRef(true);
@@ -94,8 +114,13 @@ export function ChatView({
     const skillCmds: SlashCommand[] = skills
       .filter((s) => !disabledSkills.includes(s.name))
       .map((s) => ({ name: s.name, description: s.description, type: 'skill' as const }));
-    return [...builtin, ...skillCmds];
-  }, [skills, disabledSkills, t]);
+    const sdkCmds: SlashCommand[] = sdkCommands.map((c) => ({
+      name: c.name,
+      description: c.description,
+      type: 'sdk' as const,
+    }));
+    return [...builtin, ...skillCmds, ...sdkCmds];
+  }, [skills, disabledSkills, sdkCommands, t]);
 
   const handleSlashCommand = useCallback(
     (command: SlashCommand) => {
@@ -159,7 +184,7 @@ export function ChatView({
             <div className="mb-2 flex items-center gap-2">
               <ModelSelector currentModel={currentModel} onSelect={onModelChange} />
               {currentCwd && onCwdChange && (
-                <CwdSelector currentCwd={currentCwd} onCwdChange={onCwdChange} />
+                <CwdSelector currentCwd={currentCwd} onCwdChange={onCwdChange} mode={tabMode} onModeChange={handleModeChange} />
               )}
             </div>
             {activePresets.length > 0 && (
@@ -183,13 +208,14 @@ export function ChatView({
               </div>
             )}
             <Input
-              onSend={onSend}
+              onSend={isTerminalMode ? handleTerminalSend : onSend}
               onAbort={onAbort}
               isStreaming={isStreaming}
               disabled={disabled}
-              slashCommands={slashCommands}
-              onSlashCommand={handleSlashCommand}
-              enableAttachments
+              slashCommands={isTerminalMode ? undefined : slashCommands}
+              onSlashCommand={isTerminalMode ? undefined : handleSlashCommand}
+              enableAttachments={!isTerminalMode}
+              placeholder={isTerminalMode ? t('terminal.placeholder', '$ enter command...') : undefined}
             />
           </div>
         </div>
@@ -297,7 +323,7 @@ export function ChatView({
           <div className="mb-2 flex items-center gap-2">
             <ModelSelector currentModel={currentModel} onSelect={onModelChange} />
             {currentCwd && onCwdChange && (
-              <CwdSelector currentCwd={currentCwd} onCwdChange={onCwdChange} />
+              <CwdSelector currentCwd={currentCwd} onCwdChange={onCwdChange} mode={tabMode} onModeChange={handleModeChange} />
             )}
           </div>
           {activePresets.length > 0 && (
@@ -321,13 +347,14 @@ export function ChatView({
             </div>
           )}
           <Input
-            onSend={onSend}
+            onSend={isTerminalMode ? handleTerminalSend : onSend}
             onAbort={onAbort}
             isStreaming={isStreaming}
             disabled={disabled}
-            slashCommands={slashCommands}
-            onSlashCommand={handleSlashCommand}
-            enableAttachments
+            slashCommands={isTerminalMode ? undefined : slashCommands}
+            onSlashCommand={isTerminalMode ? undefined : handleSlashCommand}
+            enableAttachments={!isTerminalMode}
+            placeholder={isTerminalMode ? t('terminal.placeholder', '$ enter command...') : undefined}
           />
         </div>
       </div>

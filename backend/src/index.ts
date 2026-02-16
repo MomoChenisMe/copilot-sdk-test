@@ -13,12 +13,14 @@ import { createConversationRoutes } from './conversation/routes.js';
 import { ClientManager } from './copilot/client-manager.js';
 import { SessionManager } from './copilot/session-manager.js';
 import { createModelsRoute } from './copilot/models-route.js';
+import { createCommandsRoute } from './copilot/commands-route.js';
 import { createCopilotAuthRoutes } from './copilot/auth-routes.js';
 import { createWsServer } from './ws/server.js';
 import { registerHandler } from './ws/router.js';
 import { createCopilotHandler } from './ws/handlers/copilot.js';
 import { createTerminalHandler } from './ws/handlers/terminal.js';
 import { createCwdHandler } from './ws/handlers/cwd.js';
+import { createBashExecHandler } from './ws/handlers/bash-exec.js';
 import { StreamManager } from './copilot/stream-manager.js';
 import { setupGracefulShutdown } from './utils/graceful-shutdown.js';
 import { PromptFileStore } from './prompts/file-store.js';
@@ -73,11 +75,17 @@ export function createApp() {
   // Protected routes
   app.use('/api/conversations', authMiddleware, createConversationRoutes(repo));
   app.use('/api/copilot', authMiddleware, createModelsRoute(clientManager));
+  app.use('/api/copilot', authMiddleware, createCommandsRoute());
   app.use('/api/copilot/auth', authMiddleware, createCopilotAuthRoutes(clientManager));
   app.use('/api/prompts', authMiddleware, createPromptsRoutes(promptStore));
   app.use('/api/memory', authMiddleware, createMemoryRoutes(promptStore));
   app.use('/api/skills', authMiddleware, createSkillsRoutes(skillStore, builtinSkillStore));
   app.use('/api/upload', authMiddleware, createUploadRoutes(path.resolve(config.dbPath, '../uploads')));
+
+  // Config endpoint (returns non-sensitive config values)
+  app.get('/api/config', authMiddleware, (_req, res) => {
+    res.json({ defaultCwd: config.defaultCwd });
+  });
 
   // Serve static files in production
   if (config.nodeEnv === 'production') {
@@ -121,6 +129,7 @@ export function createApp() {
   registerHandler('cwd', createCwdHandler((newCwd) => {
     log.info({ cwd: newCwd }, 'Working directory changed');
   }));
+  registerHandler('bash', createBashExecHandler(config.defaultCwd));
 
   // Graceful shutdown
   setupGracefulShutdown([

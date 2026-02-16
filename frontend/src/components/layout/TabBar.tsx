@@ -52,16 +52,23 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
                 />
               )}
               <span
-                ref={(el) => { tabTitleRefs.current[tabId] = el; }}
                 data-testid={`tab-title-${tabId}`}
-                className="max-w-32 truncate inline-flex items-center gap-0.5"
+                className="max-w-32 truncate"
+              >
+                {tab.title}
+              </span>
+              <span
+                ref={(el) => { tabTitleRefs.current[tabId] = el; }}
+                data-testid={`tab-chevron-${tabId}`}
+                role="button"
+                tabIndex={-1}
+                className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
                 onClick={(e) => {
                   e.stopPropagation();
                   setPopoverTabId(popoverTabId === tabId ? null : tabId);
                 }}
               >
-                {tab.title}
-                <ChevronDown size={12} className="shrink-0 opacity-60" />
+                <ChevronDown size={12} />
               </span>
               <span
                 data-testid={`tab-close-${tabId}`}

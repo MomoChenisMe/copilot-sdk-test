@@ -111,6 +111,41 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
       });
     });
 
+    it('should save user message with attachment metadata when files are provided', () => {
+      handle({
+        type: 'copilot:send',
+        data: {
+          conversationId: 'conv-1',
+          prompt: 'See image',
+          files: [
+            { id: 'f1', originalName: 'photo.png', mimeType: 'image/png', size: 1024, path: '/uploads/f1-photo.png' },
+          ],
+        },
+      });
+
+      expect(mockRepo.addMessage).toHaveBeenCalledWith('conv-1', {
+        role: 'user',
+        content: 'See image',
+        metadata: {
+          attachments: [
+            { id: 'f1', originalName: 'photo.png', mimeType: 'image/png', size: 1024 },
+          ],
+        },
+      });
+    });
+
+    it('should NOT include metadata when no files are provided', () => {
+      handle({
+        type: 'copilot:send',
+        data: { conversationId: 'conv-1', prompt: 'Hello' },
+      });
+
+      expect(mockRepo.addMessage).toHaveBeenCalledWith('conv-1', {
+        role: 'user',
+        content: 'Hello',
+      });
+    });
+
     it('should pass activePresets to streamManager.startStream', async () => {
       handle({
         type: 'copilot:send',

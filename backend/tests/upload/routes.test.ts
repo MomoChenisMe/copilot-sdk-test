@@ -139,4 +139,32 @@ describe('upload routes', () => {
       expect(body.files[0].mimeType).toBe('image/png');
     });
   });
+
+  describe('GET /api/upload/:id', () => {
+    it('should serve an uploaded file by id', async () => {
+      // First upload a file
+      const content = 'serve-me';
+      const blob = new Blob([content], { type: 'text/plain' });
+      const formData = new FormData();
+      formData.append('files', blob, 'serve.txt');
+
+      const uploadRes = await fetch(`${baseUrl}/api/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      const uploadBody = await uploadRes.json();
+      const fileId = uploadBody.files[0].id;
+
+      // Fetch it back
+      const getRes = await fetch(`${baseUrl}/api/upload/${fileId}`);
+      expect(getRes.status).toBe(200);
+      const text = await getRes.text();
+      expect(text).toBe('serve-me');
+    });
+
+    it('should return 404 for non-existent file id', async () => {
+      const getRes = await fetch(`${baseUrl}/api/upload/nonexistent-id`);
+      expect(getRes.status).toBe(404);
+    });
+  });
 });

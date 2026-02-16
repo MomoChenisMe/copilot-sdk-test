@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import type { Message, MessageMetadata, TurnSegment } from '../../lib/api';
+import type { Message, MessageMetadata, AttachmentMeta, TurnSegment } from '../../lib/api';
+import { useAppStore } from '../../store';
 import { Markdown } from '../shared/Markdown';
 import { ReasoningBlock } from './ReasoningBlock';
 import { ToolRecord } from './ToolRecord';
@@ -9,29 +10,130 @@ import { Sparkles } from 'lucide-react';
 
 const INLINE_RESULT_TOOLS = ['bash', 'shell', 'execute', 'run'];
 
+const COMMAND_RE = /^\/(\S+)(?:\s(.*))?$/s;
+
+function renderUserContent(content: string, skills: Array<{ name: string; description: string }>) {
+  const match = COMMAND_RE.exec(content);
+  if (!match) {
+    return <p className="text-sm leading-relaxed text-text-primary whitespace-pre-wrap">{content}</p>;
+  }
+  const commandName = match[1];
+  const rest = match[2]?.trim();
+  const matchedSkill = skills.find((s) => s.name === commandName);
+  return (
+    <>
+      <p className="text-sm leading-relaxed text-text-primary whitespace-pre-wrap">
+        <span
+          data-testid="command-badge"
+          className="inline-flex px-1.5 py-0.5 rounded-md bg-accent/15 text-accent font-medium text-xs"
+        >
+          /{commandName}
+        </span>
+        {rest ? ` ${rest}` : ''}
+      </p>
+      {matchedSkill && (
+        <details data-testid="skill-details" className="mt-1.5">
+          <summary className="text-xs text-text-muted cursor-pointer hover:text-text-secondary transition-colors">
+            {commandName}
+          </summary>
+          <p className="mt-1 text-xs text-text-secondary pl-2 border-l-2 border-border">
+            {matchedSkill.description}
+          </p>
+        </details>
+      )}
+    </>
+  );
+}
+
 interface MessageBlockProps {
   message: Message;
 }
 
 export function MessageBlock({ message }: MessageBlockProps) {
   const { t } = useTranslation();
+  const skills = useAppStore((s) => s.skills);
   const isUser = message.role === 'user';
 
   if (isUser) {
+    const userMeta = message.metadata as (MessageMetadata & { bash?: boolean }) | null | undefined;
+    const attachments = userMeta?.attachments;
+
+    // Bash command: render as terminal prompt
+    if (userMeta?.bash) {
+      return (
+        <div className="mb-2" data-testid="bash-command">
+          <pre className="text-xs font-mono text-text-secondary">
+            <span className="text-accent font-medium">$</span> {message.content}
+          </pre>
+        </div>
+      );
+    }
+
     return (
       <div className="flex justify-end mb-6">
         <div
           data-testid="user-bubble"
           className="max-w-[85%] bg-user-msg-bg border border-user-msg-border rounded-2xl rounded-br-sm px-4 py-3"
         >
-          <p className="text-sm leading-relaxed text-text-primary whitespace-pre-wrap">{message.content}</p>
+          {attachments && attachments.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {attachments.map((a: AttachmentMeta) =>
+                a.mimeType.startsWith('image/') ? (
+                  <img
+                    key={a.id}
+                    src={`/api/upload/${a.id}`}
+                    alt={a.originalName}
+                    className="w-24 h-24 rounded-lg object-cover"
+                  />
+                ) : (
+                  <span
+                    key={a.id}
+                    className="inline-flex items-center px-2 py-1 rounded-md bg-bg-tertiary text-xs text-text-secondary"
+                  >
+                    {a.originalName}
+                  </span>
+                ),
+              )}
+            </div>
+          )}
+          {renderUserContent(message.content, skills)}
         </div>
       </div>
     );
   }
 
   // Parse metadata for assistant messages
-  const metadata = message.metadata as MessageMetadata | null | undefined;
+  const metadata = message.metadata as (MessageMetadata & { exitCode?: number }) | null | undefined;
+  const isTerminalOutput = typeof metadata?.exitCode === 'number';
+
+  // Terminal output rendering
+  if (isTerminalOutput) {
+    const exitCode = metadata.exitCode!;
+    const hasContent = !!message.content.trim();
+    return (
+      <div className="mb-4">
+        {hasContent && (
+          <pre
+            data-testid="terminal-output"
+            className="text-xs leading-relaxed font-mono whitespace-pre-wrap bg-bg-tertiary rounded-lg p-3 text-text-primary overflow-x-auto"
+          >
+            {message.content}
+          </pre>
+        )}
+        <span
+          data-testid="exit-code-badge"
+          className={`inline-flex items-center ${hasContent ? 'mt-1' : ''} px-1.5 py-0.5 rounded text-xs font-medium ${
+            exitCode === 0
+              ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+              : 'bg-error/15 text-error'
+          }`}
+        >
+          {exitCode === 0 ? '✓' : `exit ${exitCode}`}
+        </span>
+      </div>
+    );
+  }
+
   const turnSegments = metadata?.turnSegments;
   const toolRecords = metadata?.toolRecords;
   const reasoning = metadata?.reasoning;
