@@ -39,11 +39,12 @@ vi.mock('../../../src/lib/prompts-api', () => ({
   skillsApi: {
     list: vi.fn().mockResolvedValue({
       skills: [
-        { name: 'code-review', description: 'Review code for quality', content: '# Code Review Skill' },
-        { name: 'debugging', description: 'Help debug issues', content: '# Debugging Skill' },
+        { name: 'tdd-workflow', description: 'Test-driven development', content: '# TDD Workflow', builtin: true },
+        { name: 'code-review', description: 'Review code for quality', content: '# Code Review Skill', builtin: false },
+        { name: 'debugging', description: 'Help debug issues', content: '# Debugging Skill', builtin: false },
       ],
     }),
-    get: vi.fn().mockResolvedValue({ name: 'code-review', description: 'Review code for quality', content: '# Code Review Skill' }),
+    get: vi.fn().mockResolvedValue({ name: 'code-review', description: 'Review code for quality', content: '# Code Review Skill', builtin: false }),
     put: vi.fn().mockResolvedValue({ ok: true }),
     delete: vi.fn().mockResolvedValue({ ok: true }),
   },
@@ -522,6 +523,40 @@ describe('SettingsPanel', () => {
       fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
       await waitFor(() => {
         expect(screen.getByText('No skills yet. Create one to get started.')).toBeTruthy();
+      });
+    });
+
+    // --- Builtin / User skill sections ---
+
+    it('should show system skills section with System badge', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('system-skills-section')).toBeTruthy();
+        expect(screen.getByTestId('user-skills-section')).toBeTruthy();
+      });
+    });
+
+    it('should NOT show edit/delete buttons for builtin skills', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('skill-expand-tdd-workflow')).toBeTruthy();
+      });
+
+      // Expand the builtin skill
+      fireEvent.click(screen.getByTestId('skill-expand-tdd-workflow'));
+
+      // No edit/delete buttons for builtin
+      expect(screen.queryByTestId('skill-edit-tdd-workflow')).toBeNull();
+      expect(screen.queryByTestId('skill-delete-tdd-workflow')).toBeNull();
+    });
+
+    it('should show toggle for builtin skills', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('skill-toggle-tdd-workflow')).toBeTruthy();
       });
     });
   });

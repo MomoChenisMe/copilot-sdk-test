@@ -56,7 +56,12 @@
   },
   "tabBar": {
     "copilot": "Copilot",
-    "terminal": "Terminal"
+    "terminal": "Terminal",
+    "newTab": "New Tab",
+    "closeTab": "Close Tab",
+    "closeOthers": "Close Others",
+    "rename": "Rename",
+    "tabLimit": "Tab limit reached. Consider closing unused tabs."
   },
   "settings": {
     "title": "Settings",
@@ -107,7 +112,11 @@
       "namePlaceholder": "e.g. code-review",
       "descriptionPlaceholder": "Brief description of what this skill does...",
       "contentPlaceholder": "Write your SKILL.md content here...",
-      "nameInvalid": "Name must not contain .., /, \\ or special characters"
+      "nameInvalid": "Name must not contain .., /, \\ or special characters",
+      "system": "System Skills",
+      "user": "User Skills",
+      "systemBadge": "System",
+      "cannotModifyBuiltin": "Built-in skills cannot be modified or deleted"
     }
   },
   "sidebar": {

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pencil, Star, Trash2, Search, Plus, X, Globe, LogOut } from 'lucide-react';
+import { Pencil, Star, Trash2, Search, Plus, X, Globe, LogOut, SquareArrowOutUpRight } from 'lucide-react';
 import type { Conversation, SearchResult } from '../../lib/api';
 
 interface SidebarProps {
@@ -9,6 +9,7 @@ interface SidebarProps {
   conversations: Conversation[];
   activeConversationId: string | null;
   activeStreams?: Record<string, string>;
+  openTabIds?: string[];
   onSelect: (id: string) => void;
   onCreate: () => void;
   onDelete: (id: string) => void;
@@ -44,6 +45,7 @@ export function Sidebar({
   conversations,
   activeConversationId,
   activeStreams = {},
+  openTabIds = [],
   onSelect,
   onCreate,
   onDelete,
@@ -90,6 +92,7 @@ export function Sidebar({
     const isActive = conv.id === activeConversationId;
     const streamStatus = activeStreams[conv.id];
     const showIndicator = streamStatus === 'running' || streamStatus === 'error';
+    const isOpenInTab = openTabIds.includes(conv.id);
     return (
       <div
         key={conv.id}
@@ -107,6 +110,15 @@ export function Sidebar({
               streamStatus === 'error' ? 'bg-error' : 'bg-accent animate-pulse'
             }`}
           />
+        )}
+        {/* Tab open marker */}
+        {isOpenInTab && !showIndicator && (
+          <span
+            data-testid={`tab-marker-${conv.id}`}
+            className="flex-shrink-0 text-text-muted"
+          >
+            <SquareArrowOutUpRight size={12} />
+          </span>
         )}
         {/* Title + time */}
         <div className="flex-1 min-w-0">

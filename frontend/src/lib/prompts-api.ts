@@ -43,6 +43,7 @@ export interface SkillItem {
   name: string;
   description: string;
   content: string;
+  builtin: boolean;
 }
 
 export interface SkillList {

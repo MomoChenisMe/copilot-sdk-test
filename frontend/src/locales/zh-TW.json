@@ -56,7 +56,12 @@
   },
   "tabBar": {
     "copilot": "Copilot",
-    "terminal": "終端機"
+    "terminal": "終端機",
+    "newTab": "新增頁籤",
+    "closeTab": "關閉頁籤",
+    "closeOthers": "關閉其他",
+    "rename": "重新命名",
+    "tabLimit": "已達頁籤上限，請先關閉不用的頁籤。"
   },
   "settings": {
     "title": "設定",
@@ -107,7 +112,11 @@
       "namePlaceholder": "例如 code-review",
       "descriptionPlaceholder": "簡述此技能的用途...",
       "contentPlaceholder": "在此撰寫您的 SKILL.md 內容...",
-      "nameInvalid": "名稱不可包含 ..、/、\\ 或特殊字元"
+      "nameInvalid": "名稱不可包含 ..、/、\\ 或特殊字元",
+      "system": "系統技能",
+      "user": "使用者技能",
+      "systemBadge": "系統",
+      "cannotModifyBuiltin": "內建技能無法修改或刪除"
     }
   },
   "sidebar": {

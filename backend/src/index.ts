@@ -26,6 +26,7 @@ import { PromptComposer } from './prompts/composer.js';
 import { createPromptsRoutes } from './prompts/routes.js';
 import { createMemoryRoutes } from './prompts/memory-routes.js';
 import { SkillFileStore } from './skills/file-store.js';
+import { BuiltinSkillStore } from './skills/builtin-store.js';
 import { createSkillsRoutes } from './skills/routes.js';
 
 const log = createLogger('main');
@@ -46,9 +47,12 @@ export function createApp() {
   const promptStore = new PromptFileStore(config.promptsPath);
   promptStore.ensureDirectories();
 
-  // Skills file store
+  // Skills file stores
   const skillStore = new SkillFileStore(config.skillsPath);
   skillStore.ensureDirectory();
+  const builtinSkillStore = new BuiltinSkillStore(
+    path.resolve(import.meta.dirname, 'skills/builtin'),
+  );
 
   // Copilot SDK
   const clientManager = new ClientManager({
@@ -70,7 +74,7 @@ export function createApp() {
   app.use('/api/copilot/auth', authMiddleware, createCopilotAuthRoutes(clientManager));
   app.use('/api/prompts', authMiddleware, createPromptsRoutes(promptStore));
   app.use('/api/memory', authMiddleware, createMemoryRoutes(promptStore));
-  app.use('/api/skills', authMiddleware, createSkillsRoutes(skillStore));
+  app.use('/api/skills', authMiddleware, createSkillsRoutes(skillStore, builtinSkillStore));
 
   // Serve static files in production
   if (config.nodeEnv === 'production') {
@@ -88,12 +92,18 @@ export function createApp() {
 
   // StreamManager for background streaming
   const promptComposer = new PromptComposer(promptStore, config.maxPromptLength);
+  const mergedSkillStore = {
+    getSkillDirectories: () => [
+      ...builtinSkillStore.getSkillDirectories(),
+      ...skillStore.getSkillDirectories(),
+    ],
+  };
   const streamManager = StreamManager.getInstance({
     sessionManager,
     repo,
     maxConcurrency: config.maxConcurrency,
     promptComposer,
-    skillStore,
+    skillStore: mergedSkillStore,
   });
 
   // Register WS handlers

@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import type { Server } from 'node:http';
 import { SkillFileStore } from '../../src/skills/file-store.js';
+import { BuiltinSkillStore } from '../../src/skills/builtin-store.js';
 import { createSkillsRoutes } from '../../src/skills/routes.js';
 
 describe('skills routes', () => {
@@ -148,6 +149,141 @@ describe('skills routes', () => {
         body: JSON.stringify({ content: 'hack' }),
       });
       expect(res.status).toBe(400);
+    });
+  });
+});
+
+// --- With builtinStore ---
+describe('skills routes with builtinStore', () => {
+  let tmpDir: string;
+  let builtinDir: string;
+  let userStore: SkillFileStore;
+  let builtinStore: BuiltinSkillStore;
+  let app: express.Express;
+  let server: Server;
+  let baseUrl: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skills-routes-builtin-'));
+    const userDir = path.join(tmpDir, 'user');
+    builtinDir = path.join(tmpDir, 'builtin');
+    fs.mkdirSync(userDir, { recursive: true });
+    fs.mkdirSync(builtinDir, { recursive: true });
+
+    // Create a builtin skill
+    const builtinSkillDir = path.join(builtinDir, 'sys-skill');
+    fs.mkdirSync(builtinSkillDir);
+    fs.writeFileSync(
+      path.join(builtinSkillDir, 'SKILL.md'),
+      '---\nname: sys-skill\ndescription: "A system skill"\n---\n\n# System Skill',
+    );
+
+    userStore = new SkillFileStore(userDir);
+    userStore.ensureDirectory();
+    builtinStore = new BuiltinSkillStore(builtinDir);
+
+    app = express();
+    app.use(express.json());
+    app.use('/api/skills', createSkillsRoutes(userStore, builtinStore));
+
+    server = app.listen(0);
+    const addr = server.address();
+    const port = typeof addr === 'object' && addr ? addr.port : 0;
+    baseUrl = `http://localhost:${port}`;
+  });
+
+  afterEach(() => {
+    server?.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  describe('GET /api/skills (merged)', () => {
+    it('should return builtin and user skills merged with builtin flag', async () => {
+      userStore.writeSkill('user-skill', 'User desc', '# User Skill');
+
+      const res = await fetch(`${baseUrl}/api/skills`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      // Builtin should be first
+      const builtinSkills = body.skills.filter((s: any) => s.builtin === true);
+      const userSkills = body.skills.filter((s: any) => !s.builtin);
+
+      expect(builtinSkills).toHaveLength(1);
+      expect(builtinSkills[0].name).toBe('sys-skill');
+      expect(userSkills).toHaveLength(1);
+      expect(userSkills[0].name).toBe('user-skill');
+    });
+
+    it('should mark user skills with builtin: false', async () => {
+      userStore.writeSkill('my-skill', 'Desc', '# Skill');
+
+      const res = await fetch(`${baseUrl}/api/skills`);
+      const body = await res.json();
+      const userSkill = body.skills.find((s: any) => s.name === 'my-skill');
+      expect(userSkill.builtin).toBe(false);
+    });
+  });
+
+  describe('GET /api/skills/:name (priority)', () => {
+    it('should return builtin skill with builtin: true', async () => {
+      const res = await fetch(`${baseUrl}/api/skills/sys-skill`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.name).toBe('sys-skill');
+      expect(body.builtin).toBe(true);
+    });
+
+    it('should return user skill with builtin: false', async () => {
+      userStore.writeSkill('user-only', 'Desc', '# Content');
+
+      const res = await fetch(`${baseUrl}/api/skills/user-only`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.name).toBe('user-only');
+      expect(body.builtin).toBe(false);
+    });
+  });
+
+  describe('PUT /api/skills/:name (builtin protection)', () => {
+    it('should return 403 when trying to update a builtin skill', async () => {
+      const res = await fetch(`${baseUrl}/api/skills/sys-skill`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'hacked' }),
+      });
+      expect(res.status).toBe(403);
+      const body = await res.json();
+      expect(body.error).toBe('Cannot modify built-in skills');
+    });
+
+    it('should allow creating user skills normally', async () => {
+      const res = await fetch(`${baseUrl}/api/skills/new-user-skill`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: 'New', content: '# New' }),
+      });
+      expect(res.status).toBe(200);
+    });
+  });
+
+  describe('DELETE /api/skills/:name (builtin protection)', () => {
+    it('should return 403 when trying to delete a builtin skill', async () => {
+      const res = await fetch(`${baseUrl}/api/skills/sys-skill`, {
+        method: 'DELETE',
+      });
+      expect(res.status).toBe(403);
+      const body = await res.json();
+      expect(body.error).toBe('Cannot delete built-in skills');
+    });
+
+    it('should allow deleting user skills normally', async () => {
+      userStore.writeSkill('to-delete', 'Del', '# Del');
+
+      const res = await fetch(`${baseUrl}/api/skills/to-delete`, {
+        method: 'DELETE',
+      });
+      expect(res.status).toBe(200);
     });
   });
 });

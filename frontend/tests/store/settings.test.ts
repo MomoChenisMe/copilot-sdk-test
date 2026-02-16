@@ -117,4 +117,34 @@ describe('Store: settings (activePresets + disabledSkills + settingsOpen)', () =
       expect(useAppStore.getState().settingsOpen).toBe(false);
     });
   });
+
+  // === lastSelectedModel ===
+  describe('lastSelectedModel', () => {
+    it('should initialize as null', () => {
+      expect(useAppStore.getState().lastSelectedModel).toBeNull();
+    });
+
+    it('should update state via setLastSelectedModel', () => {
+      useAppStore.getState().setLastSelectedModel('claude-3.5-sonnet');
+      expect(useAppStore.getState().lastSelectedModel).toBe('claude-3.5-sonnet');
+    });
+
+    it('should persist to localStorage on setLastSelectedModel', () => {
+      useAppStore.getState().setLastSelectedModel('gpt-4o');
+      expect(localStorageMock.setItem).toHaveBeenCalledWith(
+        'ai-terminal:lastSelectedModel',
+        'gpt-4o',
+      );
+    });
+
+    it('should allow overwriting with a different model', () => {
+      useAppStore.getState().setLastSelectedModel('gpt-4o');
+      useAppStore.getState().setLastSelectedModel('claude-3.5-sonnet');
+      expect(useAppStore.getState().lastSelectedModel).toBe('claude-3.5-sonnet');
+      expect(localStorageMock.setItem).toHaveBeenLastCalledWith(
+        'ai-terminal:lastSelectedModel',
+        'claude-3.5-sonnet',
+      );
+    });
+  });
 });

@@ -450,6 +450,97 @@ describe('StreamManager', () => {
       expect(received1.length).toBeGreaterThan(0);
       expect(received2.length).toBeGreaterThan(0);
     });
+
+    it('should inject conversationId into eventBuffer events', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+      });
+      await tick();
+
+      fireEvent('assistant.message_delta', {
+        messageId: 'msg-1',
+        deltaContent: 'Hello',
+      });
+      fireEvent('assistant.message', {
+        messageId: 'msg-1',
+        content: 'Hello world',
+      });
+
+      // Subscribe to get catch-up from eventBuffer
+      const received: WsMessage[] = [];
+      sm.subscribe('conv-1', (msg) => received.push(msg));
+
+      // Every buffered event should contain conversationId in data
+      for (const msg of received) {
+        const data = msg.data as Record<string, unknown>;
+        expect(data.conversationId).toBe('conv-1');
+      }
+    });
+
+    it('should inject conversationId into broadcast events', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+      });
+      await tick();
+
+      const received: WsMessage[] = [];
+      sm.subscribe('conv-1', (msg) => received.push(msg));
+
+      // Fire events AFTER subscribing — these go through broadcast
+      fireEvent('assistant.message_delta', {
+        messageId: 'msg-2',
+        deltaContent: 'Hi',
+      });
+      fireEvent('assistant.message', {
+        messageId: 'msg-2',
+        content: 'Hi there',
+      });
+      fireEvent('assistant.tool.start', {
+        toolCallId: 'tc-1',
+        toolName: 'read_file',
+        arguments: { path: '/tmp' },
+      });
+      fireEvent('assistant.tool.end', {
+        toolCallId: 'tc-1',
+        success: true,
+        result: 'done',
+      });
+
+      // All broadcast events should contain conversationId
+      for (const msg of received) {
+        const data = msg.data as Record<string, unknown>;
+        expect(data.conversationId).toBe('conv-1');
+      }
+    });
+
+    it('should inject correct conversationId for different conversations', async () => {
+      await sm.startStream('conv-A', {
+        prompt: 'hello A',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+      });
+      await tick();
+
+      const receivedA: WsMessage[] = [];
+      sm.subscribe('conv-A', (msg) => receivedA.push(msg));
+
+      fireEvent('assistant.message_delta', {
+        messageId: 'msg-A',
+        deltaContent: 'Response A',
+      });
+
+      for (const msg of receivedA) {
+        const data = msg.data as Record<string, unknown>;
+        expect(data.conversationId).toBe('conv-A');
+      }
+    });
   });
 
   // === 5.6 shutdownAll ===

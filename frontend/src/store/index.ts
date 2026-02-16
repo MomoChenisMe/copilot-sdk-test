@@ -10,6 +10,22 @@ export interface ModelInfo {
   name: string;
 }
 
+export interface TabState {
+  id: string;
+  conversationId: string;
+  title: string;
+  messages: Message[];
+  streamingText: string;
+  isStreaming: boolean;
+  toolRecords: ToolRecord[];
+  reasoningText: string;
+  turnContentSegments: string[];
+  turnSegments: TurnSegment[];
+  copilotError: string | null;
+  messagesLoaded: boolean;
+  createdAt: number;
+}
+
 export interface AppState {
   // Theme
   theme: Theme;
@@ -98,6 +114,10 @@ export interface AppState {
   updateStreamStatus: (conversationId: string, status: string) => void;
   removeStream: (conversationId: string) => void;
 
+  // Model memory
+  lastSelectedModel: string | null;
+  setLastSelectedModel: (modelId: string) => void;
+
   // Actions — Settings
   togglePreset: (name: string) => void;
   removePreset: (name: string) => void;
@@ -106,6 +126,35 @@ export interface AppState {
 
   // Actions — Error
   setCopilotError: (error: string | null) => void;
+
+  // Tab state
+  tabs: Record<string, TabState>;
+  tabOrder: string[];
+  activeTabId: string | null;
+  tabLimitWarning: boolean;
+
+  // Actions — Tab management
+  openTab: (conversationId: string, title: string) => void;
+  closeTab: (tabId: string) => void;
+  setActiveTab: (tabId: string) => void;
+  reorderTabs: (tabIds: string[]) => void;
+  updateTabTitle: (tabId: string, title: string) => void;
+  restoreOpenTabs: () => void;
+  restoreDisabledSkills: () => void;
+
+  // Actions — Per-tab streaming
+  setTabMessages: (tabId: string, messages: Message[]) => void;
+  addTabMessage: (tabId: string, message: Message) => void;
+  appendTabStreamingText: (tabId: string, delta: string) => void;
+  setTabIsStreaming: (tabId: string, streaming: boolean) => void;
+  clearTabStreaming: (tabId: string) => void;
+  addTabToolRecord: (tabId: string, record: ToolRecord) => void;
+  updateTabToolRecord: (tabId: string, toolCallId: string, updates: Partial<ToolRecord>) => void;
+  appendTabReasoningText: (tabId: string, delta: string) => void;
+  addTabTurnContentSegment: (tabId: string, content: string) => void;
+  addTabTurnSegment: (tabId: string, segment: TurnSegment) => void;
+  updateTabToolInTurnSegments: (tabId: string, toolCallId: string, updates: Partial<ToolRecord>) => void;
+  setTabCopilotError: (tabId: string, error: string | null) => void;
 }
 
 function readThemeFromStorage(): Theme {
@@ -157,6 +206,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   activePresets: [],
   disabledSkills: [],
   settingsOpen: false,
+  lastSelectedModel: null,
   copilotError: null,
 
   // Conversation actions
@@ -288,6 +338,242 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setSettingsOpen: (open) => set({ settingsOpen: open }),
 
+  // Model memory
+  setLastSelectedModel: (modelId) => {
+    try { localStorage.setItem('ai-terminal:lastSelectedModel', modelId); } catch { /* noop */ }
+    set({ lastSelectedModel: modelId });
+  },
+
   // Error actions
   setCopilotError: (error) => set({ copilotError: error }),
+
+  // Tab state
+  tabs: {},
+  tabOrder: [],
+  activeTabId: null,
+  tabLimitWarning: false,
+
+  // Tab management actions
+  openTab: (conversationId, title) => {
+    const state = get();
+    // If tab already exists, just activate it
+    if (state.tabs[conversationId]) {
+      set({ activeTabId: conversationId });
+      return;
+    }
+    const tab: TabState = {
+      id: conversationId,
+      conversationId,
+      title,
+      messages: [],
+      streamingText: '',
+      isStreaming: false,
+      toolRecords: [],
+      reasoningText: '',
+      turnContentSegments: [],
+      turnSegments: [],
+      copilotError: null,
+      messagesLoaded: false,
+      createdAt: Date.now(),
+    };
+    const newTabs = { ...state.tabs, [conversationId]: tab };
+    const newOrder = [...state.tabOrder, conversationId];
+    set({ tabs: newTabs, tabOrder: newOrder, activeTabId: conversationId, tabLimitWarning: newOrder.length >= 15 });
+    persistOpenTabs(newTabs, newOrder);
+  },
+
+  closeTab: (tabId) => {
+    const state = get();
+    const { [tabId]: _, ...restTabs } = state.tabs;
+    const newOrder = state.tabOrder.filter((id) => id !== tabId);
+    let nextActiveId = state.activeTabId;
+    if (state.activeTabId === tabId) {
+      const idx = state.tabOrder.indexOf(tabId);
+      nextActiveId = newOrder[Math.min(idx, newOrder.length - 1)] ?? null;
+    }
+    set({ tabs: restTabs, tabOrder: newOrder, activeTabId: nextActiveId, tabLimitWarning: newOrder.length >= 15 });
+    persistOpenTabs(restTabs, newOrder);
+  },
+
+  setActiveTab: (tabId) => set({ activeTabId: tabId }),
+
+  reorderTabs: (tabIds) => {
+    set({ tabOrder: tabIds });
+    persistOpenTabs(get().tabs, tabIds);
+  },
+
+  updateTabTitle: (tabId, title) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return { tabs: { ...state.tabs, [tabId]: { ...tab, title } } };
+    }),
+
+  restoreOpenTabs: () => {
+    try {
+      const raw = localStorage.getItem('ai-terminal:openTabs');
+      if (!raw) return;
+      const saved = JSON.parse(raw) as Array<{ id: string; title: string; conversationId: string }>;
+      if (!Array.isArray(saved) || saved.length === 0) return;
+      const tabs: Record<string, TabState> = {};
+      const tabOrder: string[] = [];
+      for (const item of saved) {
+        tabs[item.id] = {
+          id: item.id,
+          conversationId: item.conversationId,
+          title: item.title,
+          messages: [],
+          streamingText: '',
+          isStreaming: false,
+          toolRecords: [],
+          reasoningText: '',
+          turnContentSegments: [],
+          turnSegments: [],
+          copilotError: null,
+          messagesLoaded: false,
+          createdAt: Date.now(),
+        };
+        tabOrder.push(item.id);
+      }
+      set({ tabs, tabOrder, activeTabId: tabOrder[0] ?? null, tabLimitWarning: tabOrder.length >= 15 });
+    } catch { /* noop — invalid JSON or localStorage unavailable */ }
+  },
+
+  restoreDisabledSkills: () => {
+    try {
+      const raw = localStorage.getItem('ai-terminal:disabledSkills');
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        set({ disabledSkills: parsed });
+      }
+    } catch { /* noop */ }
+  },
+
+  // Per-tab streaming actions
+  setTabMessages: (tabId, messages) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return { tabs: { ...state.tabs, [tabId]: { ...tab, messages, messagesLoaded: true } } };
+    }),
+
+  addTabMessage: (tabId, message) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      if (tab.messages.some((m) => m.id === message.id)) return state;
+      return { tabs: { ...state.tabs, [tabId]: { ...tab, messages: [...tab.messages, message] } } };
+    }),
+
+  appendTabStreamingText: (tabId, delta) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return { tabs: { ...state.tabs, [tabId]: { ...tab, streamingText: tab.streamingText + delta } } };
+    }),
+
+  setTabIsStreaming: (tabId, streaming) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return { tabs: { ...state.tabs, [tabId]: { ...tab, isStreaming: streaming } } };
+    }),
+
+  clearTabStreaming: (tabId) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return {
+        tabs: {
+          ...state.tabs,
+          [tabId]: {
+            ...tab,
+            streamingText: '',
+            isStreaming: false,
+            toolRecords: [],
+            reasoningText: '',
+            turnContentSegments: [],
+            turnSegments: [],
+            copilotError: null,
+          },
+        },
+      };
+    }),
+
+  addTabToolRecord: (tabId, record) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return { tabs: { ...state.tabs, [tabId]: { ...tab, toolRecords: [...tab.toolRecords, record] } } };
+    }),
+
+  updateTabToolRecord: (tabId, toolCallId, updates) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return {
+        tabs: {
+          ...state.tabs,
+          [tabId]: {
+            ...tab,
+            toolRecords: tab.toolRecords.map((r) =>
+              r.toolCallId === toolCallId ? { ...r, ...updates } : r,
+            ),
+          },
+        },
+      };
+    }),
+
+  appendTabReasoningText: (tabId, delta) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return { tabs: { ...state.tabs, [tabId]: { ...tab, reasoningText: tab.reasoningText + delta } } };
+    }),
+
+  addTabTurnContentSegment: (tabId, content) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return { tabs: { ...state.tabs, [tabId]: { ...tab, turnContentSegments: [...tab.turnContentSegments, content] } } };
+    }),
+
+  addTabTurnSegment: (tabId, segment) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return { tabs: { ...state.tabs, [tabId]: { ...tab, turnSegments: [...tab.turnSegments, segment] } } };
+    }),
+
+  updateTabToolInTurnSegments: (tabId, toolCallId, updates) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return {
+        tabs: {
+          ...state.tabs,
+          [tabId]: {
+            ...tab,
+            turnSegments: tab.turnSegments.map((s) =>
+              s.type === 'tool' && s.toolCallId === toolCallId ? { ...s, ...updates } : s,
+            ),
+          },
+        },
+      };
+    }),
+
+  setTabCopilotError: (tabId, error) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return { tabs: { ...state.tabs, [tabId]: { ...tab, copilotError: error } } };
+    }),
 }));
+
+function persistOpenTabs(tabs: Record<string, TabState>, tabOrder: string[]) {
+  try {
+    const data = tabOrder.map((id) => ({ id: tabs[id].id, title: tabs[id].title, conversationId: tabs[id].conversationId }));
+    localStorage.setItem('ai-terminal:openTabs', JSON.stringify(data));
+  } catch { /* noop */ }
+}

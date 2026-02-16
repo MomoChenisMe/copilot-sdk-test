@@ -385,11 +385,17 @@ export class StreamManager extends EventEmitter {
       }
     }
 
-    // Buffer the event
-    stream.eventBuffer.push(msg);
+    // Enrich the event with conversationId so frontend can route it
+    const enrichedMsg: WsMessage = {
+      ...msg,
+      data: { ...((msg.data as Record<string, unknown>) ?? {}), conversationId: stream.conversationId },
+    };
+
+    // Buffer the enriched event
+    stream.eventBuffer.push(enrichedMsg);
 
     // Forward to all subscribers
-    this.broadcast(stream, msg);
+    this.broadcast(stream, enrichedMsg);
   }
 
   private broadcast(stream: ConversationStream, msg: WsMessage): void {

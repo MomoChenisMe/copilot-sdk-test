@@ -1,74 +1,133 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { useAppStore } from '../../../src/store/index';
 import { TabBar } from '../../../src/components/layout/TabBar';
 
 // Mock lucide-react icons
 vi.mock('lucide-react', () => ({
-  Sparkles: (props: any) => <svg data-testid="sparkles-icon" {...props} />,
-  TerminalSquare: (props: any) => <svg data-testid="terminal-icon" {...props} />,
+  Plus: (props: any) => <svg data-testid="plus-icon" {...props} />,
+  X: (props: any) => <svg data-testid="x-icon" {...props} />,
+  AlertTriangle: (props: any) => <svg data-testid="alert-triangle-icon" {...props} />,
 }));
 
 describe('TabBar', () => {
   const defaultProps = {
-    activeTab: 'copilot' as const,
-    onTabChange: vi.fn(),
+    onNewTab: vi.fn(),
+    onSelectTab: vi.fn(),
+    onCloseTab: vi.fn(),
   };
 
-  it('renders Copilot and Terminal tabs', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAppStore.setState({
+      tabs: {},
+      tabOrder: [],
+      activeTabId: null,
+      activeStreams: {},
+      tabLimitWarning: false,
+    });
+  });
+
+  it('should render "+" button when no tabs exist', () => {
     render(<TabBar {...defaultProps} />);
-    expect(screen.getByText('Copilot')).toBeTruthy();
-    expect(screen.getByText('Terminal')).toBeTruthy();
+    expect(screen.getByTestId('new-tab-button')).toBeTruthy();
   });
 
-  it('renders Sparkles icon for Copilot tab', () => {
+  it('should render tab items for each tab in tabOrder', () => {
+    useAppStore.getState().openTab('conv-1', 'Chat 1');
+    useAppStore.getState().openTab('conv-2', 'Chat 2');
     render(<TabBar {...defaultProps} />);
-    expect(screen.getByTestId('sparkles-icon')).toBeTruthy();
+    expect(screen.getByTestId('tab-conv-1')).toBeTruthy();
+    expect(screen.getByTestId('tab-conv-2')).toBeTruthy();
   });
 
-  it('renders TerminalSquare icon for Terminal tab', () => {
+  it('should display tab titles', () => {
+    useAppStore.getState().openTab('conv-1', 'My Chat');
     render(<TabBar {...defaultProps} />);
-    expect(screen.getByTestId('terminal-icon')).toBeTruthy();
+    expect(screen.getByText('My Chat')).toBeTruthy();
   });
 
-  it('applies active styles to Copilot tab when active', () => {
-    render(<TabBar {...defaultProps} activeTab="copilot" />);
-    const copilotBtn = screen.getByText('Copilot').closest('button');
-    expect(copilotBtn?.className).toContain('text-accent');
-    expect(copilotBtn?.className).toContain('bg-accent-soft');
+  it('should apply active styles to the active tab', () => {
+    useAppStore.getState().openTab('conv-1', 'Chat 1');
+    useAppStore.getState().openTab('conv-2', 'Chat 2');
+    useAppStore.getState().setActiveTab('conv-1');
+    render(<TabBar {...defaultProps} />);
+    const tab1 = screen.getByTestId('tab-conv-1');
+    expect(tab1.className).toContain('text-accent');
+    expect(tab1.className).toContain('bg-accent-soft');
   });
 
-  it('applies inactive styles to Terminal tab when copilot is active', () => {
-    render(<TabBar {...defaultProps} activeTab="copilot" />);
-    const terminalBtn = screen.getByText('Terminal').closest('button');
-    expect(terminalBtn?.className).toContain('text-text-muted');
+  it('should apply inactive styles to non-active tabs', () => {
+    useAppStore.getState().openTab('conv-1', 'Chat 1');
+    useAppStore.getState().openTab('conv-2', 'Chat 2');
+    useAppStore.getState().setActiveTab('conv-1');
+    render(<TabBar {...defaultProps} />);
+    const tab2 = screen.getByTestId('tab-conv-2');
+    expect(tab2.className).toContain('text-text-muted');
   });
 
-  it('applies active styles to Terminal tab when active', () => {
-    render(<TabBar {...defaultProps} activeTab="terminal" />);
-    const terminalBtn = screen.getByText('Terminal').closest('button');
-    expect(terminalBtn?.className).toContain('text-accent');
-    expect(terminalBtn?.className).toContain('bg-accent-soft');
+  it('should show streaming pulse indicator for active-streamed tabs', () => {
+    useAppStore.getState().openTab('conv-1', 'Chat 1');
+    useAppStore.setState({ activeStreams: { 'conv-1': 'running' } });
+    render(<TabBar {...defaultProps} />);
+    expect(screen.getByTestId('tab-streaming-conv-1')).toBeTruthy();
   });
 
-  it('calls onTabChange with "copilot" when Copilot tab is clicked', () => {
-    const onTabChange = vi.fn();
-    render(<TabBar {...defaultProps} onTabChange={onTabChange} activeTab="terminal" />);
-    fireEvent.click(screen.getByText('Copilot'));
-    expect(onTabChange).toHaveBeenCalledWith('copilot');
+  it('should NOT show streaming indicator for non-streaming tabs', () => {
+    useAppStore.getState().openTab('conv-1', 'Chat 1');
+    render(<TabBar {...defaultProps} />);
+    expect(screen.queryByTestId('tab-streaming-conv-1')).toBeNull();
   });
 
-  it('calls onTabChange with "terminal" when Terminal tab is clicked', () => {
-    const onTabChange = vi.fn();
-    render(<TabBar {...defaultProps} onTabChange={onTabChange} />);
-    fireEvent.click(screen.getByText('Terminal'));
-    expect(onTabChange).toHaveBeenCalledWith('terminal');
+  it('should call onSelectTab when a tab is clicked', () => {
+    useAppStore.getState().openTab('conv-1', 'Chat 1');
+    render(<TabBar {...defaultProps} />);
+    fireEvent.click(screen.getByTestId('tab-conv-1'));
+    expect(defaultProps.onSelectTab).toHaveBeenCalledWith('conv-1');
   });
 
-  it('has h-10 height and border-b border-border-subtle', () => {
+  it('should call onCloseTab when close button is clicked', () => {
+    useAppStore.getState().openTab('conv-1', 'Chat 1');
+    render(<TabBar {...defaultProps} />);
+    fireEvent.click(screen.getByTestId('tab-close-conv-1'));
+    expect(defaultProps.onCloseTab).toHaveBeenCalledWith('conv-1');
+  });
+
+  it('should call onNewTab when + button is clicked', () => {
+    render(<TabBar {...defaultProps} />);
+    fireEvent.click(screen.getByTestId('new-tab-button'));
+    expect(defaultProps.onNewTab).toHaveBeenCalled();
+  });
+
+  it('should close tab on middle-click (auxclick button=1)', () => {
+    useAppStore.getState().openTab('conv-1', 'Chat 1');
+    render(<TabBar {...defaultProps} />);
+    fireEvent(screen.getByTestId('tab-conv-1'), new MouseEvent('auxclick', { button: 1, bubbles: true }));
+    expect(defaultProps.onCloseTab).toHaveBeenCalledWith('conv-1');
+  });
+
+  it('should have h-10 height and border-b', () => {
     const { container } = render(<TabBar {...defaultProps} />);
     const tabBar = container.firstChild as HTMLElement;
     expect(tabBar.className).toContain('h-10');
     expect(tabBar.className).toContain('border-b');
-    expect(tabBar.className).toContain('border-border-subtle');
+  });
+
+  it('should have overflow-x-auto for horizontal scrolling', () => {
+    const { container } = render(<TabBar {...defaultProps} />);
+    const tabBar = container.firstChild as HTMLElement;
+    expect(tabBar.className).toContain('overflow-x-auto');
+  });
+
+  it('should show tab limit warning when tabLimitWarning is true', () => {
+    useAppStore.setState({ tabLimitWarning: true });
+    render(<TabBar {...defaultProps} />);
+    expect(screen.getByTestId('tab-limit-warning')).toBeTruthy();
+  });
+
+  it('should not show tab limit warning when tabLimitWarning is false', () => {
+    useAppStore.setState({ tabLimitWarning: false });
+    render(<TabBar {...defaultProps} />);
+    expect(screen.queryByTestId('tab-limit-warning')).toBeNull();
   });
 });

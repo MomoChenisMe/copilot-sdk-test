@@ -625,7 +625,7 @@ function SkillsTab() {
     if (!newName.trim() || INVALID_NAME_RE.test(newName.trim())) return;
     try {
       await skillsApi.put(newName.trim(), newDescription, newContent);
-      setSkills((prev) => [...prev, { name: newName.trim(), description: newDescription, content: newContent }]);
+      setSkills((prev) => [...prev, { name: newName.trim(), description: newDescription, content: newContent, builtin: false }]);
       setNewName('');
       setNewDescription('');
       setNewContent('');
@@ -678,7 +678,10 @@ function SkillsTab() {
 
   if (loading) return <div className="text-text-secondary text-sm">{t('settings.loading')}</div>;
 
-  if (skills.length === 0 && !showCreate) {
+  const systemSkills = skills.filter((s) => s.builtin);
+  const userSkills = skills.filter((s) => !s.builtin);
+
+  if (userSkills.length === 0 && systemSkills.length === 0 && !showCreate) {
     return (
       <div className="flex flex-col items-center justify-center py-8 text-center">
         <p className="text-sm text-text-secondary mb-4">{t('settings.skills.empty')}</p>
@@ -694,110 +697,173 @@ function SkillsTab() {
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      {/* Skill list */}
-      {skills.map((skill) => (
-        <div key={skill.name} className="border border-border rounded-lg overflow-hidden">
-          <div className="flex items-center gap-2 px-3 py-2">
-            {/* Toggle switch — enabled means NOT in disabledSkills */}
-            <button
-              data-testid={`skill-toggle-${skill.name}`}
-              role="switch"
-              aria-checked={!disabledSkills.includes(skill.name)}
-              onClick={() => toggleSkill(skill.name)}
-              className={`shrink-0 w-8 h-4 rounded-full relative transition-colors ${
-                !disabledSkills.includes(skill.name) ? 'bg-accent' : 'bg-bg-tertiary'
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
-                  !disabledSkills.includes(skill.name) ? 'translate-x-4' : 'translate-x-0.5'
-                }`}
-              />
-            </button>
+    <div className="flex flex-col gap-4">
+      {/* System Skills Section */}
+      {systemSkills.length > 0 && (
+        <div data-testid="system-skills-section" className="flex flex-col gap-2">
+          <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">{t('settings.skills.system')}</h3>
+          {systemSkills.map((skill) => (
+            <div key={skill.name} className="border border-border rounded-lg overflow-hidden">
+              <div className="flex items-center gap-2 px-3 py-2">
+                {/* Toggle switch */}
+                <button
+                  data-testid={`skill-toggle-${skill.name}`}
+                  role="switch"
+                  aria-checked={!disabledSkills.includes(skill.name)}
+                  onClick={() => toggleSkill(skill.name)}
+                  className={`shrink-0 w-8 h-4 rounded-full relative transition-colors ${
+                    !disabledSkills.includes(skill.name) ? 'bg-accent' : 'bg-bg-tertiary'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
+                      !disabledSkills.includes(skill.name) ? 'translate-x-4' : 'translate-x-0.5'
+                    }`}
+                  />
+                </button>
 
-            {/* Name + description + expand */}
-            <button
-              data-testid={`skill-expand-${skill.name}`}
-              onClick={() => handleExpand(skill.name, skill.description, skill.content)}
-              className="flex-1 text-left min-w-0"
-            >
-              <div className="text-sm text-text-primary hover:text-accent truncate">{skill.name}</div>
-              {skill.description && (
-                <div className="text-xs text-text-secondary truncate">{skill.description}</div>
-              )}
-            </button>
-
-            {/* Delete */}
-            <button
-              data-testid={`skill-delete-${skill.name}`}
-              onClick={() => setConfirmDelete(skill.name)}
-              className="shrink-0 p-1 text-text-secondary hover:text-error"
-            >
-              <X size={14} />
-            </button>
-          </div>
-
-          {/* Expanded edit area */}
-          {expandedSkill === skill.name && (
-            <div className="px-3 pb-3 flex flex-col gap-2 border-t border-border-subtle mt-0">
-              <label className="text-xs font-medium text-text-secondary mt-2">{t('settings.skills.description')}</label>
-              <input
-                type="text"
-                value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
-                className="w-full p-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-primary"
-              />
-              <div className="flex items-center gap-2">
-                <label className="text-xs font-medium text-text-secondary">{t('settings.skills.content')}</label>
-                <div className="flex gap-1 ml-auto">
-                  <button
-                    data-testid="skill-edit-button"
-                    onClick={() => setShowPreview(false)}
-                    className={`px-2 py-0.5 text-xs rounded ${!showPreview ? 'bg-accent text-white' : 'text-text-secondary hover:text-text-primary'}`}
-                  >
-                    {t('settings.skills.edit')}
-                  </button>
-                  <button
-                    data-testid="skill-preview-button"
-                    onClick={() => setShowPreview(true)}
-                    className={`px-2 py-0.5 text-xs rounded ${showPreview ? 'bg-accent text-white' : 'text-text-secondary hover:text-text-primary'}`}
-                  >
-                    {t('settings.skills.preview')}
-                  </button>
-                </div>
+                {/* Name + description + expand */}
+                <button
+                  data-testid={`skill-expand-${skill.name}`}
+                  onClick={() => handleExpand(skill.name, skill.description, skill.content)}
+                  className="flex-1 text-left min-w-0"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm text-text-primary hover:text-accent truncate">{skill.name}</span>
+                    <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-medium bg-accent/10 text-accent rounded">{t('settings.skills.systemBadge')}</span>
+                  </div>
+                  {skill.description && (
+                    <div className="text-xs text-text-secondary truncate">{skill.description}</div>
+                  )}
+                </button>
               </div>
-              {showPreview ? (
-                <div data-testid="skill-preview-content" className="w-full min-h-[8rem] p-2 bg-bg-secondary border border-border rounded-lg overflow-auto">
-                  <Markdown content={editContent} />
+
+              {/* Expanded preview area (read-only for builtin) */}
+              {expandedSkill === skill.name && (
+                <div className="px-3 pb-3 flex flex-col gap-2 border-t border-border-subtle mt-0">
+                  {skill.description && (
+                    <>
+                      <label className="text-xs font-medium text-text-secondary mt-2">{t('settings.skills.description')}</label>
+                      <p className="text-sm text-text-primary">{skill.description}</p>
+                    </>
+                  )}
+                  <label className="text-xs font-medium text-text-secondary">{t('settings.skills.content')}</label>
+                  <div data-testid="skill-preview-content" className="w-full min-h-[8rem] p-2 bg-bg-secondary border border-border rounded-lg overflow-auto">
+                    <Markdown content={skill.content} />
+                  </div>
                 </div>
-              ) : (
-                <textarea
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  className="w-full h-32 p-2 text-sm bg-bg-secondary border border-border rounded-lg resize-y font-mono text-text-primary"
-                />
               )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* User Skills Section */}
+      <div data-testid="user-skills-section" className="flex flex-col gap-2">
+        <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">{t('settings.skills.user')}</h3>
+        {userSkills.map((skill) => (
+          <div key={skill.name} className="border border-border rounded-lg overflow-hidden">
+            <div className="flex items-center gap-2 px-3 py-2">
+              {/* Toggle switch */}
               <button
-                data-testid="save-skill"
-                onClick={handleSave}
-                className="self-start px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
+                data-testid={`skill-toggle-${skill.name}`}
+                role="switch"
+                aria-checked={!disabledSkills.includes(skill.name)}
+                onClick={() => toggleSkill(skill.name)}
+                className={`shrink-0 w-8 h-4 rounded-full relative transition-colors ${
+                  !disabledSkills.includes(skill.name) ? 'bg-accent' : 'bg-bg-tertiary'
+                }`}
               >
-                {t('settings.save')}
+                <span
+                  className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
+                    !disabledSkills.includes(skill.name) ? 'translate-x-4' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+
+              {/* Name + description + expand */}
+              <button
+                data-testid={`skill-expand-${skill.name}`}
+                onClick={() => handleExpand(skill.name, skill.description, skill.content)}
+                className="flex-1 text-left min-w-0"
+              >
+                <div className="text-sm text-text-primary hover:text-accent truncate">{skill.name}</div>
+                {skill.description && (
+                  <div className="text-xs text-text-secondary truncate">{skill.description}</div>
+                )}
+              </button>
+
+              {/* Delete */}
+              <button
+                data-testid={`skill-delete-${skill.name}`}
+                onClick={() => setConfirmDelete(skill.name)}
+                className="shrink-0 p-1 text-text-secondary hover:text-error"
+              >
+                <X size={14} />
               </button>
             </div>
-          )}
-        </div>
-      ))}
 
-      {/* New Skill button */}
-      <button
-        data-testid="new-skill-button"
-        onClick={() => setShowCreate(!showCreate)}
-        className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90 self-start"
-      >
-        {t('settings.skills.newSkill')}
-      </button>
+            {/* Expanded edit area */}
+            {expandedSkill === skill.name && (
+              <div className="px-3 pb-3 flex flex-col gap-2 border-t border-border-subtle mt-0">
+                <label className="text-xs font-medium text-text-secondary mt-2">{t('settings.skills.description')}</label>
+                <input
+                  type="text"
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  className="w-full p-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-primary"
+                />
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-medium text-text-secondary">{t('settings.skills.content')}</label>
+                  <div className="flex gap-1 ml-auto">
+                    <button
+                      data-testid="skill-edit-button"
+                      onClick={() => setShowPreview(false)}
+                      className={`px-2 py-0.5 text-xs rounded ${!showPreview ? 'bg-accent text-white' : 'text-text-secondary hover:text-text-primary'}`}
+                    >
+                      {t('settings.skills.edit')}
+                    </button>
+                    <button
+                      data-testid="skill-preview-button"
+                      onClick={() => setShowPreview(true)}
+                      className={`px-2 py-0.5 text-xs rounded ${showPreview ? 'bg-accent text-white' : 'text-text-secondary hover:text-text-primary'}`}
+                    >
+                      {t('settings.skills.preview')}
+                    </button>
+                  </div>
+                </div>
+                {showPreview ? (
+                  <div data-testid="skill-preview-content" className="w-full min-h-[8rem] p-2 bg-bg-secondary border border-border rounded-lg overflow-auto">
+                    <Markdown content={editContent} />
+                  </div>
+                ) : (
+                  <textarea
+                    value={editContent}
+                    onChange={(e) => setEditContent(e.target.value)}
+                    className="w-full h-32 p-2 text-sm bg-bg-secondary border border-border rounded-lg resize-y font-mono text-text-primary"
+                  />
+                )}
+                <button
+                  data-testid="save-skill"
+                  onClick={handleSave}
+                  className="self-start px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
+                >
+                  {t('settings.save')}
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {/* New Skill button */}
+        <button
+          data-testid="new-skill-button"
+          onClick={() => setShowCreate(!showCreate)}
+          className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90 self-start"
+        >
+          {t('settings.skills.newSkill')}
+        </button>
+      </div>
 
       {/* Create form */}
       {showCreate && (

@@ -235,4 +235,34 @@ describe('Sidebar', () => {
     const dots = container.querySelectorAll('[data-testid^="stream-indicator-"]');
     expect(dots.length).toBe(3);
   });
+
+  // --- Tab marker tests ---
+
+  it('shows tab-open marker for conversations that are open in tabs', () => {
+    const { container } = render(
+      <Sidebar {...defaultProps} openTabIds={['conv-2', 'conv-3']} />,
+    );
+    const marker1 = container.querySelector('[data-testid="tab-marker-conv-1"]');
+    const marker2 = container.querySelector('[data-testid="tab-marker-conv-2"]');
+    const marker3 = container.querySelector('[data-testid="tab-marker-conv-3"]');
+    expect(marker1).toBeNull();
+    expect(marker2).toBeTruthy();
+    expect(marker3).toBeTruthy();
+  });
+
+  it('does not show tab-open marker when openTabIds is empty', () => {
+    const { container } = render(
+      <Sidebar {...defaultProps} openTabIds={[]} />,
+    );
+    const markers = container.querySelectorAll('[data-testid^="tab-marker-"]');
+    expect(markers.length).toBe(0);
+  });
+
+  it('does not show tab-open marker when openTabIds is not provided', () => {
+    const { container } = render(
+      <Sidebar {...defaultProps} />,
+    );
+    const markers = container.querySelectorAll('[data-testid^="tab-marker-"]');
+    expect(markers.length).toBe(0);
+  });
 });

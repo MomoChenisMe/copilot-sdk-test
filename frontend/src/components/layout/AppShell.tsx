@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useConversations } from '../../hooks/useConversations';
-import { useCopilot } from '../../hooks/useCopilot';
+import { useTabCopilot } from '../../hooks/useTabCopilot';
 import { useTerminal } from '../../hooks/useTerminal';
 import { useModels } from '../../hooks/useModels';
 import { conversationApi } from '../../lib/api';
@@ -14,12 +14,9 @@ import { ChatView } from '../copilot/ChatView';
 import { TerminalView } from '../terminal/TerminalView';
 import { SettingsPanel } from '../settings/SettingsPanel';
 
-type ActiveTab = 'copilot' | 'terminal';
-
 export function AppShell({ onLogout }: { onLogout: () => void }) {
   const { t } = useTranslation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<ActiveTab>('copilot');
   const [cwd] = useState('/home');
 
   const { status, send, subscribe } = useWebSocket(onLogout);
@@ -36,11 +33,16 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
 
   const activeConversationId = useAppStore((s) => s.activeConversationId);
   const setActiveConversationId = useAppStore((s) => s.setActiveConversationId);
-  const isStreaming = useAppStore((s) => s.isStreaming);
-  const setMessages = useAppStore((s) => s.setMessages);
   const models = useAppStore((s) => s.models);
 
-  const { sendMessage, abortMessage } = useCopilot({ subscribe, send });
+  // Tab state
+  const activeTabId = useAppStore((s) => s.activeTabId);
+  const tabs = useAppStore((s) => s.tabs);
+  const openTab = useAppStore((s) => s.openTab);
+  const closeTab = useAppStore((s) => s.closeTab);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
+
+  const { sendMessage, abortMessage, cleanupDedup } = useTabCopilot({ subscribe, send });
 
   const terminalWriteRef = useRef<((data: string) => void) | null>(null);
   const { writeRef, handleData, handleResize, handleReady } = useTerminal({
@@ -86,57 +88,134 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Restore persisted state on mount
+  useEffect(() => {
+    useAppStore.getState().restoreOpenTabs();
+    useAppStore.getState().restoreDisabledSkills();
+    // Sync activeConversationId with restored activeTabId
+    const restoredTabId = useAppStore.getState().activeTabId;
+    if (restoredTabId) {
+      setActiveConversationId(restoredTabId);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleLanguageToggle = useCallback(() => {
     const next = language === 'zh-TW' ? 'en' : 'zh-TW';
     i18n.changeLanguage(next);
     setLanguage(next);
   }, [language, i18n, setLanguage]);
 
-  const activeConversation = conversations.find((c) => c.id === activeConversationId);
-  const defaultModel = models[0]?.id || '';
+  const lastSelectedModel = useAppStore((s) => s.lastSelectedModel);
+  const setLastSelectedModel = useAppStore((s) => s.setLastSelectedModel);
+  const defaultModel = lastSelectedModel || models[0]?.id || '';
 
-  const handleNewConversation = useCallback(async () => {
-    const model = models[0]?.id || 'gpt-4o';
+  // --- Tab management ---
+  const handleNewTab = useCallback(async () => {
+    const model = lastSelectedModel || models[0]?.id || 'gpt-4o';
     const conv = await createConversation(model, cwd);
+    openTab(conv.id, conv.title || t('tabBar.newTab', 'New Chat'));
     setActiveConversationId(conv.id);
     setSidebarOpen(false);
-  }, [createConversation, cwd, setActiveConversationId, models]);
+  }, [createConversation, cwd, openTab, setActiveConversationId, models, lastSelectedModel, t]);
+
+  const handleSelectTab = useCallback(
+    async (tabId: string) => {
+      setActiveTab(tabId);
+      setActiveConversationId(tabId);
+
+      // Lazy-load messages if not yet loaded
+      const tab = useAppStore.getState().tabs[tabId];
+      if (tab && !tab.messagesLoaded) {
+        try {
+          const msgs = await conversationApi.getMessages(tabId);
+          useAppStore.getState().setTabMessages(tabId, msgs);
+        } catch {
+          // ignore
+        }
+      }
+
+      // Subscribe to active stream if exists
+      const activeStreams = useAppStore.getState().activeStreams;
+      if (activeStreams[tabId]) {
+        send({ type: 'copilot:subscribe', data: { conversationId: tabId } });
+      }
+    },
+    [setActiveTab, setActiveConversationId, send],
+  );
+
+  const handleCloseTab = useCallback(
+    (tabId: string) => {
+      closeTab(tabId);
+      cleanupDedup(tabId);
+      // Update activeConversationId to match new activeTabId
+      const newActiveTabId = useAppStore.getState().activeTabId;
+      setActiveConversationId(newActiveTabId);
+    },
+    [closeTab, cleanupDedup, setActiveConversationId],
+  );
+
+  // Legacy: new conversation also opens a tab
+  const handleNewConversation = handleNewTab;
 
   const handleSelectConversation = useCallback(
     async (id: string) => {
+      openTab(id, conversations.find((c) => c.id === id)?.title || 'Chat');
       setActiveConversationId(id);
       setSidebarOpen(false);
-      // Load messages for this conversation
-      try {
-        const msgs = await conversationApi.getMessages(id);
-        setMessages(msgs);
-      } catch {
-        // ignore
+
+      // Lazy-load messages
+      const tab = useAppStore.getState().tabs[id];
+      if (tab && !tab.messagesLoaded) {
+        try {
+          const msgs = await conversationApi.getMessages(id);
+          useAppStore.getState().setTabMessages(id, msgs);
+        } catch {
+          // ignore
+        }
       }
     },
-    [setActiveConversationId, setMessages],
+    [openTab, setActiveConversationId, conversations],
   );
 
   const handleSend = useCallback(
     (text: string) => {
-      if (!activeConversationId) return;
-      sendMessage(activeConversationId, text);
+      if (!activeTabId) return;
+      sendMessage(activeTabId, text);
     },
-    [activeConversationId, sendMessage],
+    [activeTabId, sendMessage],
   );
+
+  const handleAbort = useCallback(() => {
+    if (!activeTabId) return;
+    abortMessage(activeTabId);
+  }, [activeTabId, abortMessage]);
 
   const handleHomeClick = useCallback(() => {
     setActiveConversationId(null);
+    useAppStore.setState({ activeTabId: null });
   }, [setActiveConversationId]);
 
   const handleModelChange = useCallback(
     (modelId: string) => {
-      if (activeConversationId) {
-        updateConversation(activeConversationId, { model: modelId });
+      setLastSelectedModel(modelId);
+      if (activeTabId) {
+        updateConversation(activeTabId, { model: modelId });
       }
     },
-    [activeConversationId, updateConversation],
+    [activeTabId, updateConversation, setLastSelectedModel],
   );
+
+  // WebSocket reconnect: re-subscribe to all active streams
+  useEffect(() => {
+    if (status === 'connected') {
+      // Query active streams on connect
+      send({ type: 'copilot:status', data: {} });
+    }
+  }, [status, send]);
+
+  // Get active tab state for rendering
+  const activeTab = activeTabId ? tabs[activeTabId] : null;
+  const activeConversation = conversations.find((c) => c.id === activeTabId);
 
   return (
     <div className="flex flex-col h-full bg-bg-primary">
@@ -147,31 +226,28 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         onMenuClick={() => setSidebarOpen(!sidebarOpen)}
         onThemeToggle={toggleTheme}
         onHomeClick={handleHomeClick}
-        onNewChat={handleNewConversation}
+        onNewChat={handleNewTab}
         onSettingsClick={() => setSettingsOpen(!settingsOpen)}
       />
 
-      <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
+      <TabBar
+        onNewTab={handleNewTab}
+        onSelectTab={handleSelectTab}
+        onCloseTab={handleCloseTab}
+      />
 
       <div className="flex-1 overflow-hidden relative">
         {/* Main content area */}
-        <div className={`h-full flex flex-col ${activeTab === 'copilot' ? '' : 'hidden'}`}>
+        <div className="h-full flex flex-col">
           <ChatView
+            tabId={activeTabId}
             onNewConversation={handleNewConversation}
             onSend={handleSend}
-            onAbort={abortMessage}
-            isStreaming={isStreaming}
-            disabled={!activeConversationId}
+            onAbort={handleAbort}
+            isStreaming={activeTab?.isStreaming ?? false}
+            disabled={!activeTabId}
             currentModel={activeConversation?.model || defaultModel}
             onModelChange={handleModelChange}
-          />
-        </div>
-        <div className={`h-full ${activeTab === 'terminal' ? '' : 'hidden'}`}>
-          <TerminalView
-            onData={handleData}
-            onResize={handleResize}
-            onReady={handleReady}
-            writeRef={writeRef}
           />
         </div>
       </div>
@@ -187,11 +263,16 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         conversations={conversations}
-        activeConversationId={activeConversationId}
+        activeConversationId={activeTabId}
+        openTabIds={Object.keys(tabs)}
         onSelect={handleSelectConversation}
-        onCreate={handleNewConversation}
+        onCreate={handleNewTab}
         onDelete={async (id) => {
           await removeConversation(id);
+          // Close the tab if it's open
+          if (tabs[id]) {
+            handleCloseTab(id);
+          }
           if (activeConversationId === id) setActiveConversationId(null);
         }}
         onPin={async (id, pinned) => {
@@ -199,6 +280,8 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         }}
         onRename={async (id, title) => {
           await updateConversation(id, { title });
+          // Update tab title too
+          useAppStore.getState().updateTabTitle(id, title);
         }}
         onSearch={searchConversations}
         language={language}

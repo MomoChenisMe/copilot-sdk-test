@@ -14,6 +14,7 @@ import { Input } from '../shared/Input';
 const INLINE_RESULT_TOOLS = ['bash', 'shell', 'execute', 'run'];
 
 interface ChatViewProps {
+  tabId?: string | null;
   onNewConversation: () => void;
   onSend: (text: string) => void;
   onAbort: () => void;
@@ -24,6 +25,7 @@ interface ChatViewProps {
 }
 
 export function ChatView({
+  tabId,
   onNewConversation,
   onSend,
   onAbort,
@@ -34,12 +36,22 @@ export function ChatView({
 }: ChatViewProps) {
   const { t } = useTranslation();
   const activeConversationId = useAppStore((s) => s.activeConversationId);
-  const messages = useAppStore((s) => s.messages);
-  const streamingText = useAppStore((s) => s.streamingText);
-  const toolRecords = useAppStore((s) => s.toolRecords);
-  const reasoningText = useAppStore((s) => s.reasoningText);
-  const turnSegments = useAppStore((s) => s.turnSegments);
-  const copilotError = useAppStore((s) => s.copilotError);
+
+  // Always call all hooks unconditionally (Rules of Hooks), then pick the right value
+  const tab = useAppStore((s) => tabId ? s.tabs[tabId] : null);
+  const globalMessages = useAppStore((s) => s.messages);
+  const globalStreamingText = useAppStore((s) => s.streamingText);
+  const globalToolRecords = useAppStore((s) => s.toolRecords);
+  const globalReasoningText = useAppStore((s) => s.reasoningText);
+  const globalTurnSegments = useAppStore((s) => s.turnSegments);
+  const globalCopilotError = useAppStore((s) => s.copilotError);
+
+  const messages = tab?.messages ?? globalMessages;
+  const streamingText = tab?.streamingText ?? globalStreamingText;
+  const toolRecords = tab?.toolRecords ?? globalToolRecords;
+  const reasoningText = tab?.reasoningText ?? globalReasoningText;
+  const turnSegments = tab?.turnSegments ?? globalTurnSegments;
+  const copilotError = tab?.copilotError ?? globalCopilotError;
   const activePresets = useAppStore((s) => s.activePresets);
   const removePreset = useAppStore((s) => s.removePreset);
 
@@ -62,8 +74,8 @@ export function ChatView({
 
   const showStreamingBlock = isStreaming || streamingText || toolRecords.length > 0 || turnSegments.length > 0 || copilotError;
 
-  // Welcome screen — no active conversation
-  if (!activeConversationId) {
+  // Welcome screen — no active conversation/tab
+  if (!tabId && !activeConversationId) {
     return (
       <div className="flex flex-col h-full">
         <div className="flex-1 overflow-y-auto flex items-center justify-center">
