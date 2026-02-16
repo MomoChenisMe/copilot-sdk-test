@@ -16,10 +16,12 @@ export interface CreateSessionOptions {
   systemMessage?: SystemMessage;
   skillDirectories?: string[];
   disabledSkills?: string[];
+  tools?: any[];
 }
 
 export interface ResumeSessionOptions {
   systemMessage?: SystemMessage;
+  tools?: any[];
 }
 
 export interface GetOrCreateSessionOptions {
@@ -29,6 +31,7 @@ export interface GetOrCreateSessionOptions {
   systemMessage?: SystemMessage;
   skillDirectories?: string[];
   disabledSkills?: string[];
+  tools?: any[];
 }
 
 export class SessionManager {
@@ -58,6 +61,10 @@ export class SessionManager {
       sessionConfig.disabledSkills = options.disabledSkills;
     }
 
+    if (options.tools) {
+      sessionConfig.tools = options.tools;
+    }
+
     const session = await client.createSession(sessionConfig as any);
 
     log.info({ sessionId: session.sessionId }, 'SDK session created');
@@ -77,6 +84,10 @@ export class SessionManager {
       resumeConfig.systemMessage = options.systemMessage;
     }
 
+    if (options?.tools) {
+      resumeConfig.tools = options.tools;
+    }
+
     const session = await client.resumeSession(sdkSessionId, resumeConfig as any);
 
     return session;
@@ -86,6 +97,7 @@ export class SessionManager {
     if (options.sdkSessionId) {
       return this.resumeSession(options.sdkSessionId, {
         systemMessage: options.systemMessage,
+        tools: options.tools,
       });
     }
     return this.createSession({
@@ -94,12 +106,17 @@ export class SessionManager {
       systemMessage: options.systemMessage,
       skillDirectories: options.skillDirectories,
       disabledSkills: options.disabledSkills,
+      tools: options.tools,
     });
   }
 
-  async sendMessage(session: CopilotSession, prompt: string): Promise<string> {
-    log.info({ sessionId: session.sessionId, promptLength: prompt.length }, 'Sending message');
-    return session.send({ prompt });
+  async sendMessage(session: CopilotSession, prompt: string, files?: Array<{ id: string; originalName: string; mimeType: string; size: number; path: string }>): Promise<string> {
+    log.info({ sessionId: session.sessionId, promptLength: prompt.length, filesCount: files?.length ?? 0 }, 'Sending message');
+    const sendOptions: Record<string, unknown> = { prompt };
+    if (files && files.length > 0) {
+      sendOptions.files = files.map((f) => ({ path: f.path, mimeType: f.mimeType }));
+    }
+    return session.send(sendOptions as any);
   }
 
   async abortMessage(session: CopilotSession): Promise<void> {

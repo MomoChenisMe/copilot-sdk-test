@@ -48,6 +48,7 @@ export function createCopilotHandler(
             try {
               const activePresets = (payload.activePresets as string[]) ?? [];
               const disabledSkills = (payload.disabledSkills as string[]) ?? [];
+              const files = (payload.files as Array<{ id: string; originalName: string; mimeType: string; size: number; path: string }>) ?? undefined;
               await streamManager.startStream(conversationId, {
                 prompt,
                 sdkSessionId: conversation.sdkSessionId,
@@ -55,6 +56,7 @@ export function createCopilotHandler(
                 cwd: conversation.cwd,
                 activePresets,
                 disabledSkills,
+                files,
               });
 
               // Auto-subscribe this connection to the stream

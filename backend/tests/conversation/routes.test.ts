@@ -160,6 +160,20 @@ describe('conversation routes', () => {
       expect(body.model).toBe('claude-sonnet-4-5');
     });
 
+    it('should update cwd', async () => {
+      const conv = repo.create({ model: 'gpt-5', cwd: '/tmp' });
+
+      const res = await fetch(`${baseUrl}/api/conversations/${conv.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cwd: '/home/user/new-project' }),
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.cwd).toBe('/home/user/new-project');
+    });
+
     it('should return 404 for nonexistent id', async () => {
       const res = await fetch(`${baseUrl}/api/conversations/nonexistent`, {
         method: 'PATCH',

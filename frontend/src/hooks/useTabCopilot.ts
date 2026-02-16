@@ -16,6 +16,12 @@ interface ConversationDedup {
   receivedMessage: boolean;
 }
 
+/** Scan all tabs to find the tabId that has the given conversationId */
+function findTabIdByConversationId(conversationId: string): string | undefined {
+  const tabs = useAppStore.getState().tabs;
+  return Object.keys(tabs).find((id) => tabs[id].conversationId === conversationId);
+}
+
 export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
   // Per-conversation dedup maps
   const dedupMapRef = useRef<Map<string, ConversationDedup>>(new Map());
@@ -58,19 +64,19 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
         }
       }
 
-      // Scoped events — need conversationId + matching tab
+      // Scoped events — need conversationId + matching tab (scan by conversationId)
       if (!conversationId) return;
 
-      const state = useAppStore.getState();
-      const tab = state.tabs[conversationId];
-      if (!tab) return; // No matching tab, silently discard
+      const tabId = findTabIdByConversationId(conversationId);
+      if (!tabId) return; // No matching tab, silently discard
 
+      const state = useAppStore.getState();
       const dedup = getDedup(conversationId);
 
       switch (msg.type) {
         case 'copilot:delta':
-          state.setTabIsStreaming(conversationId, true);
-          state.appendTabStreamingText(conversationId, data.content as string);
+          state.setTabIsStreaming(tabId, true);
+          state.appendTabStreamingText(tabId, data.content as string);
           break;
 
         case 'copilot:message': {
@@ -82,14 +88,14 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
 
           if (content) {
             dedup.receivedMessage = true;
-            state.addTabTurnContentSegment(conversationId, content);
-            state.addTabTurnSegment(conversationId, { type: 'text', content });
+            state.addTabTurnContentSegment(tabId, content);
+            state.addTabTurnSegment(tabId, { type: 'text', content });
           }
           // Clear streamingText when a message event arrives
           useAppStore.setState((s) => {
-            const t = s.tabs[conversationId];
+            const t = s.tabs[tabId];
             if (!t) return s;
-            return { tabs: { ...s.tabs, [conversationId]: { ...t, streamingText: '' } } };
+            return { tabs: { ...s.tabs, [tabId]: { ...t, streamingText: '' } } };
           });
           break;
         }
@@ -101,13 +107,13 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
           if (toolCallId && dedup.seenToolCallIds.has(toolCallId)) break;
           if (toolCallId) dedup.seenToolCallIds.add(toolCallId);
 
-          state.addTabToolRecord(conversationId, {
+          state.addTabToolRecord(tabId, {
             toolCallId,
             toolName,
             arguments: data.arguments,
             status: 'running',
           });
-          state.addTabTurnSegment(conversationId, {
+          state.addTabTurnSegment(tabId, {
             type: 'tool',
             toolCallId,
             toolName,
@@ -119,7 +125,7 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
 
         case 'copilot:tool_end': {
           const toolCallId = data.toolCallId as string;
-          const currentTab = useAppStore.getState().tabs[conversationId];
+          const currentTab = useAppStore.getState().tabs[tabId];
           if (!currentTab?.toolRecords.find((r) => r.toolCallId === toolCallId)) break;
 
           const updates = {
@@ -127,15 +133,15 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
             result: data.result as unknown,
             error: data.error as string | undefined,
           };
-          state.updateTabToolRecord(conversationId, toolCallId, updates);
-          state.updateTabToolInTurnSegments(conversationId, toolCallId, updates);
+          state.updateTabToolRecord(tabId, toolCallId, updates);
+          state.updateTabToolInTurnSegments(tabId, toolCallId, updates);
           break;
         }
 
         case 'copilot:reasoning_delta': {
           const reasoningId = data.reasoningId as string | undefined;
           if (reasoningId && dedup.seenReasoningIds.has(reasoningId)) break;
-          state.appendTabReasoningText(conversationId, data.content as string);
+          state.appendTabReasoningText(tabId, data.content as string);
           break;
         }
 
@@ -144,23 +150,23 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
           if (reasoningId && dedup.seenReasoningIds.has(reasoningId)) break;
           if (reasoningId) dedup.seenReasoningIds.add(reasoningId);
 
-          const currentTab = useAppStore.getState().tabs[conversationId];
+          const currentTab = useAppStore.getState().tabs[tabId];
           if (!currentTab) break;
           const content = data.content as string | undefined;
 
           if (!currentTab.reasoningText && content) {
-            state.appendTabReasoningText(conversationId, content);
+            state.appendTabReasoningText(tabId, content);
           }
 
-          const updatedTab = useAppStore.getState().tabs[conversationId];
+          const updatedTab = useAppStore.getState().tabs[tabId];
           if (updatedTab?.reasoningText) {
-            state.addTabTurnSegment(conversationId, { type: 'reasoning', content: updatedTab.reasoningText });
+            state.addTabTurnSegment(tabId, { type: 'reasoning', content: updatedTab.reasoningText });
           }
           break;
         }
 
         case 'copilot:idle': {
-          const currentTab = useAppStore.getState().tabs[conversationId];
+          const currentTab = useAppStore.getState().tabs[tabId];
           if (!currentTab) break;
 
           // Determine content
@@ -188,7 +194,7 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
 
           // Create consolidated message
           if (content || metadata) {
-            state.addTabMessage(conversationId, {
+            state.addTabMessage(tabId, {
               id: crypto.randomUUID(),
               conversationId,
               role: 'assistant',
@@ -200,15 +206,15 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
 
           // Remove from active streams
           state.removeStream(conversationId);
-          state.setTabIsStreaming(conversationId, false);
-          state.clearTabStreaming(conversationId);
+          state.setTabIsStreaming(tabId, false);
+          state.clearTabStreaming(tabId);
           dedup.receivedMessage = false;
           break;
         }
 
         case 'copilot:error':
-          state.setTabCopilotError(conversationId, data.message as string);
-          state.setTabIsStreaming(conversationId, false);
+          state.setTabCopilotError(tabId, data.message as string);
+          state.setTabIsStreaming(tabId, false);
           break;
       }
     });
@@ -216,18 +222,24 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
     return unsub;
   }, [subscribe]);
 
+  // sendMessage now takes tabId, resolves conversationId from tab state
   const sendMessage = useCallback(
-    (conversationId: string, prompt: string) => {
+    (tabId: string, prompt: string, files?: Array<{ id: string; originalName: string; mimeType: string; size: number; path: string }>) => {
       const state = useAppStore.getState();
-      state.clearTabStreaming(conversationId);
-      state.setTabIsStreaming(conversationId, true);
+      const tab = state.tabs[tabId];
+      if (!tab) return;
+
+      const conversationId = tab.conversationId;
+
+      state.clearTabStreaming(tabId);
+      state.setTabIsStreaming(tabId, true);
 
       // Reset per-conversation receivedMessage flag
       const dedup = getDedup(conversationId);
       dedup.receivedMessage = false;
 
       // Add user message to tab
-      state.addTabMessage(conversationId, {
+      state.addTabMessage(tabId, {
         id: crypto.randomUUID(),
         conversationId,
         role: 'user',
@@ -237,9 +249,13 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
       });
 
       const { activePresets, disabledSkills } = state;
+      const data: Record<string, unknown> = { conversationId, prompt, activePresets, disabledSkills };
+      if (files && files.length > 0) {
+        data.files = files;
+      }
       send({
         type: 'copilot:send',
-        data: { conversationId, prompt, activePresets, disabledSkills },
+        data,
       });
     },
     [send],

@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Sun, Moon, Menu, Plus, Settings } from 'lucide-react';
+import { Sun, Moon, Menu, Settings } from 'lucide-react';
 import type { WsStatus } from '../../lib/ws-types';
 import type { Theme } from '../../store';
 import { ConnectionBadge } from '../shared/ConnectionBadge';
@@ -11,15 +11,14 @@ interface TopBarProps {
   onMenuClick: () => void;
   onThemeToggle: () => void;
   onHomeClick: () => void;
-  onNewChat: () => void;
   onSettingsClick?: () => void;
 }
 
-export function TopBar({ title, status, theme, onMenuClick, onThemeToggle, onHomeClick, onNewChat, onSettingsClick }: TopBarProps) {
+export function TopBar({ title, status, theme, onMenuClick, onThemeToggle, onHomeClick, onSettingsClick }: TopBarProps) {
   const { t } = useTranslation();
   return (
     <header className="h-12 flex items-center gap-2 px-4 bg-bg-primary border-b border-border-subtle shrink-0">
-      {/* Left: Sidebar + New Chat */}
+      {/* Left: Sidebar toggle */}
       <div className="flex items-center gap-1">
         <button
           onClick={onMenuClick}
@@ -27,13 +26,6 @@ export function TopBar({ title, status, theme, onMenuClick, onThemeToggle, onHom
           aria-label={t('topBar.menu')}
         >
           <Menu size={18} />
-        </button>
-        <button
-          onClick={onNewChat}
-          className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors text-text-secondary"
-          aria-label={t('topBar.newChat', 'New chat')}
-        >
-          <Plus size={18} />
         </button>
       </div>
 

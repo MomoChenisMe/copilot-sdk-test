@@ -123,7 +123,7 @@ export const conversationApi = {
   create: (model: string, cwd: string) =>
     apiPost<Conversation>('/api/conversations', { model, cwd }),
 
-  update: (id: string, updates: { title?: string; pinned?: boolean; sdkSessionId?: string; model?: string }) =>
+  update: (id: string, updates: { title?: string; pinned?: boolean; sdkSessionId?: string | null; model?: string; cwd?: string }) =>
     apiPatch<Conversation>(`/api/conversations/${id}`, updates),
 
   delete: (id: string) => apiDelete<{ ok: true }>(`/api/conversations/${id}`),

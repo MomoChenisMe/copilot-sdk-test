@@ -80,6 +80,15 @@ export interface StreamManagerDeps {
   maxConcurrency?: number;
   promptComposer?: PromptComposer;
   skillStore?: { getSkillDirectories(): string[] };
+  selfControlTools?: any[];
+}
+
+export interface FileReference {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  path: string;
 }
 
 export interface StartStreamOptions {
@@ -89,6 +98,7 @@ export interface StartStreamOptions {
   cwd: string;
   activePresets?: string[];
   disabledSkills?: string[];
+  files?: FileReference[];
 }
 
 export class StreamManager extends EventEmitter {
@@ -100,6 +110,7 @@ export class StreamManager extends EventEmitter {
   private repo: ConversationRepository;
   private promptComposer?: PromptComposer;
   private skillStore?: { getSkillDirectories(): string[] };
+  private selfControlTools?: any[];
 
   private constructor(deps: StreamManagerDeps) {
     super();
@@ -108,6 +119,7 @@ export class StreamManager extends EventEmitter {
     this.maxConcurrency = deps.maxConcurrency ?? 3;
     this.promptComposer = deps.promptComposer;
     this.skillStore = deps.skillStore;
+    this.selfControlTools = deps.selfControlTools;
   }
 
   static getInstance(deps?: StreamManagerDeps): StreamManager {
@@ -181,6 +193,10 @@ export class StreamManager extends EventEmitter {
         sessionOpts.disabledSkills = options.disabledSkills;
       }
 
+      if (this.selfControlTools?.length) {
+        sessionOpts.tools = this.selfControlTools;
+      }
+
       const session = await this.sessionManager.getOrCreateSession(sessionOpts);
 
       // Persist the SDK session ID so future messages resume the same session
@@ -191,7 +207,7 @@ export class StreamManager extends EventEmitter {
       stream.session = session;
       stream.relay.attach(session);
 
-      await this.sessionManager.sendMessage(session, options.prompt);
+      await this.sessionManager.sendMessage(session, options.prompt, options.files);
     } catch (err) {
       log.error({ err, conversationId }, 'Failed to start stream');
       stream.status = 'error';

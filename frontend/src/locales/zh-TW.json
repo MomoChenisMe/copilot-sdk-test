@@ -39,10 +39,27 @@
   "markdown": {
     "copyCode": "複製程式碼"
   },
+  "slashCommand": {
+    "noResults": "沒有匹配的命令",
+    "commands": "命令",
+    "skills": "技能",
+    "clearDesc": "清除對話",
+    "settingsDesc": "開啟設定",
+    "newDesc": "新對話"
+  },
+  "cwd": {
+    "label": "工作目錄",
+    "change": "切換",
+    "placeholder": "輸入路徑..."
+  },
   "input": {
     "placeholder": "輸入訊息...",
     "send": "發送",
-    "stop": "停止"
+    "stop": "停止",
+    "attach": "附加檔案",
+    "attachError": "附加檔案失敗",
+    "attachSizeError": "檔案過大，上限為 10MB。",
+    "uploading": "上傳中..."
   },
   "bottomBar": {
     "copilot": "Copilot",

@@ -181,6 +181,68 @@ describe('SessionManager', () => {
     });
   });
 
+  describe('tools config', () => {
+    const fakeTool = {
+      name: 'test_tool',
+      description: 'A test tool',
+      handler: async () => ({ ok: true }),
+    };
+
+    it('should pass tools to session config on createSession', async () => {
+      await sessionManager.createSession({
+        model: 'gpt-5',
+        workingDirectory: '/tmp',
+        tools: [fakeTool],
+      });
+
+      const config = mockClient.createSession.mock.calls[0][0];
+      expect(config.tools).toEqual([fakeTool]);
+    });
+
+    it('should pass tools to resume config on resumeSession', async () => {
+      await sessionManager.resumeSession('sdk-session-123', {
+        tools: [fakeTool],
+      });
+
+      const resumeConfig = mockClient.resumeSession.mock.calls[0][1];
+      expect(resumeConfig.tools).toEqual([fakeTool]);
+    });
+
+    it('should not include tools when not provided', async () => {
+      await sessionManager.createSession({
+        model: 'gpt-5',
+        workingDirectory: '/tmp',
+      });
+
+      const config = mockClient.createSession.mock.calls[0][0];
+      expect(config.tools).toBeUndefined();
+    });
+
+    it('should pass tools through getOrCreateSession (create path)', async () => {
+      await sessionManager.getOrCreateSession({
+        sdkSessionId: null,
+        model: 'gpt-5',
+        workingDirectory: '/tmp',
+        tools: [fakeTool],
+      });
+
+      const config = mockClient.createSession.mock.calls[0][0];
+      expect(config.tools).toEqual([fakeTool]);
+    });
+
+    it('should pass tools through getOrCreateSession (resume path)', async () => {
+      await sessionManager.getOrCreateSession({
+        sdkSessionId: 'existing-session',
+        model: 'gpt-5',
+        workingDirectory: '/tmp',
+        tools: [fakeTool],
+      });
+
+      const resumeConfig = mockClient.resumeSession.mock.calls[0][1];
+      expect(resumeConfig.tools).toEqual([fakeTool]);
+    });
+  });
+
   describe('getOrCreateSession', () => {
     it('should create session when no sdkSessionId exists', async () => {
       const session = await sessionManager.getOrCreateSession({

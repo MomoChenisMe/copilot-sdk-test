@@ -10,7 +10,6 @@ describe('TopBar', () => {
     onMenuClick: vi.fn(),
     onThemeToggle: vi.fn(),
     onHomeClick: vi.fn(),
-    onNewChat: vi.fn(),
   };
 
   it('renders the conversation title', () => {
@@ -33,12 +32,9 @@ describe('TopBar', () => {
     expect(onMenuClick).toHaveBeenCalledTimes(1);
   });
 
-  it('renders new chat button and calls onNewChat when clicked', () => {
-    const onNewChat = vi.fn();
-    render(<TopBar {...defaultProps} onNewChat={onNewChat} />);
-    const newChatBtn = screen.getByRole('button', { name: /new chat/i });
-    fireEvent.click(newChatBtn);
-    expect(onNewChat).toHaveBeenCalledTimes(1);
+  it('does not render new chat / Plus button', () => {
+    render(<TopBar {...defaultProps} />);
+    expect(screen.queryByRole('button', { name: /new chat/i })).toBeNull();
   });
 
   it('renders connection badge with connected status', () => {

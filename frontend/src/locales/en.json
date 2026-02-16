@@ -39,10 +39,27 @@
   "markdown": {
     "copyCode": "copy code"
   },
+  "slashCommand": {
+    "noResults": "No matching commands",
+    "commands": "Commands",
+    "skills": "Skills",
+    "clearDesc": "Clear conversation",
+    "settingsDesc": "Open settings",
+    "newDesc": "New conversation"
+  },
+  "cwd": {
+    "label": "Working Directory",
+    "change": "Change",
+    "placeholder": "Enter path..."
+  },
   "input": {
     "placeholder": "Message AI Terminal...",
     "send": "Send",
-    "stop": "Stop"
+    "stop": "Stop",
+    "attach": "Attach file",
+    "attachError": "Failed to attach file",
+    "attachSizeError": "File too large. Maximum size is 10MB.",
+    "uploading": "Uploading..."
   },
   "bottomBar": {
     "copilot": "Copilot",

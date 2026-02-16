@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Sparkles, Plus, X } from 'lucide-react';
 import { useAppStore } from '../../store';
@@ -9,19 +9,25 @@ import { ToolRecordErrorBoundary } from './ToolRecordErrorBoundary';
 import { ToolResultBlock } from './ToolResultBlock';
 import { ReasoningBlock } from './ReasoningBlock';
 import { ModelSelector } from './ModelSelector';
+import { CwdSelector } from './CwdSelector';
 import { Input } from '../shared/Input';
+import type { SlashCommand } from '../shared/SlashCommandMenu';
 
 const INLINE_RESULT_TOOLS = ['bash', 'shell', 'execute', 'run'];
 
 interface ChatViewProps {
   tabId?: string | null;
   onNewConversation: () => void;
-  onSend: (text: string) => void;
+  onSend: (text: string, files?: import('../shared/AttachmentPreview').AttachedFile[]) => void;
   onAbort: () => void;
   isStreaming: boolean;
   disabled: boolean;
   currentModel: string;
   onModelChange: (modelId: string) => void;
+  currentCwd?: string;
+  onCwdChange?: (newCwd: string) => void;
+  onClearConversation?: () => void;
+  onSettingsOpen?: () => void;
 }
 
 export function ChatView({
@@ -33,6 +39,10 @@ export function ChatView({
   disabled,
   currentModel,
   onModelChange,
+  currentCwd,
+  onCwdChange,
+  onClearConversation,
+  onSettingsOpen,
 }: ChatViewProps) {
   const { t } = useTranslation();
   const activeConversationId = useAppStore((s) => s.activeConversationId);
@@ -54,6 +64,8 @@ export function ChatView({
   const copilotError = tab?.copilotError ?? globalCopilotError;
   const activePresets = useAppStore((s) => s.activePresets);
   const removePreset = useAppStore((s) => s.removePreset);
+  const skills = useAppStore((s) => s.skills);
+  const disabledSkills = useAppStore((s) => s.disabledSkills);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAutoScrolling = useRef(true);
@@ -71,6 +83,38 @@ export function ChatView({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, streamingText, toolRecords]);
+
+  // Assemble slash commands from builtin + enabled skills
+  const slashCommands: SlashCommand[] = useMemo(() => {
+    const builtin: SlashCommand[] = [
+      { name: 'clear', description: t('slashCommand.clearDesc', 'Clear conversation'), type: 'builtin' },
+      { name: 'settings', description: t('slashCommand.settingsDesc', 'Open settings'), type: 'builtin' },
+      { name: 'new', description: t('slashCommand.newDesc', 'New conversation'), type: 'builtin' },
+    ];
+    const skillCmds: SlashCommand[] = skills
+      .filter((s) => !disabledSkills.includes(s.name))
+      .map((s) => ({ name: s.name, description: s.description, type: 'skill' as const }));
+    return [...builtin, ...skillCmds];
+  }, [skills, disabledSkills, t]);
+
+  const handleSlashCommand = useCallback(
+    (command: SlashCommand) => {
+      if (command.type === 'builtin') {
+        switch (command.name) {
+          case 'clear':
+            onClearConversation?.();
+            break;
+          case 'settings':
+            onSettingsOpen?.();
+            break;
+          case 'new':
+            onNewConversation();
+            break;
+        }
+      }
+    },
+    [onClearConversation, onSettingsOpen, onNewConversation],
+  );
 
   const showStreamingBlock = isStreaming || streamingText || toolRecords.length > 0 || turnSegments.length > 0 || copilotError;
 
@@ -112,8 +156,11 @@ export function ChatView({
         {/* Input area */}
         <div className="shrink-0 pb-4 pt-2 px-4">
           <div className="max-w-3xl mx-auto">
-            <div className="mb-2">
+            <div className="mb-2 flex items-center gap-2">
               <ModelSelector currentModel={currentModel} onSelect={onModelChange} />
+              {currentCwd && onCwdChange && (
+                <CwdSelector currentCwd={currentCwd} onCwdChange={onCwdChange} />
+              )}
             </div>
             {activePresets.length > 0 && (
               <div data-testid="preset-pills" className="mb-2 flex gap-1.5 overflow-x-auto whitespace-nowrap">
@@ -140,6 +187,9 @@ export function ChatView({
               onAbort={onAbort}
               isStreaming={isStreaming}
               disabled={disabled}
+              slashCommands={slashCommands}
+              onSlashCommand={handleSlashCommand}
+              enableAttachments
             />
           </div>
         </div>
@@ -244,8 +294,11 @@ export function ChatView({
       {/* Input area (shrink-0) */}
       <div className="shrink-0 pb-4 pt-2 px-4">
         <div className="max-w-3xl mx-auto">
-          <div className="mb-2">
+          <div className="mb-2 flex items-center gap-2">
             <ModelSelector currentModel={currentModel} onSelect={onModelChange} />
+            {currentCwd && onCwdChange && (
+              <CwdSelector currentCwd={currentCwd} onCwdChange={onCwdChange} />
+            )}
           </div>
           {activePresets.length > 0 && (
             <div data-testid="preset-pills" className="mb-2 flex gap-1.5 overflow-x-auto whitespace-nowrap">
@@ -272,6 +325,9 @@ export function ChatView({
             onAbort={onAbort}
             isStreaming={isStreaming}
             disabled={disabled}
+            slashCommands={slashCommands}
+            onSlashCommand={handleSlashCommand}
+            enableAttachments
           />
         </div>
       </div>

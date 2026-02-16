@@ -1,20 +1,27 @@
+import { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, X, AlertTriangle } from 'lucide-react';
+import { Plus, X, AlertTriangle, ChevronDown } from 'lucide-react';
 import { useAppStore } from '../../store';
+import { ConversationPopover } from './ConversationPopover';
 
 interface TabBarProps {
   onNewTab: () => void;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
+  onSwitchConversation: (tabId: string, conversationId: string) => void;
+  conversations: Array<{ id: string; title: string; pinned?: boolean; updatedAt?: string }>;
 }
 
-export function TabBar({ onNewTab, onSelectTab, onCloseTab }: TabBarProps) {
+export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation, conversations }: TabBarProps) {
   const { t } = useTranslation();
   const tabOrder = useAppStore((s) => s.tabOrder);
   const tabs = useAppStore((s) => s.tabs);
   const activeTabId = useAppStore((s) => s.activeTabId);
   const activeStreams = useAppStore((s) => s.activeStreams);
   const tabLimitWarning = useAppStore((s) => s.tabLimitWarning);
+
+  const [popoverTabId, setPopoverTabId] = useState<string | null>(null);
+  const tabTitleRefs = useRef<Record<string, HTMLSpanElement | null>>({});
 
   return (
     <div className="h-10 flex items-center gap-1 px-2 bg-bg-primary border-b border-border-subtle shrink-0 overflow-x-auto flex-nowrap">
@@ -25,39 +32,68 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab }: TabBarProps) {
         const isStreaming = !!activeStreams[tab.conversationId];
 
         return (
-          <button
-            key={tabId}
-            data-testid={`tab-${tabId}`}
-            onClick={() => onSelectTab(tabId)}
-            onAuxClick={(e) => {
-              if (e.button === 1) onCloseTab(tabId);
-            }}
-            className={`group flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors shrink-0 ${
-              isActive
-                ? 'text-accent bg-accent-soft'
-                : 'text-text-muted hover:text-text-secondary hover:bg-bg-tertiary'
-            }`}
-          >
-            {isStreaming && (
-              <span
-                data-testid={`tab-streaming-${tabId}`}
-                className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse shrink-0"
-              />
-            )}
-            <span className="max-w-32 truncate">{tab.title}</span>
-            <span
-              data-testid={`tab-close-${tabId}`}
-              role="button"
-              tabIndex={-1}
-              onClick={(e) => {
-                e.stopPropagation();
-                onCloseTab(tabId);
+          <div key={tabId} className="relative">
+            <button
+              data-testid={`tab-${tabId}`}
+              onClick={() => onSelectTab(tabId)}
+              onAuxClick={(e) => {
+                if (e.button === 1) onCloseTab(tabId);
               }}
-              className="shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-bg-tertiary transition-opacity"
+              className={`group flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors shrink-0 ${
+                isActive
+                  ? 'text-accent bg-accent-soft'
+                  : 'text-text-muted hover:text-text-secondary hover:bg-bg-tertiary'
+              }`}
             >
-              <X size={12} />
-            </span>
-          </button>
+              {isStreaming && (
+                <span
+                  data-testid={`tab-streaming-${tabId}`}
+                  className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse shrink-0"
+                />
+              )}
+              <span
+                ref={(el) => { tabTitleRefs.current[tabId] = el; }}
+                data-testid={`tab-title-${tabId}`}
+                className="max-w-32 truncate inline-flex items-center gap-0.5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPopoverTabId(popoverTabId === tabId ? null : tabId);
+                }}
+              >
+                {tab.title}
+                <ChevronDown size={12} className="shrink-0 opacity-60" />
+              </span>
+              <span
+                data-testid={`tab-close-${tabId}`}
+                role="button"
+                tabIndex={-1}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCloseTab(tabId);
+                }}
+                className="shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-bg-tertiary transition-opacity"
+              >
+                <X size={12} />
+              </span>
+            </button>
+
+            {/* ConversationPopover */}
+            <ConversationPopover
+              open={popoverTabId === tabId}
+              onClose={() => setPopoverTabId(null)}
+              conversations={conversations}
+              currentConversationId={tab.conversationId}
+              onSelect={(conversationId) => {
+                onSwitchConversation(tabId, conversationId);
+                setPopoverTabId(null);
+              }}
+              onNew={() => {
+                onNewTab();
+                setPopoverTabId(null);
+              }}
+              anchorRef={{ current: tabTitleRefs.current[tabId] ?? null }}
+            />
+          </div>
         );
       })}
 

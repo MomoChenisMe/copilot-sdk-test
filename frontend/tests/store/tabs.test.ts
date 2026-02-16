@@ -1,6 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useAppStore } from '../../src/store/index';
 
+// Helper: open a tab and return its generated tabId
+function openTabAndGetId(conversationId: string, title: string): string {
+  useAppStore.getState().openTab(conversationId, title);
+  const state = useAppStore.getState();
+  const tabId = state.tabOrder[state.tabOrder.length - 1];
+  return tabId;
+}
+
 // Ensure clean state for each test
 beforeEach(() => {
   useAppStore.setState({
@@ -15,164 +23,218 @@ describe('Tab management', () => {
   // --- openTab ---
   describe('openTab', () => {
     it('should create a new tab with given conversationId and title', () => {
-      useAppStore.getState().openTab('conv-1', 'New Chat');
-      const state = useAppStore.getState();
-      expect(state.tabs['conv-1']).toBeTruthy();
-      expect(state.tabs['conv-1'].conversationId).toBe('conv-1');
-      expect(state.tabs['conv-1'].title).toBe('New Chat');
-      expect(state.tabs['conv-1'].messages).toEqual([]);
-      expect(state.tabs['conv-1'].streamingText).toBe('');
-      expect(state.tabs['conv-1'].isStreaming).toBe(false);
-      expect(state.tabs['conv-1'].toolRecords).toEqual([]);
-      expect(state.tabs['conv-1'].reasoningText).toBe('');
-      expect(state.tabs['conv-1'].turnContentSegments).toEqual([]);
-      expect(state.tabs['conv-1'].turnSegments).toEqual([]);
-      expect(state.tabs['conv-1'].copilotError).toBeNull();
-      expect(state.tabs['conv-1'].messagesLoaded).toBe(false);
+      const tabId = openTabAndGetId('conv-1', 'New Chat');
+      const tab = useAppStore.getState().tabs[tabId];
+      expect(tab).toBeTruthy();
+      expect(tab.conversationId).toBe('conv-1');
+      expect(tab.title).toBe('New Chat');
+      expect(tab.messages).toEqual([]);
+      expect(tab.streamingText).toBe('');
+      expect(tab.isStreaming).toBe(false);
+      expect(tab.toolRecords).toEqual([]);
+      expect(tab.reasoningText).toBe('');
+      expect(tab.turnContentSegments).toEqual([]);
+      expect(tab.turnSegments).toEqual([]);
+      expect(tab.copilotError).toBeNull();
+      expect(tab.messagesLoaded).toBe(false);
     });
 
     it('should add tabId to tabOrder', () => {
-      useAppStore.getState().openTab('conv-1', 'Chat 1');
-      expect(useAppStore.getState().tabOrder).toEqual(['conv-1']);
+      const tabId = openTabAndGetId('conv-1', 'Chat 1');
+      expect(useAppStore.getState().tabOrder).toEqual([tabId]);
     });
 
     it('should set activeTabId to the new tab', () => {
-      useAppStore.getState().openTab('conv-1', 'Chat 1');
-      expect(useAppStore.getState().activeTabId).toBe('conv-1');
+      const tabId = openTabAndGetId('conv-1', 'Chat 1');
+      expect(useAppStore.getState().activeTabId).toBe(tabId);
     });
 
     it('should not duplicate an already open tab, just activate it', () => {
-      useAppStore.getState().openTab('conv-1', 'Chat 1');
-      useAppStore.getState().openTab('conv-2', 'Chat 2');
+      const tab1Id = openTabAndGetId('conv-1', 'Chat 1');
+      openTabAndGetId('conv-2', 'Chat 2');
       useAppStore.getState().openTab('conv-1', 'Chat 1');
       const state = useAppStore.getState();
-      expect(state.tabOrder).toEqual(['conv-1', 'conv-2']);
-      expect(state.activeTabId).toBe('conv-1');
+      expect(state.tabOrder).toHaveLength(2);
+      expect(state.activeTabId).toBe(tab1Id);
     });
 
     it('should persist open tabs to localStorage', () => {
-      useAppStore.getState().openTab('conv-1', 'Chat 1');
-      useAppStore.getState().openTab('conv-2', 'Chat 2');
+      const tab1Id = openTabAndGetId('conv-1', 'Chat 1');
+      const tab2Id = openTabAndGetId('conv-2', 'Chat 2');
       const stored = JSON.parse(localStorage.getItem('ai-terminal:openTabs') ?? '[]');
       expect(stored).toHaveLength(2);
-      expect(stored[0].id).toBe('conv-1');
-      expect(stored[1].id).toBe('conv-2');
+      expect(stored[0].id).toBe(tab1Id);
+      expect(stored[0].conversationId).toBe('conv-1');
+      expect(stored[1].id).toBe(tab2Id);
+      expect(stored[1].conversationId).toBe('conv-2');
     });
   });
 
   // --- closeTab ---
   describe('closeTab', () => {
     it('should remove the tab from tabs and tabOrder', () => {
-      useAppStore.getState().openTab('conv-1', 'Chat 1');
-      useAppStore.getState().openTab('conv-2', 'Chat 2');
-      useAppStore.getState().closeTab('conv-1');
+      const tab1Id = openTabAndGetId('conv-1', 'Chat 1');
+      const tab2Id = openTabAndGetId('conv-2', 'Chat 2');
+      useAppStore.getState().closeTab(tab1Id);
       const state = useAppStore.getState();
-      expect(state.tabs['conv-1']).toBeUndefined();
-      expect(state.tabOrder).toEqual(['conv-2']);
+      expect(state.tabs[tab1Id]).toBeUndefined();
+      expect(state.tabOrder).toEqual([tab2Id]);
     });
 
     it('should activate the next tab when closing the active tab', () => {
-      useAppStore.getState().openTab('conv-1', 'Chat 1');
-      useAppStore.getState().openTab('conv-2', 'Chat 2');
-      useAppStore.getState().setActiveTab('conv-1');
-      useAppStore.getState().closeTab('conv-1');
-      expect(useAppStore.getState().activeTabId).toBe('conv-2');
+      const tab1Id = openTabAndGetId('conv-1', 'Chat 1');
+      const tab2Id = openTabAndGetId('conv-2', 'Chat 2');
+      useAppStore.getState().setActiveTab(tab1Id);
+      useAppStore.getState().closeTab(tab1Id);
+      expect(useAppStore.getState().activeTabId).toBe(tab2Id);
     });
 
     it('should set activeTabId to null when closing the last tab', () => {
-      useAppStore.getState().openTab('conv-1', 'Chat 1');
-      useAppStore.getState().closeTab('conv-1');
+      const tabId = openTabAndGetId('conv-1', 'Chat 1');
+      useAppStore.getState().closeTab(tabId);
       expect(useAppStore.getState().activeTabId).toBeNull();
       expect(useAppStore.getState().tabOrder).toEqual([]);
     });
 
     it('should persist after close', () => {
-      useAppStore.getState().openTab('conv-1', 'Chat 1');
-      useAppStore.getState().openTab('conv-2', 'Chat 2');
-      useAppStore.getState().closeTab('conv-1');
+      const tab1Id = openTabAndGetId('conv-1', 'Chat 1');
+      const tab2Id = openTabAndGetId('conv-2', 'Chat 2');
+      useAppStore.getState().closeTab(tab1Id);
       const stored = JSON.parse(localStorage.getItem('ai-terminal:openTabs') ?? '[]');
       expect(stored).toHaveLength(1);
-      expect(stored[0].id).toBe('conv-2');
+      expect(stored[0].id).toBe(tab2Id);
     });
   });
 
   // --- setActiveTab ---
   describe('setActiveTab', () => {
     it('should switch activeTabId', () => {
-      useAppStore.getState().openTab('conv-1', 'Chat 1');
-      useAppStore.getState().openTab('conv-2', 'Chat 2');
-      useAppStore.getState().setActiveTab('conv-1');
-      expect(useAppStore.getState().activeTabId).toBe('conv-1');
+      const tab1Id = openTabAndGetId('conv-1', 'Chat 1');
+      openTabAndGetId('conv-2', 'Chat 2');
+      useAppStore.getState().setActiveTab(tab1Id);
+      expect(useAppStore.getState().activeTabId).toBe(tab1Id);
     });
 
     it('should not clear streaming state of the previous tab', () => {
-      useAppStore.getState().openTab('conv-1', 'Chat 1');
-      useAppStore.getState().appendTabStreamingText('conv-1', 'hello');
-      useAppStore.getState().openTab('conv-2', 'Chat 2');
-      useAppStore.getState().setActiveTab('conv-1');
-      expect(useAppStore.getState().tabs['conv-1'].streamingText).toBe('hello');
+      const tab1Id = openTabAndGetId('conv-1', 'Chat 1');
+      useAppStore.getState().appendTabStreamingText(tab1Id, 'hello');
+      openTabAndGetId('conv-2', 'Chat 2');
+      useAppStore.getState().setActiveTab(tab1Id);
+      expect(useAppStore.getState().tabs[tab1Id].streamingText).toBe('hello');
     });
   });
 
   // --- reorderTabs ---
   describe('reorderTabs', () => {
     it('should reorder tabOrder', () => {
-      useAppStore.getState().openTab('conv-1', 'Chat 1');
-      useAppStore.getState().openTab('conv-2', 'Chat 2');
-      useAppStore.getState().openTab('conv-3', 'Chat 3');
-      useAppStore.getState().reorderTabs(['conv-3', 'conv-1', 'conv-2']);
-      expect(useAppStore.getState().tabOrder).toEqual(['conv-3', 'conv-1', 'conv-2']);
+      const tab1Id = openTabAndGetId('conv-1', 'Chat 1');
+      const tab2Id = openTabAndGetId('conv-2', 'Chat 2');
+      const tab3Id = openTabAndGetId('conv-3', 'Chat 3');
+      useAppStore.getState().reorderTabs([tab3Id, tab1Id, tab2Id]);
+      expect(useAppStore.getState().tabOrder).toEqual([tab3Id, tab1Id, tab2Id]);
     });
   });
 
   // --- updateTabTitle ---
   describe('updateTabTitle', () => {
     it('should update the title of a tab', () => {
-      useAppStore.getState().openTab('conv-1', 'Chat 1');
-      useAppStore.getState().updateTabTitle('conv-1', 'Renamed Chat');
-      expect(useAppStore.getState().tabs['conv-1'].title).toBe('Renamed Chat');
+      const tabId = openTabAndGetId('conv-1', 'Chat 1');
+      useAppStore.getState().updateTabTitle(tabId, 'Renamed Chat');
+      expect(useAppStore.getState().tabs[tabId].title).toBe('Renamed Chat');
     });
   });
 });
 
-describe('Per-tab streaming actions', () => {
-  beforeEach(() => {
+describe('Tab ID independent from conversationId', () => {
+  it('openTab should generate an independent tab ID (not equal to conversationId)', () => {
     useAppStore.getState().openTab('conv-1', 'Chat 1');
+    const state = useAppStore.getState();
+    const tabOrder = state.tabOrder;
+    expect(tabOrder).toHaveLength(1);
+    const tabId = tabOrder[0];
+    // Tab ID should be different from conversationId
+    expect(tabId).not.toBe('conv-1');
+    // But the tab should still reference the conversation
+    expect(state.tabs[tabId].conversationId).toBe('conv-1');
+  });
+
+  it('switchTabConversation should change the conversationId of a tab', () => {
+    useAppStore.getState().openTab('conv-1', 'Chat 1');
+    const tabId = useAppStore.getState().tabOrder[0];
+    useAppStore.getState().switchTabConversation(tabId, 'conv-2', 'Chat 2');
+    const tab = useAppStore.getState().tabs[tabId];
+    expect(tab.conversationId).toBe('conv-2');
+    expect(tab.title).toBe('Chat 2');
+    // Streaming state should be cleared
+    expect(tab.streamingText).toBe('');
+    expect(tab.messages).toEqual([]);
+    expect(tab.messagesLoaded).toBe(false);
+  });
+
+  it('getTabIdByConversationId should find the tab with given conversationId', () => {
+    useAppStore.getState().openTab('conv-1', 'Chat 1');
+    useAppStore.getState().openTab('conv-2', 'Chat 2');
+    const tabId = useAppStore.getState().getTabIdByConversationId('conv-2');
+    expect(tabId).toBeDefined();
+    expect(useAppStore.getState().tabs[tabId!].conversationId).toBe('conv-2');
+  });
+
+  it('getTabIdByConversationId should return undefined for non-existent conversationId', () => {
+    useAppStore.getState().openTab('conv-1', 'Chat 1');
+    const tabId = useAppStore.getState().getTabIdByConversationId('conv-999');
+    expect(tabId).toBeUndefined();
+  });
+
+  it('openTab should reactivate existing tab with same conversationId', () => {
+    useAppStore.getState().openTab('conv-1', 'Chat 1');
+    const firstTabId = useAppStore.getState().tabOrder[0];
+    useAppStore.getState().openTab('conv-2', 'Chat 2');
+    useAppStore.getState().openTab('conv-1', 'Chat 1'); // reopening
+    expect(useAppStore.getState().activeTabId).toBe(firstTabId);
+    expect(useAppStore.getState().tabOrder).toHaveLength(2);
+  });
+});
+
+describe('Per-tab streaming actions', () => {
+  let tabId: string;
+
+  beforeEach(() => {
+    tabId = openTabAndGetId('conv-1', 'Chat 1');
   });
 
   it('setTabMessages should set messages for a tab', () => {
     const msgs = [{ id: 'm1', conversationId: 'conv-1', role: 'user' as const, content: 'hi', metadata: null, createdAt: '' }];
-    useAppStore.getState().setTabMessages('conv-1', msgs);
-    expect(useAppStore.getState().tabs['conv-1'].messages).toEqual(msgs);
-    expect(useAppStore.getState().tabs['conv-1'].messagesLoaded).toBe(true);
+    useAppStore.getState().setTabMessages(tabId, msgs);
+    expect(useAppStore.getState().tabs[tabId].messages).toEqual(msgs);
+    expect(useAppStore.getState().tabs[tabId].messagesLoaded).toBe(true);
   });
 
   it('addTabMessage should append a message and dedup by id', () => {
     const msg1 = { id: 'm1', conversationId: 'conv-1', role: 'user' as const, content: 'hi', metadata: null, createdAt: '' };
-    useAppStore.getState().addTabMessage('conv-1', msg1);
-    useAppStore.getState().addTabMessage('conv-1', msg1); // dup
-    expect(useAppStore.getState().tabs['conv-1'].messages).toHaveLength(1);
+    useAppStore.getState().addTabMessage(tabId, msg1);
+    useAppStore.getState().addTabMessage(tabId, msg1); // dup
+    expect(useAppStore.getState().tabs[tabId].messages).toHaveLength(1);
   });
 
   it('appendTabStreamingText should append delta text', () => {
-    useAppStore.getState().appendTabStreamingText('conv-1', 'Hello ');
-    useAppStore.getState().appendTabStreamingText('conv-1', 'World');
-    expect(useAppStore.getState().tabs['conv-1'].streamingText).toBe('Hello World');
+    useAppStore.getState().appendTabStreamingText(tabId, 'Hello ');
+    useAppStore.getState().appendTabStreamingText(tabId, 'World');
+    expect(useAppStore.getState().tabs[tabId].streamingText).toBe('Hello World');
   });
 
   it('setTabIsStreaming should toggle streaming flag', () => {
-    useAppStore.getState().setTabIsStreaming('conv-1', true);
-    expect(useAppStore.getState().tabs['conv-1'].isStreaming).toBe(true);
-    useAppStore.getState().setTabIsStreaming('conv-1', false);
-    expect(useAppStore.getState().tabs['conv-1'].isStreaming).toBe(false);
+    useAppStore.getState().setTabIsStreaming(tabId, true);
+    expect(useAppStore.getState().tabs[tabId].isStreaming).toBe(true);
+    useAppStore.getState().setTabIsStreaming(tabId, false);
+    expect(useAppStore.getState().tabs[tabId].isStreaming).toBe(false);
   });
 
   it('clearTabStreaming should reset all streaming state', () => {
-    useAppStore.getState().appendTabStreamingText('conv-1', 'text');
-    useAppStore.getState().setTabIsStreaming('conv-1', true);
-    useAppStore.getState().appendTabReasoningText('conv-1', 'reason');
-    useAppStore.getState().clearTabStreaming('conv-1');
-    const tab = useAppStore.getState().tabs['conv-1'];
+    useAppStore.getState().appendTabStreamingText(tabId, 'text');
+    useAppStore.getState().setTabIsStreaming(tabId, true);
+    useAppStore.getState().appendTabReasoningText(tabId, 'reason');
+    useAppStore.getState().clearTabStreaming(tabId);
+    const tab = useAppStore.getState().tabs[tabId];
     expect(tab.streamingText).toBe('');
     expect(tab.isStreaming).toBe(false);
     expect(tab.toolRecords).toEqual([]);
@@ -184,46 +246,46 @@ describe('Per-tab streaming actions', () => {
 
   it('addTabToolRecord should add a tool record', () => {
     const record = { toolCallId: 'tc1', toolName: 'test', status: 'running' as const };
-    useAppStore.getState().addTabToolRecord('conv-1', record);
-    expect(useAppStore.getState().tabs['conv-1'].toolRecords).toHaveLength(1);
-    expect(useAppStore.getState().tabs['conv-1'].toolRecords[0].toolCallId).toBe('tc1');
+    useAppStore.getState().addTabToolRecord(tabId, record);
+    expect(useAppStore.getState().tabs[tabId].toolRecords).toHaveLength(1);
+    expect(useAppStore.getState().tabs[tabId].toolRecords[0].toolCallId).toBe('tc1');
   });
 
   it('updateTabToolRecord should update an existing tool record', () => {
     const record = { toolCallId: 'tc1', toolName: 'test', status: 'running' as const };
-    useAppStore.getState().addTabToolRecord('conv-1', record);
-    useAppStore.getState().updateTabToolRecord('conv-1', 'tc1', { status: 'success' });
-    expect(useAppStore.getState().tabs['conv-1'].toolRecords[0].status).toBe('success');
+    useAppStore.getState().addTabToolRecord(tabId, record);
+    useAppStore.getState().updateTabToolRecord(tabId, 'tc1', { status: 'success' });
+    expect(useAppStore.getState().tabs[tabId].toolRecords[0].status).toBe('success');
   });
 
   it('appendTabReasoningText should append reasoning delta', () => {
-    useAppStore.getState().appendTabReasoningText('conv-1', 'step 1');
-    useAppStore.getState().appendTabReasoningText('conv-1', ' step 2');
-    expect(useAppStore.getState().tabs['conv-1'].reasoningText).toBe('step 1 step 2');
+    useAppStore.getState().appendTabReasoningText(tabId, 'step 1');
+    useAppStore.getState().appendTabReasoningText(tabId, ' step 2');
+    expect(useAppStore.getState().tabs[tabId].reasoningText).toBe('step 1 step 2');
   });
 
   it('addTabTurnContentSegment should add a segment', () => {
-    useAppStore.getState().addTabTurnContentSegment('conv-1', 'content block');
-    expect(useAppStore.getState().tabs['conv-1'].turnContentSegments).toEqual(['content block']);
+    useAppStore.getState().addTabTurnContentSegment(tabId, 'content block');
+    expect(useAppStore.getState().tabs[tabId].turnContentSegments).toEqual(['content block']);
   });
 
   it('addTabTurnSegment should add a turn segment', () => {
     const seg = { type: 'text' as const, content: 'hello' };
-    useAppStore.getState().addTabTurnSegment('conv-1', seg);
-    expect(useAppStore.getState().tabs['conv-1'].turnSegments).toHaveLength(1);
+    useAppStore.getState().addTabTurnSegment(tabId, seg);
+    expect(useAppStore.getState().tabs[tabId].turnSegments).toHaveLength(1);
   });
 
   it('updateTabToolInTurnSegments should update tool segment', () => {
     const seg = { type: 'tool' as const, toolCallId: 'tc1', toolName: 'test', status: 'running' as const };
-    useAppStore.getState().addTabTurnSegment('conv-1', seg);
-    useAppStore.getState().updateTabToolInTurnSegments('conv-1', 'tc1', { status: 'success' });
-    const segments = useAppStore.getState().tabs['conv-1'].turnSegments;
+    useAppStore.getState().addTabTurnSegment(tabId, seg);
+    useAppStore.getState().updateTabToolInTurnSegments(tabId, 'tc1', { status: 'success' });
+    const segments = useAppStore.getState().tabs[tabId].turnSegments;
     expect(segments[0].type === 'tool' && segments[0].status).toBe('success');
   });
 
   it('setTabCopilotError should set error on the tab', () => {
-    useAppStore.getState().setTabCopilotError('conv-1', 'something broke');
-    expect(useAppStore.getState().tabs['conv-1'].copilotError).toBe('something broke');
+    useAppStore.getState().setTabCopilotError(tabId, 'something broke');
+    expect(useAppStore.getState().tabs[tabId].copilotError).toBe('something broke');
   });
 
   it('should not throw for operations on non-existent tab', () => {
@@ -235,27 +297,28 @@ describe('Per-tab streaming actions', () => {
 describe('Tab localStorage restore', () => {
   it('should restore tabs from localStorage on restoreOpenTabs call', () => {
     const saved = [
-      { id: 'conv-a', title: 'Chat A', conversationId: 'conv-a' },
-      { id: 'conv-b', title: 'Chat B', conversationId: 'conv-b' },
+      { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+      { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
     ];
     localStorage.setItem('ai-terminal:openTabs', JSON.stringify(saved));
     useAppStore.getState().restoreOpenTabs();
     const state = useAppStore.getState();
-    expect(state.tabOrder).toEqual(['conv-a', 'conv-b']);
-    expect(state.tabs['conv-a']).toBeTruthy();
-    expect(state.tabs['conv-a'].title).toBe('Chat A');
-    expect(state.tabs['conv-a'].messagesLoaded).toBe(false);
-    expect(state.tabs['conv-b']).toBeTruthy();
-    expect(state.tabs['conv-b'].title).toBe('Chat B');
+    expect(state.tabOrder).toEqual(['tab-a', 'tab-b']);
+    expect(state.tabs['tab-a']).toBeTruthy();
+    expect(state.tabs['tab-a'].title).toBe('Chat A');
+    expect(state.tabs['tab-a'].conversationId).toBe('conv-a');
+    expect(state.tabs['tab-a'].messagesLoaded).toBe(false);
+    expect(state.tabs['tab-b']).toBeTruthy();
+    expect(state.tabs['tab-b'].title).toBe('Chat B');
   });
 
   it('should set activeTabId to the first restored tab', () => {
     const saved = [
-      { id: 'conv-a', title: 'Chat A', conversationId: 'conv-a' },
+      { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
     ];
     localStorage.setItem('ai-terminal:openTabs', JSON.stringify(saved));
     useAppStore.getState().restoreOpenTabs();
-    expect(useAppStore.getState().activeTabId).toBe('conv-a');
+    expect(useAppStore.getState().activeTabId).toBe('tab-a');
   });
 
   it('should handle empty or invalid localStorage gracefully', () => {
@@ -268,6 +331,28 @@ describe('Tab localStorage restore', () => {
     useAppStore.getState().restoreOpenTabs();
     expect(useAppStore.getState().tabOrder).toEqual([]);
     expect(useAppStore.getState().activeTabId).toBeNull();
+  });
+
+  it('should migrate old format (no conversationId field) to new format', () => {
+    // Old format: { id: conversationId, title } — id was used as both tabId and conversationId
+    const oldFormat = [
+      { id: 'conv-old-1', title: 'Old Chat 1' },
+      { id: 'conv-old-2', title: 'Old Chat 2' },
+    ];
+    localStorage.setItem('ai-terminal:openTabs', JSON.stringify(oldFormat));
+    useAppStore.getState().restoreOpenTabs();
+    const state = useAppStore.getState();
+    expect(state.tabOrder).toHaveLength(2);
+    // After migration, tabs should have new UUIDs as keys (not old conversationIds)
+    const tab1Id = state.tabOrder[0];
+    const tab2Id = state.tabOrder[1];
+    expect(state.tabs[tab1Id].conversationId).toBe('conv-old-1');
+    expect(state.tabs[tab1Id].title).toBe('Old Chat 1');
+    expect(state.tabs[tab2Id].conversationId).toBe('conv-old-2');
+    expect(state.tabs[tab2Id].title).toBe('Old Chat 2');
+    // Tab IDs should be newly generated UUIDs (different from old ids)
+    expect(tab1Id).not.toBe('conv-old-1');
+    expect(tab2Id).not.toBe('conv-old-2');
   });
 });
 
@@ -315,7 +400,8 @@ describe('Tab soft limit', () => {
       useAppStore.getState().openTab(`conv-${i}`, `Chat ${i}`);
     }
     expect(useAppStore.getState().tabLimitWarning).toBe(true);
-    useAppStore.getState().closeTab('conv-0');
+    const firstTabId = useAppStore.getState().tabOrder[0];
+    useAppStore.getState().closeTab(firstTabId);
     expect(useAppStore.getState().tabLimitWarning).toBe(false);
   });
 });

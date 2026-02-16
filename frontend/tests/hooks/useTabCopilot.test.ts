@@ -4,10 +4,19 @@ import { useTabCopilot } from '../../src/hooks/useTabCopilot';
 import { useAppStore } from '../../src/store';
 import type { WsMessage } from '../../src/lib/ws-types';
 
+// Helper: open a tab and return its generated tabId
+function openTabAndGetId(conversationId: string, title: string): string {
+  useAppStore.getState().openTab(conversationId, title);
+  const state = useAppStore.getState();
+  return state.tabOrder[state.tabOrder.length - 1];
+}
+
 describe('useTabCopilot', () => {
   let listeners: ((msg: WsMessage) => void)[];
   let subscribe: (listener: (msg: WsMessage) => void) => () => void;
   let send: ReturnType<typeof vi.fn>;
+  let tabIdA: string;
+  let tabIdB: string;
 
   beforeEach(() => {
     listeners = [];
@@ -19,7 +28,7 @@ describe('useTabCopilot', () => {
     };
     send = vi.fn();
 
-    // Reset store with two open tabs
+    // Reset store
     useAppStore.setState({
       tabs: {},
       tabOrder: [],
@@ -35,9 +44,9 @@ describe('useTabCopilot', () => {
       copilotError: null,
     });
 
-    // Open two tabs
-    useAppStore.getState().openTab('conv-A', 'Chat A');
-    useAppStore.getState().openTab('conv-B', 'Chat B');
+    // Open two tabs — tabId is now an independent UUID
+    tabIdA = openTabAndGetId('conv-A', 'Chat A');
+    tabIdB = openTabAndGetId('conv-B', 'Chat B');
   });
 
   function emit(msg: WsMessage) {
@@ -45,14 +54,14 @@ describe('useTabCopilot', () => {
   }
 
   // --- Event routing ---
-  describe('event routing by conversationId', () => {
-    it('should route copilot:delta to the correct tab', () => {
+  describe('event routing by conversationId (scans tabs)', () => {
+    it('should route copilot:delta to the correct tab via conversationId scan', () => {
       renderHook(() => useTabCopilot({ subscribe, send }));
       act(() => {
         emit({ type: 'copilot:delta', data: { content: 'hello', conversationId: 'conv-A' } });
       });
-      expect(useAppStore.getState().tabs['conv-A'].streamingText).toBe('hello');
-      expect(useAppStore.getState().tabs['conv-B'].streamingText).toBe('');
+      expect(useAppStore.getState().tabs[tabIdA].streamingText).toBe('hello');
+      expect(useAppStore.getState().tabs[tabIdB].streamingText).toBe('');
     });
 
     it('should route copilot:delta to a different tab', () => {
@@ -60,8 +69,8 @@ describe('useTabCopilot', () => {
       act(() => {
         emit({ type: 'copilot:delta', data: { content: 'world', conversationId: 'conv-B' } });
       });
-      expect(useAppStore.getState().tabs['conv-A'].streamingText).toBe('');
-      expect(useAppStore.getState().tabs['conv-B'].streamingText).toBe('world');
+      expect(useAppStore.getState().tabs[tabIdA].streamingText).toBe('');
+      expect(useAppStore.getState().tabs[tabIdB].streamingText).toBe('world');
     });
 
     it('should route copilot:error to the correct tab', () => {
@@ -69,8 +78,8 @@ describe('useTabCopilot', () => {
       act(() => {
         emit({ type: 'copilot:error', data: { message: 'fail', conversationId: 'conv-A' } });
       });
-      expect(useAppStore.getState().tabs['conv-A'].copilotError).toBe('fail');
-      expect(useAppStore.getState().tabs['conv-B'].copilotError).toBeNull();
+      expect(useAppStore.getState().tabs[tabIdA].copilotError).toBe('fail');
+      expect(useAppStore.getState().tabs[tabIdB].copilotError).toBeNull();
     });
   });
 
@@ -81,9 +90,8 @@ describe('useTabCopilot', () => {
       act(() => {
         emit({ type: 'copilot:delta', data: { content: 'ghost', conversationId: 'conv-X' } });
       });
-      // No tab should be affected
-      expect(useAppStore.getState().tabs['conv-A'].streamingText).toBe('');
-      expect(useAppStore.getState().tabs['conv-B'].streamingText).toBe('');
+      expect(useAppStore.getState().tabs[tabIdA].streamingText).toBe('');
+      expect(useAppStore.getState().tabs[tabIdB].streamingText).toBe('');
     });
   });
 
@@ -116,8 +124,7 @@ describe('useTabCopilot', () => {
         emit({ type: 'copilot:message', data: { content: 'msg1', messageId: 'mid-1', conversationId: 'conv-A' } });
         emit({ type: 'copilot:message', data: { content: 'msg1', messageId: 'mid-1', conversationId: 'conv-A' } });
       });
-      // Should only have one turn content segment
-      expect(useAppStore.getState().tabs['conv-A'].turnContentSegments).toHaveLength(1);
+      expect(useAppStore.getState().tabs[tabIdA].turnContentSegments).toHaveLength(1);
     });
 
     it('should allow same messageId across different conversations', () => {
@@ -126,8 +133,8 @@ describe('useTabCopilot', () => {
         emit({ type: 'copilot:message', data: { content: 'msg1', messageId: 'mid-1', conversationId: 'conv-A' } });
         emit({ type: 'copilot:message', data: { content: 'msg1', messageId: 'mid-1', conversationId: 'conv-B' } });
       });
-      expect(useAppStore.getState().tabs['conv-A'].turnContentSegments).toHaveLength(1);
-      expect(useAppStore.getState().tabs['conv-B'].turnContentSegments).toHaveLength(1);
+      expect(useAppStore.getState().tabs[tabIdA].turnContentSegments).toHaveLength(1);
+      expect(useAppStore.getState().tabs[tabIdB].turnContentSegments).toHaveLength(1);
     });
 
     it('should dedup tool_start by toolCallId per conversation', () => {
@@ -136,7 +143,7 @@ describe('useTabCopilot', () => {
         emit({ type: 'copilot:tool_start', data: { toolCallId: 'tc-1', toolName: 'test', conversationId: 'conv-A' } });
         emit({ type: 'copilot:tool_start', data: { toolCallId: 'tc-1', toolName: 'test', conversationId: 'conv-A' } });
       });
-      expect(useAppStore.getState().tabs['conv-A'].toolRecords).toHaveLength(1);
+      expect(useAppStore.getState().tabs[tabIdA].toolRecords).toHaveLength(1);
     });
   });
 
@@ -150,11 +157,10 @@ describe('useTabCopilot', () => {
         emit({ type: 'copilot:message', data: { content: 'Hello World', messageId: 'mid-1', conversationId: 'conv-A' } });
         emit({ type: 'copilot:idle', data: { conversationId: 'conv-A' } });
       });
-      const tabA = useAppStore.getState().tabs['conv-A'];
+      const tabA = useAppStore.getState().tabs[tabIdA];
       expect(tabA.messages).toHaveLength(1);
       expect(tabA.messages[0].role).toBe('assistant');
       expect(tabA.messages[0].content).toBe('Hello World');
-      // Streaming state should be cleared
       expect(tabA.streamingText).toBe('');
       expect(tabA.isStreaming).toBe(false);
     });
@@ -166,25 +172,24 @@ describe('useTabCopilot', () => {
         emit({ type: 'copilot:delta', data: { content: 'B content', conversationId: 'conv-B' } });
         emit({ type: 'copilot:idle', data: { conversationId: 'conv-A' } });
       });
-      // Tab A cleared, Tab B still has streaming
-      expect(useAppStore.getState().tabs['conv-A'].streamingText).toBe('');
-      expect(useAppStore.getState().tabs['conv-B'].streamingText).toBe('B content');
+      expect(useAppStore.getState().tabs[tabIdA].streamingText).toBe('');
+      expect(useAppStore.getState().tabs[tabIdB].streamingText).toBe('B content');
     });
   });
 
-  // --- sendMessage ---
+  // --- sendMessage (now takes tabId, resolves conversationId internally) ---
   describe('sendMessage', () => {
-    it('should send message to the specified tab conversationId', () => {
+    it('should send message using tabId, resolving conversationId from tab state', () => {
       const { result } = renderHook(() => useTabCopilot({ subscribe, send }));
       act(() => {
-        result.current.sendMessage('conv-A', 'hello');
+        result.current.sendMessage(tabIdA, 'hello');
       });
       expect(send).toHaveBeenCalledWith(expect.objectContaining({
         type: 'copilot:send',
         data: expect.objectContaining({ conversationId: 'conv-A', prompt: 'hello' }),
       }));
-      // User message added to tab
-      const tabA = useAppStore.getState().tabs['conv-A'];
+      // User message added to tab (keyed by tabId)
+      const tabA = useAppStore.getState().tabs[tabIdA];
       expect(tabA.messages).toHaveLength(1);
       expect(tabA.messages[0].role).toBe('user');
       expect(tabA.messages[0].content).toBe('hello');
@@ -192,14 +197,23 @@ describe('useTabCopilot', () => {
 
     it('should clear tab streaming state before sending', () => {
       renderHook(() => useTabCopilot({ subscribe, send }));
-      // Pre-fill some streaming state
-      useAppStore.getState().appendTabStreamingText('conv-A', 'old');
+      useAppStore.getState().appendTabStreamingText(tabIdA, 'old');
       const { result } = renderHook(() => useTabCopilot({ subscribe, send }));
       act(() => {
-        result.current.sendMessage('conv-A', 'new message');
+        result.current.sendMessage(tabIdA, 'new message');
       });
-      expect(useAppStore.getState().tabs['conv-A'].streamingText).toBe('');
-      expect(useAppStore.getState().tabs['conv-A'].isStreaming).toBe(true);
+      expect(useAppStore.getState().tabs[tabIdA].streamingText).toBe('');
+      expect(useAppStore.getState().tabs[tabIdA].isStreaming).toBe(true);
+    });
+
+    it('should not throw when called with non-existent tabId', () => {
+      const { result } = renderHook(() => useTabCopilot({ subscribe, send }));
+      expect(() => {
+        act(() => {
+          result.current.sendMessage('non-existent-tab', 'hello');
+        });
+      }).not.toThrow();
+      expect(send).not.toHaveBeenCalled();
     });
   });
 
@@ -207,8 +221,7 @@ describe('useTabCopilot', () => {
   describe('Tab close dedup cleanup', () => {
     it('should not throw when receiving events after tab is closed', () => {
       renderHook(() => useTabCopilot({ subscribe, send }));
-      useAppStore.getState().closeTab('conv-A');
-      // Events for closed tab should be silently discarded
+      useAppStore.getState().closeTab(tabIdA);
       expect(() => {
         act(() => {
           emit({ type: 'copilot:delta', data: { content: 'orphan', conversationId: 'conv-A' } });

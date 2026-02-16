@@ -40,7 +40,7 @@ export class ConversationRepository {
 
   update(
     id: string,
-    updates: { title?: string; pinned?: boolean; sdkSessionId?: string; model?: string },
+    updates: { title?: string; pinned?: boolean; sdkSessionId?: string; model?: string; cwd?: string },
   ): Conversation | null {
     const existing = this.getById(id);
     if (!existing) return null;
@@ -63,6 +63,10 @@ export class ConversationRepository {
     if (updates.model !== undefined) {
       setClauses.push('model = ?');
       params.push(updates.model);
+    }
+    if (updates.cwd !== undefined) {
+      setClauses.push('cwd = ?');
+      params.push(updates.cwd);
     }
 
     params.push(id);

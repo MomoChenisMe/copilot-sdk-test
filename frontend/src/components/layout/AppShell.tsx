@@ -6,12 +6,14 @@ import { useConversations } from '../../hooks/useConversations';
 import { useTabCopilot } from '../../hooks/useTabCopilot';
 import { useTerminal } from '../../hooks/useTerminal';
 import { useModels } from '../../hooks/useModels';
+import { useSkills } from '../../hooks/useSkills';
 import { conversationApi } from '../../lib/api';
+import { uploadFiles } from '../../lib/upload-api';
+import type { AttachedFile } from '../shared/AttachmentPreview';
 import { TopBar } from './TopBar';
 import { TabBar } from './TabBar';
 import { Sidebar } from './Sidebar';
 import { ChatView } from '../copilot/ChatView';
-import { TerminalView } from '../terminal/TerminalView';
 import { SettingsPanel } from '../settings/SettingsPanel';
 
 export function AppShell({ onLogout }: { onLogout: () => void }) {
@@ -28,8 +30,9 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     search: searchConversations,
   } = useConversations();
 
-  // Load models from API
+  // Load models and skills from API
   useModels();
+  useSkills();
 
   const activeConversationId = useAppStore((s) => s.activeConversationId);
   const setActiveConversationId = useAppStore((s) => s.setActiveConversationId);
@@ -41,6 +44,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   const openTab = useAppStore((s) => s.openTab);
   const closeTab = useAppStore((s) => s.closeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const switchTabConversation = useAppStore((s) => s.switchTabConversation);
 
   const { sendMessage, abortMessage, cleanupDedup } = useTabCopilot({ subscribe, send });
 
@@ -95,7 +99,8 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     // Sync activeConversationId with restored activeTabId
     const restoredTabId = useAppStore.getState().activeTabId;
     if (restoredTabId) {
-      setActiveConversationId(restoredTabId);
+      const restoredTab = useAppStore.getState().tabs[restoredTabId];
+      setActiveConversationId(restoredTab?.conversationId ?? null);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -109,6 +114,13 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   const setLastSelectedModel = useAppStore((s) => s.setLastSelectedModel);
   const defaultModel = lastSelectedModel || models[0]?.id || '';
 
+  // Helper: get conversationId from active tab
+  const getActiveConversationId = useCallback(() => {
+    const tabId = useAppStore.getState().activeTabId;
+    if (!tabId) return null;
+    return useAppStore.getState().tabs[tabId]?.conversationId ?? null;
+  }, []);
+
   // --- Tab management ---
   const handleNewTab = useCallback(async () => {
     const model = lastSelectedModel || models[0]?.id || 'gpt-4o';
@@ -121,13 +133,15 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   const handleSelectTab = useCallback(
     async (tabId: string) => {
       setActiveTab(tabId);
-      setActiveConversationId(tabId);
+      const tab = useAppStore.getState().tabs[tabId];
+      if (!tab) return;
+      const conversationId = tab.conversationId;
+      setActiveConversationId(conversationId);
 
       // Lazy-load messages if not yet loaded
-      const tab = useAppStore.getState().tabs[tabId];
-      if (tab && !tab.messagesLoaded) {
+      if (!tab.messagesLoaded) {
         try {
-          const msgs = await conversationApi.getMessages(tabId);
+          const msgs = await conversationApi.getMessages(conversationId);
           useAppStore.getState().setTabMessages(tabId, msgs);
         } catch {
           // ignore
@@ -136,8 +150,8 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
 
       // Subscribe to active stream if exists
       const activeStreams = useAppStore.getState().activeStreams;
-      if (activeStreams[tabId]) {
-        send({ type: 'copilot:subscribe', data: { conversationId: tabId } });
+      if (activeStreams[conversationId]) {
+        send({ type: 'copilot:subscribe', data: { conversationId } });
       }
     },
     [setActiveTab, setActiveConversationId, send],
@@ -145,49 +159,108 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
 
   const handleCloseTab = useCallback(
     (tabId: string) => {
+      const tab = useAppStore.getState().tabs[tabId];
+      if (tab) {
+        cleanupDedup(tab.conversationId);
+      }
       closeTab(tabId);
-      cleanupDedup(tabId);
       // Update activeConversationId to match new activeTabId
       const newActiveTabId = useAppStore.getState().activeTabId;
-      setActiveConversationId(newActiveTabId);
+      if (newActiveTabId) {
+        const newTab = useAppStore.getState().tabs[newActiveTabId];
+        setActiveConversationId(newTab?.conversationId ?? null);
+      } else {
+        setActiveConversationId(null);
+      }
     },
     [closeTab, cleanupDedup, setActiveConversationId],
   );
 
-  // Legacy: new conversation also opens a tab
-  const handleNewConversation = handleNewTab;
+  // Switch conversation within an existing tab
+  const handleSwitchConversation = useCallback(
+    async (tabId: string, newConversationId: string) => {
+      const tab = useAppStore.getState().tabs[tabId];
+      if (!tab) return;
 
-  const handleSelectConversation = useCallback(
-    async (id: string) => {
-      openTab(id, conversations.find((c) => c.id === id)?.title || 'Chat');
-      setActiveConversationId(id);
-      setSidebarOpen(false);
+      // Check if this conversation is already open in another tab
+      const existingTabId = useAppStore.getState().getTabIdByConversationId(newConversationId);
+      if (existingTabId && existingTabId !== tabId) {
+        // Jump to that tab instead
+        setActiveTab(existingTabId);
+        setActiveConversationId(newConversationId);
+        return;
+      }
+
+      // Abort current stream if any
+      if (tab.isStreaming) {
+        abortMessage(tab.conversationId);
+      }
+
+      // Switch conversation in this tab
+      const conv = conversations.find((c) => c.id === newConversationId);
+      switchTabConversation(tabId, newConversationId, conv?.title || 'Chat');
+
+      // Update global active
+      if (useAppStore.getState().activeTabId === tabId) {
+        setActiveConversationId(newConversationId);
+      }
 
       // Lazy-load messages
-      const tab = useAppStore.getState().tabs[id];
-      if (tab && !tab.messagesLoaded) {
-        try {
-          const msgs = await conversationApi.getMessages(id);
-          useAppStore.getState().setTabMessages(id, msgs);
-        } catch {
-          // ignore
-        }
+      try {
+        const msgs = await conversationApi.getMessages(newConversationId);
+        useAppStore.getState().setTabMessages(tabId, msgs);
+      } catch {
+        // ignore
+      }
+
+      // Subscribe to active stream if exists
+      const activeStreams = useAppStore.getState().activeStreams;
+      if (activeStreams[newConversationId]) {
+        send({ type: 'copilot:subscribe', data: { conversationId: newConversationId } });
       }
     },
-    [openTab, setActiveConversationId, conversations],
+    [abortMessage, switchTabConversation, setActiveTab, setActiveConversationId, conversations, send],
+  );
+
+  // Sidebar: click conversation → load into current active Tab
+  const handleSelectConversation = useCallback(
+    async (conversationId: string) => {
+      if (activeTabId) {
+        await handleSwitchConversation(activeTabId, conversationId);
+      } else {
+        // No active tab — open a new one
+        openTab(conversationId, conversations.find((c) => c.id === conversationId)?.title || 'Chat');
+        setActiveConversationId(conversationId);
+      }
+      setSidebarOpen(false);
+    },
+    [activeTabId, handleSwitchConversation, openTab, setActiveConversationId, conversations],
   );
 
   const handleSend = useCallback(
-    (text: string) => {
+    async (text: string, attachments?: AttachedFile[]) => {
       if (!activeTabId) return;
-      sendMessage(activeTabId, text);
+
+      let fileRefs: Array<{ id: string; originalName: string; mimeType: string; size: number; path: string }> | undefined;
+      if (attachments && attachments.length > 0) {
+        try {
+          fileRefs = await uploadFiles(attachments.map((a) => a.file));
+        } catch {
+          // Upload failed — send without files
+        }
+      }
+
+      sendMessage(activeTabId, text, fileRefs);
     },
     [activeTabId, sendMessage],
   );
 
   const handleAbort = useCallback(() => {
     if (!activeTabId) return;
-    abortMessage(activeTabId);
+    const tab = useAppStore.getState().tabs[activeTabId];
+    if (tab) {
+      abortMessage(tab.conversationId);
+    }
   }, [activeTabId, abortMessage]);
 
   const handleHomeClick = useCallback(() => {
@@ -198,11 +271,21 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   const handleModelChange = useCallback(
     (modelId: string) => {
       setLastSelectedModel(modelId);
-      if (activeTabId) {
-        updateConversation(activeTabId, { model: modelId });
+      const convId = getActiveConversationId();
+      if (convId) {
+        updateConversation(convId, { model: modelId });
       }
     },
-    [activeTabId, updateConversation, setLastSelectedModel],
+    [getActiveConversationId, updateConversation, setLastSelectedModel],
+  );
+
+  const handleCwdChange = useCallback(
+    async (newCwd: string) => {
+      const convId = getActiveConversationId();
+      if (!convId) return;
+      await updateConversation(convId, { cwd: newCwd, sdkSessionId: null });
+    },
+    [getActiveConversationId, updateConversation],
   );
 
   // WebSocket reconnect: re-subscribe to all active streams
@@ -215,7 +298,8 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
 
   // Get active tab state for rendering
   const activeTab = activeTabId ? tabs[activeTabId] : null;
-  const activeConversation = conversations.find((c) => c.id === activeTabId);
+  const activeConvId = activeTab?.conversationId;
+  const activeConversation = conversations.find((c) => c.id === activeConvId);
 
   return (
     <div className="flex flex-col h-full bg-bg-primary">
@@ -226,7 +310,6 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         onMenuClick={() => setSidebarOpen(!sidebarOpen)}
         onThemeToggle={toggleTheme}
         onHomeClick={handleHomeClick}
-        onNewChat={handleNewTab}
         onSettingsClick={() => setSettingsOpen(!settingsOpen)}
       />
 
@@ -234,6 +317,13 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         onNewTab={handleNewTab}
         onSelectTab={handleSelectTab}
         onCloseTab={handleCloseTab}
+        onSwitchConversation={handleSwitchConversation}
+        conversations={conversations.map((c) => ({
+          id: c.id,
+          title: c.title,
+          pinned: c.pinned,
+          updatedAt: c.updatedAt,
+        }))}
       />
 
       <div className="flex-1 overflow-hidden relative">
@@ -241,13 +331,22 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         <div className="h-full flex flex-col">
           <ChatView
             tabId={activeTabId}
-            onNewConversation={handleNewConversation}
+            onNewConversation={handleNewTab}
             onSend={handleSend}
             onAbort={handleAbort}
             isStreaming={activeTab?.isStreaming ?? false}
             disabled={!activeTabId}
             currentModel={activeConversation?.model || defaultModel}
             onModelChange={handleModelChange}
+            currentCwd={activeConversation?.cwd}
+            onCwdChange={handleCwdChange}
+            onClearConversation={() => {
+              if (activeTabId) {
+                useAppStore.getState().clearTabStreaming(activeTabId);
+                useAppStore.getState().setTabMessages(activeTabId, []);
+              }
+            }}
+            onSettingsOpen={() => setSettingsOpen(true)}
           />
         </div>
       </div>
@@ -263,15 +362,16 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         conversations={conversations}
-        activeConversationId={activeTabId}
-        openTabIds={Object.keys(tabs)}
+        activeConversationId={activeConvId ?? null}
+        openTabIds={Object.values(tabs).map((t) => t.conversationId)}
         onSelect={handleSelectConversation}
         onCreate={handleNewTab}
         onDelete={async (id) => {
           await removeConversation(id);
-          // Close the tab if it's open
-          if (tabs[id]) {
-            handleCloseTab(id);
+          // Close the tab that has this conversationId
+          const tabIdForConv = useAppStore.getState().getTabIdByConversationId(id);
+          if (tabIdForConv) {
+            handleCloseTab(tabIdForConv);
           }
           if (activeConversationId === id) setActiveConversationId(null);
         }}
@@ -280,8 +380,11 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         }}
         onRename={async (id, title) => {
           await updateConversation(id, { title });
-          // Update tab title too
-          useAppStore.getState().updateTabTitle(id, title);
+          // Update tab title if open
+          const tabIdForConv = useAppStore.getState().getTabIdByConversationId(id);
+          if (tabIdForConv) {
+            useAppStore.getState().updateTabTitle(tabIdForConv, title);
+          }
         }}
         onSearch={searchConversations}
         language={language}

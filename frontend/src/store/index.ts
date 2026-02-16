@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Conversation, Message, ToolRecord, TurnSegment } from '../lib/api';
+import type { SkillItem } from '../lib/prompts-api';
 
 export type { ToolRecord, TurnSegment };
 
@@ -70,6 +71,10 @@ export interface AppState {
   // Active streams (background streaming)
   activeStreams: Record<string, string>;
 
+  // Skills cache
+  skills: SkillItem[];
+  skillsLoaded: boolean;
+
   // Settings
   activePresets: string[];
   disabledSkills: string[];
@@ -118,6 +123,10 @@ export interface AppState {
   lastSelectedModel: string | null;
   setLastSelectedModel: (modelId: string) => void;
 
+  // Actions — Skills
+  setSkills: (skills: SkillItem[]) => void;
+  setSkillsLoaded: (loaded: boolean) => void;
+
   // Actions — Settings
   togglePreset: (name: string) => void;
   removePreset: (name: string) => void;
@@ -139,6 +148,8 @@ export interface AppState {
   setActiveTab: (tabId: string) => void;
   reorderTabs: (tabIds: string[]) => void;
   updateTabTitle: (tabId: string, title: string) => void;
+  switchTabConversation: (tabId: string, conversationId: string, title: string) => void;
+  getTabIdByConversationId: (conversationId: string) => string | undefined;
   restoreOpenTabs: () => void;
   restoreDisabledSkills: () => void;
 
@@ -203,6 +214,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   turnContentSegments: [],
   turnSegments: [],
   activeStreams: {},
+  skills: [],
+  skillsLoaded: false,
   activePresets: [],
   disabledSkills: [],
   settingsOpen: false,
@@ -311,6 +324,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { activeStreams: rest };
     }),
 
+  // Skills actions
+  setSkills: (skills) => set({ skills }),
+  setSkillsLoaded: (loaded) => set({ skillsLoaded: loaded }),
+
   // Settings actions
   togglePreset: (name) => {
     const current = get().activePresets;
@@ -356,13 +373,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Tab management actions
   openTab: (conversationId, title) => {
     const state = get();
-    // If tab already exists, just activate it
-    if (state.tabs[conversationId]) {
-      set({ activeTabId: conversationId });
+    // If a tab already has this conversationId, just activate it
+    const existingTabId = Object.keys(state.tabs).find(
+      (id) => state.tabs[id].conversationId === conversationId,
+    );
+    if (existingTabId) {
+      set({ activeTabId: existingTabId });
       return;
     }
+    const tabId = crypto.randomUUID();
     const tab: TabState = {
-      id: conversationId,
+      id: tabId,
       conversationId,
       title,
       messages: [],
@@ -376,9 +397,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       messagesLoaded: false,
       createdAt: Date.now(),
     };
-    const newTabs = { ...state.tabs, [conversationId]: tab };
-    const newOrder = [...state.tabOrder, conversationId];
-    set({ tabs: newTabs, tabOrder: newOrder, activeTabId: conversationId, tabLimitWarning: newOrder.length >= 15 });
+    const newTabs = { ...state.tabs, [tabId]: tab };
+    const newOrder = [...state.tabOrder, tabId];
+    set({ tabs: newTabs, tabOrder: newOrder, activeTabId: tabId, tabLimitWarning: newOrder.length >= 15 });
     persistOpenTabs(newTabs, newOrder);
   },
 
@@ -409,18 +430,50 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { tabs: { ...state.tabs, [tabId]: { ...tab, title } } };
     }),
 
+  switchTabConversation: (tabId, conversationId, title) => {
+    const state = get();
+    const tab = state.tabs[tabId];
+    if (!tab) return;
+    const updatedTab: TabState = {
+      ...tab,
+      conversationId,
+      title,
+      messages: [],
+      streamingText: '',
+      isStreaming: false,
+      toolRecords: [],
+      reasoningText: '',
+      turnContentSegments: [],
+      turnSegments: [],
+      copilotError: null,
+      messagesLoaded: false,
+    };
+    const newTabs = { ...state.tabs, [tabId]: updatedTab };
+    set({ tabs: newTabs });
+    persistOpenTabs(newTabs, state.tabOrder);
+  },
+
+  getTabIdByConversationId: (conversationId) => {
+    const tabs = get().tabs;
+    return Object.keys(tabs).find((id) => tabs[id].conversationId === conversationId);
+  },
+
   restoreOpenTabs: () => {
     try {
       const raw = localStorage.getItem('ai-terminal:openTabs');
       if (!raw) return;
-      const saved = JSON.parse(raw) as Array<{ id: string; title: string; conversationId: string }>;
+      const saved = JSON.parse(raw) as Array<{ id: string; title: string; conversationId?: string }>;
       if (!Array.isArray(saved) || saved.length === 0) return;
       const tabs: Record<string, TabState> = {};
       const tabOrder: string[] = [];
       for (const item of saved) {
-        tabs[item.id] = {
-          id: item.id,
-          conversationId: item.conversationId,
+        // Old format migration: if no conversationId, id was the conversationId
+        const isOldFormat = !item.conversationId;
+        const tabId = isOldFormat ? crypto.randomUUID() : item.id;
+        const conversationId = item.conversationId ?? item.id;
+        tabs[tabId] = {
+          id: tabId,
+          conversationId,
           title: item.title,
           messages: [],
           streamingText: '',
@@ -433,7 +486,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           messagesLoaded: false,
           createdAt: Date.now(),
         };
-        tabOrder.push(item.id);
+        tabOrder.push(tabId);
       }
       set({ tabs, tabOrder, activeTabId: tabOrder[0] ?? null, tabLimitWarning: tabOrder.length >= 15 });
     } catch { /* noop — invalid JSON or localStorage unavailable */ }

@@ -44,8 +44,8 @@ export function createConversationRoutes(repo: ConversationRepository): Router {
   });
 
   router.patch('/:id', (req, res) => {
-    const { title, pinned, sdkSessionId, model } = req.body;
-    const updated = repo.update(req.params.id, { title, pinned, sdkSessionId, model });
+    const { title, pinned, sdkSessionId, model, cwd } = req.body;
+    const updated = repo.update(req.params.id, { title, pinned, sdkSessionId, model, cwd });
     if (!updated) {
       res.status(404).json({ error: 'Conversation not found' });
       return;

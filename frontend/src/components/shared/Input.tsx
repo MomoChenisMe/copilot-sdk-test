@@ -1,18 +1,30 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowUp, Square } from 'lucide-react';
+import { ArrowUp, Square, Paperclip } from 'lucide-react';
+import { SlashCommandMenu } from './SlashCommandMenu';
+import type { SlashCommand } from './SlashCommandMenu';
+import { AttachmentPreview } from './AttachmentPreview';
+import type { AttachedFile } from './AttachmentPreview';
 
 interface InputProps {
-  onSend: (text: string) => void;
+  onSend: (text: string, attachments?: AttachedFile[]) => void;
   onAbort: () => void;
   isStreaming: boolean;
   disabled?: boolean;
+  slashCommands?: SlashCommand[];
+  onSlashCommand?: (command: SlashCommand) => void;
+  enableAttachments?: boolean;
 }
 
-export function Input({ onSend, onAbort, isStreaming, disabled }: InputProps) {
+export function Input({ onSend, onAbort, isStreaming, disabled, slashCommands, onSlashCommand, enableAttachments }: InputProps) {
   const { t } = useTranslation();
   const [text, setText] = useState('');
+  const [showSlashMenu, setShowSlashMenu] = useState(false);
+  const [slashFilter, setSlashFilter] = useState('');
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [attachments, setAttachments] = useState<AttachedFile[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const adjustHeight = useCallback(() => {
     const el = textareaRef.current;
@@ -26,14 +38,164 @@ export function Input({ onSend, onAbort, isStreaming, disabled }: InputProps) {
     adjustHeight();
   }, [text, adjustHeight]);
 
+  // Add files to attachments
+  const addFiles = useCallback((files: FileList | File[]) => {
+    const newAttachments: AttachedFile[] = Array.from(files).map((file) => ({
+      id: crypto.randomUUID(),
+      file,
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+    }));
+    setAttachments((prev) => [...prev, ...newAttachments]);
+  }, []);
+
+  const removeAttachment = useCallback((id: string) => {
+    setAttachments((prev) => {
+      const removed = prev.find((a) => a.id === id);
+      if (removed?.previewUrl) {
+        URL.revokeObjectURL(removed.previewUrl);
+      }
+      return prev.filter((a) => a.id !== id);
+    });
+  }, []);
+
+  // Handle file input change
+  const handleFileInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files.length > 0) {
+        addFiles(e.target.files);
+      }
+      // Reset so same file can be selected again
+      e.target.value = '';
+    },
+    [addFiles],
+  );
+
+  // Handle paste (for images)
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      if (!enableAttachments) return;
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const imageFiles: File[] = [];
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) imageFiles.push(file);
+        }
+      }
+      if (imageFiles.length > 0) {
+        addFiles(imageFiles);
+      }
+    },
+    [enableAttachments, addFiles],
+  );
+
+  // Handle drag and drop
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      if (!enableAttachments) return;
+      e.preventDefault();
+      if (e.dataTransfer.files.length > 0) {
+        addFiles(e.dataTransfer.files);
+      }
+    },
+    [enableAttachments, addFiles],
+  );
+
+  const handleDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (!enableAttachments) return;
+      e.preventDefault();
+    },
+    [enableAttachments],
+  );
+
+  // Detect slash command trigger
+  const handleChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const value = e.target.value;
+      setText(value);
+
+      if (slashCommands && slashCommands.length > 0 && value.startsWith('/')) {
+        const filter = value.slice(1).split(' ')[0] || '';
+        // Only show menu if there's no space after the command (still typing the command name)
+        if (!value.includes(' ') || value === '/') {
+          setSlashFilter(filter);
+          setShowSlashMenu(true);
+          setSelectedIndex(0);
+          return;
+        }
+      }
+      setShowSlashMenu(false);
+    },
+    [slashCommands],
+  );
+
+  const getFilteredCommands = useCallback(() => {
+    if (!slashCommands) return [];
+    return slashCommands.filter((cmd) =>
+      cmd.name.toLowerCase().includes(slashFilter.toLowerCase()),
+    );
+  }, [slashCommands, slashFilter]);
+
+  const handleSlashSelect = useCallback(
+    (command: SlashCommand) => {
+      setShowSlashMenu(false);
+      if (command.type === 'skill') {
+        // Insert /skill-name with trailing space
+        setText(`/${command.name} `);
+      } else {
+        // Builtin command — fire callback and clear
+        setText('');
+        onSlashCommand?.(command);
+      }
+    },
+    [onSlashCommand],
+  );
+
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed || isStreaming) return;
-    onSend(trimmed);
+    if (enableAttachments) {
+      onSend(trimmed, [...attachments]);
+      setAttachments([]);
+    } else {
+      onSend(trimmed);
+    }
     setText('');
-  }, [text, isStreaming, onSend]);
+    setShowSlashMenu(false);
+  }, [text, isStreaming, onSend, enableAttachments, attachments]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (showSlashMenu) {
+      const filtered = getFilteredCommands();
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedIndex((prev) => Math.min(prev + 1, filtered.length - 1));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedIndex((prev) => Math.max(prev - 1, 0));
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (filtered[selectedIndex]) {
+          handleSlashSelect(filtered[selectedIndex]);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowSlashMenu(false);
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -41,12 +203,31 @@ export function Input({ onSend, onAbort, isStreaming, disabled }: InputProps) {
   };
 
   return (
-    <div className="relative bg-bg-elevated border border-border rounded-2xl shadow-[var(--shadow-input)] transition-shadow focus-within:border-border-focus focus-within:shadow-[var(--shadow-md)]">
+    <div
+      className="relative bg-bg-elevated border border-border rounded-2xl shadow-[var(--shadow-input)] transition-shadow focus-within:border-border-focus focus-within:shadow-[var(--shadow-md)]"
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+    >
+      {showSlashMenu && slashCommands && (
+        <SlashCommandMenu
+          commands={slashCommands}
+          filter={slashFilter}
+          selectedIndex={selectedIndex}
+          onSelect={handleSlashSelect}
+          onClose={() => setShowSlashMenu(false)}
+        />
+      )}
+      {enableAttachments && attachments.length > 0 && (
+        <div className="px-3 pt-2">
+          <AttachmentPreview files={attachments} onRemove={removeAttachment} />
+        </div>
+      )}
       <textarea
         ref={textareaRef}
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={handleChange}
         onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
         placeholder={t('input.placeholder')}
         disabled={disabled}
         rows={1}
@@ -54,6 +235,28 @@ export function Input({ onSend, onAbort, isStreaming, disabled }: InputProps) {
         style={{ maxHeight: '200px' }}
       />
       <div className="absolute bottom-2 right-2 flex items-center gap-1">
+        {enableAttachments && (
+          <>
+            <button
+              data-testid="attach-button"
+              onClick={() => fileInputRef.current?.click()}
+              className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-tertiary transition-colors"
+              aria-label={t('input.attach', 'Attach file')}
+              type="button"
+            >
+              <Paperclip size={16} />
+            </button>
+            <input
+              ref={fileInputRef}
+              data-testid="file-input"
+              type="file"
+              multiple
+              className="hidden"
+              onChange={handleFileInputChange}
+              accept="image/*,.pdf,.txt,.md,.csv,.json"
+            />
+          </>
+        )}
         {isStreaming ? (
           <button
             onClick={onAbort}

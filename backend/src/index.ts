@@ -28,6 +28,8 @@ import { createMemoryRoutes } from './prompts/memory-routes.js';
 import { SkillFileStore } from './skills/file-store.js';
 import { BuiltinSkillStore } from './skills/builtin-store.js';
 import { createSkillsRoutes } from './skills/routes.js';
+import { createUploadRoutes } from './upload/routes.js';
+import { createSelfControlTools } from './copilot/self-control-tools.js';
 
 const log = createLogger('main');
 
@@ -75,6 +77,7 @@ export function createApp() {
   app.use('/api/prompts', authMiddleware, createPromptsRoutes(promptStore));
   app.use('/api/memory', authMiddleware, createMemoryRoutes(promptStore));
   app.use('/api/skills', authMiddleware, createSkillsRoutes(skillStore, builtinSkillStore));
+  app.use('/api/upload', authMiddleware, createUploadRoutes(path.resolve(config.dbPath, '../uploads')));
 
   // Serve static files in production
   if (config.nodeEnv === 'production') {
@@ -98,12 +101,18 @@ export function createApp() {
       ...skillStore.getSkillDirectories(),
     ],
   };
+  const selfControlTools = createSelfControlTools({
+    promptStore,
+    skillStore,
+    builtinSkillStore,
+  });
   const streamManager = StreamManager.getInstance({
     sessionManager,
     repo,
     maxConcurrency: config.maxConcurrency,
     promptComposer,
     skillStore: mergedSkillStore,
+    selfControlTools,
   });
 
   // Register WS handlers

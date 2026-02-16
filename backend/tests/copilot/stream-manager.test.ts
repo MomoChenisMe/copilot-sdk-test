@@ -139,6 +139,7 @@ describe('StreamManager', () => {
       expect(mockSessionManager.sendMessage).toHaveBeenCalledWith(
         mockSession,
         'hello',
+        undefined,
       );
       expect(sm.getActiveStreamIds()).toContain('conv-1');
     });
@@ -425,6 +426,7 @@ describe('StreamManager', () => {
       expect(mockSessionManager.sendMessage).toHaveBeenCalledWith(
         mockSession,
         'second',
+        undefined,
       );
     });
 
@@ -661,6 +663,54 @@ describe('StreamManager', () => {
       const opts = mockSessionManager.getOrCreateSession.mock.calls[0][0];
       expect(opts.skillDirectories).toBeUndefined();
       expect(opts.disabledSkills).toBeUndefined();
+    });
+  });
+
+  // === selfControlTools integration ===
+  describe('startStream with selfControlTools', () => {
+    it('should pass selfControlTools to session options', async () => {
+      const fakeTools = [
+        { name: 'read_profile', description: 'Read profile', handler: async () => ({}) },
+        { name: 'update_profile', description: 'Update profile', handler: async () => ({}) },
+      ];
+
+      StreamManager.resetInstance();
+      const smTools = StreamManager.getInstance({
+        sessionManager: mockSessionManager as any,
+        repo: mockRepo as any,
+        selfControlTools: fakeTools as any,
+      });
+
+      await smTools.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+      });
+
+      expect(mockSessionManager.getOrCreateSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tools: fakeTools,
+        }),
+      );
+    });
+
+    it('should not pass tools when no selfControlTools provided', async () => {
+      StreamManager.resetInstance();
+      const smNoTools = StreamManager.getInstance({
+        sessionManager: mockSessionManager as any,
+        repo: mockRepo as any,
+      });
+
+      await smNoTools.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+      });
+
+      const opts = mockSessionManager.getOrCreateSession.mock.calls[0][0];
+      expect(opts.tools).toBeUndefined();
     });
   });
 
