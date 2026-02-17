@@ -433,6 +433,69 @@ describe('Tab mode (copilot/terminal)', () => {
   });
 });
 
+describe('Draft tabs (lazy conversation creation)', () => {
+  beforeEach(() => {
+    useAppStore.setState({ tabs: {}, tabOrder: [], activeTabId: null });
+    localStorage.clear();
+  });
+
+  it('openTab with null conversationId should create a draft tab', () => {
+    useAppStore.getState().openTab(null, 'New Chat');
+    const state = useAppStore.getState();
+    const tabId = state.tabOrder[0];
+    expect(tabId).toBeDefined();
+    expect(state.tabs[tabId].conversationId).toBeNull();
+    expect(state.tabs[tabId].title).toBe('New Chat');
+    expect(state.activeTabId).toBe(tabId);
+  });
+
+  it('multiple draft tabs should be allowed (no dedup on null)', () => {
+    useAppStore.getState().openTab(null, 'Draft 1');
+    useAppStore.getState().openTab(null, 'Draft 2');
+    const state = useAppStore.getState();
+    expect(state.tabOrder).toHaveLength(2);
+    expect(state.tabs[state.tabOrder[0]].conversationId).toBeNull();
+    expect(state.tabs[state.tabOrder[1]].conversationId).toBeNull();
+  });
+
+  it('draft tabs should NOT be persisted to localStorage', () => {
+    useAppStore.getState().openTab(null, 'Draft 1');
+    useAppStore.getState().openTab('conv-1', 'Saved Chat');
+    const stored = JSON.parse(localStorage.getItem('ai-terminal:openTabs') ?? '[]');
+    expect(stored).toHaveLength(1);
+    expect(stored[0].conversationId).toBe('conv-1');
+  });
+
+  it('materializeTabConversation should set conversationId on a draft tab', () => {
+    useAppStore.getState().openTab(null, 'Draft');
+    const tabId = useAppStore.getState().tabOrder[0];
+    useAppStore.getState().materializeTabConversation(tabId, 'conv-new');
+    const tab = useAppStore.getState().tabs[tabId];
+    expect(tab.conversationId).toBe('conv-new');
+  });
+
+  it('materializeTabConversation should persist after materialization', () => {
+    useAppStore.getState().openTab(null, 'Draft');
+    const tabId = useAppStore.getState().tabOrder[0];
+    useAppStore.getState().materializeTabConversation(tabId, 'conv-new');
+    const stored = JSON.parse(localStorage.getItem('ai-terminal:openTabs') ?? '[]');
+    expect(stored).toHaveLength(1);
+    expect(stored[0].conversationId).toBe('conv-new');
+  });
+
+  it('materializeTabConversation should set messagesLoaded to true', () => {
+    useAppStore.getState().openTab(null, 'Draft');
+    const tabId = useAppStore.getState().tabOrder[0];
+    expect(useAppStore.getState().tabs[tabId].messagesLoaded).toBe(false);
+    useAppStore.getState().materializeTabConversation(tabId, 'conv-new');
+    expect(useAppStore.getState().tabs[tabId].messagesLoaded).toBe(true);
+  });
+
+  it('materializeTabConversation should not throw for non-existent tab', () => {
+    expect(() => useAppStore.getState().materializeTabConversation('nonexistent', 'conv-1')).not.toThrow();
+  });
+});
+
 describe('Tab soft limit', () => {
   it('openTab should set tabLimitWarning when reaching 15 tabs', () => {
     for (let i = 0; i < 15; i++) {

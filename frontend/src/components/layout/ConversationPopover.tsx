@@ -1,15 +1,16 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { Search, Plus } from 'lucide-react';
+import { Search, Plus, Trash2 } from 'lucide-react';
 
 export interface ConversationPopoverProps {
   open: boolean;
   onClose: () => void;
   conversations: Array<{ id: string; title: string; pinned?: boolean; updatedAt?: string }>;
-  currentConversationId: string;
+  currentConversationId: string | null;
   onSelect: (conversationId: string) => void;
   onNew: () => void;
+  onDelete?: (conversationId: string) => void;
   anchorRef?: React.RefObject<HTMLElement | null>;
 }
 
@@ -20,11 +21,14 @@ export function ConversationPopover({
   currentConversationId,
   onSelect,
   onNew,
+  onDelete,
   anchorRef,
 }: ConversationPopoverProps) {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [highlightIndex, setHighlightIndex] = useState(-1);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -47,6 +51,8 @@ export function ConversationPopover({
     if (open) {
       setSearchQuery('');
       setHighlightIndex(-1);
+      setConfirmingDeleteId(null);
+      setHoveredId(null);
       // Autofocus the search input after mount
       requestAnimationFrame(() => {
         searchInputRef.current?.focus();
@@ -113,26 +119,76 @@ export function ConversationPopover({
   const renderItem = (conv: (typeof conversations)[number], index: number) => {
     const isCurrent = conv.id === currentConversationId;
     const isHighlighted = index === highlightIndex;
+    const isHovered = hoveredId === conv.id;
+    const isConfirming = confirmingDeleteId === conv.id;
+
+    if (isConfirming) {
+      return (
+        <div
+          key={conv.id}
+          data-popover-item
+          className="flex items-center gap-2 px-3 py-2 text-sm rounded-md bg-error/10"
+        >
+          <span className="flex-1 truncate text-text-secondary">{t('sidebar.deleteConfirm', 'Delete?')}</span>
+          <button
+            data-testid={`confirm-delete-${conv.id}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete?.(conv.id);
+              setConfirmingDeleteId(null);
+            }}
+            className="px-2 py-0.5 text-xs rounded bg-error text-white hover:bg-error/80 transition-colors"
+          >
+            {t('common.delete', 'Delete')}
+          </button>
+          <button
+            data-testid={`cancel-delete-${conv.id}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setConfirmingDeleteId(null);
+            }}
+            className="px-2 py-0.5 text-xs rounded bg-bg-tertiary text-text-secondary hover:bg-bg-secondary transition-colors"
+          >
+            {t('common.cancel', 'Cancel')}
+          </button>
+        </div>
+      );
+    }
 
     return (
-      <button
+      <div
         key={conv.id}
         data-popover-item
         data-testid={`popover-item-${conv.id}`}
-        onClick={() => {
-          onSelect(conv.id);
-          onClose();
-        }}
-        className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${
+        className={`relative flex items-center w-full text-left px-3 py-2 text-sm rounded-md transition-colors cursor-pointer ${
           isCurrent
             ? 'bg-indigo-50 dark:bg-indigo-900/30 text-text-primary font-medium'
             : isHighlighted
               ? 'bg-bg-tertiary text-text-primary'
               : 'text-text-secondary hover:bg-bg-tertiary'
         }`}
+        onClick={() => {
+          onSelect(conv.id);
+          onClose();
+        }}
+        onMouseEnter={() => setHoveredId(conv.id)}
+        onMouseLeave={() => setHoveredId(null)}
       >
-        <span className="block truncate">{conv.title}</span>
-      </button>
+        <span className="block truncate flex-1">{conv.title}</span>
+        {onDelete && isHovered && (
+          <button
+            data-testid={`delete-conv-${conv.id}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setConfirmingDeleteId(conv.id);
+            }}
+            className="shrink-0 p-1 rounded text-text-muted hover:text-error hover:bg-error/10 transition-colors"
+            aria-label={t('sidebar.deleteConversation', 'Delete conversation')}
+          >
+            <Trash2 size={14} />
+          </button>
+        )}
+      </div>
     );
   };
 

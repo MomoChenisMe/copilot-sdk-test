@@ -8,6 +8,7 @@ import { useTerminal } from '../../hooks/useTerminal';
 import { useBashMode } from '../../hooks/useBashMode';
 import { useModels } from '../../hooks/useModels';
 import { useSkills } from '../../hooks/useSkills';
+import { useGlobalShortcuts } from '../../hooks/useGlobalShortcuts';
 import { conversationApi, configApi } from '../../lib/api';
 import { uploadFiles } from '../../lib/upload-api';
 import type { AttachedFile } from '../shared/AttachmentPreview';
@@ -15,6 +16,7 @@ import { TopBar } from './TopBar';
 import { TabBar } from './TabBar';
 import { ChatView } from '../copilot/ChatView';
 import { SettingsPanel } from '../settings/SettingsPanel';
+import { ShortcutsPanel } from '../shared/ShortcutsPanel';
 
 export function AppShell({ onLogout }: { onLogout: () => void }) {
   const { t } = useTranslation();
@@ -52,7 +54,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       const tabId = useAppStore.getState().activeTabId;
       if (!tabId) return;
       const tab = useAppStore.getState().tabs[tabId];
-      if (!tab) return;
+      if (!tab?.conversationId) return;
       await updateConversation(tab.conversationId, { cwd: newCwd, sdkSessionId: null });
     },
     [updateConversation],
@@ -127,6 +129,15 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     if (restoredTabId) {
       const restoredTab = useAppStore.getState().tabs[restoredTabId];
       setActiveConversationId(restoredTab?.conversationId ?? null);
+      // Load messages for the restored active tab to exit loading state
+      if (restoredTab?.conversationId && !restoredTab.messagesLoaded) {
+        conversationApi.getMessages(restoredTab.conversationId).then((msgs) => {
+          useAppStore.getState().setTabMessages(restoredTabId, msgs);
+        }).catch(() => {
+          // Mark as loaded even on error to exit the loading spinner
+          useAppStore.getState().setTabMessages(restoredTabId, []);
+        });
+      }
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -148,12 +159,11 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   }, []);
 
   // --- Tab management ---
-  const handleNewTab = useCallback(async () => {
-    const model = lastSelectedModel || models[0]?.id || 'gpt-4o';
-    const conv = await createConversation(model, cwd);
-    openTab(conv.id, conv.title || t('tabBar.newTab', 'New Chat'));
-    setActiveConversationId(conv.id);
-  }, [createConversation, cwd, openTab, setActiveConversationId, models, lastSelectedModel, t]);
+  const handleNewTab = useCallback(() => {
+    // Lazy: create a draft tab without calling the API
+    openTab(null, t('tabBar.newTab', 'New Chat'));
+    setActiveConversationId(null);
+  }, [openTab, setActiveConversationId, t]);
 
   const handleSelectTab = useCallback(
     async (tabId: string) => {
@@ -162,6 +172,9 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       if (!tab) return;
       const conversationId = tab.conversationId;
       setActiveConversationId(conversationId);
+
+      // Draft tab — no messages to load
+      if (!conversationId) return;
 
       // Lazy-load messages if not yet loaded
       if (!tab.messagesLoaded) {
@@ -185,7 +198,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   const handleCloseTab = useCallback(
     (tabId: string) => {
       const tab = useAppStore.getState().tabs[tabId];
-      if (tab) {
+      if (tab && tab.conversationId) {
         cleanupDedup(tab.conversationId);
       }
       closeTab(tabId);
@@ -199,6 +212,30 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       }
     },
     [closeTab, cleanupDedup, setActiveConversationId],
+  );
+
+  const handleDeleteConversation = useCallback(
+    (conversationId: string) => {
+      // Abort any active stream for this conversation
+      abortMessage(conversationId);
+      // Close any tab that has this conversation
+      const tabId = useAppStore.getState().getTabIdByConversationId(conversationId);
+      if (tabId) {
+        cleanupDedup(conversationId);
+        closeTab(tabId);
+      }
+      // Remove the conversation from the list and API
+      removeConversation(conversationId);
+      // Update activeConversationId
+      const newActiveTabId = useAppStore.getState().activeTabId;
+      if (newActiveTabId) {
+        const newTab = useAppStore.getState().tabs[newActiveTabId];
+        setActiveConversationId(newTab?.conversationId ?? null);
+      } else {
+        setActiveConversationId(null);
+      }
+    },
+    [abortMessage, cleanupDedup, closeTab, removeConversation, setActiveConversationId],
   );
 
   // Switch conversation within an existing tab
@@ -217,7 +254,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       }
 
       // Abort current stream if any
-      if (tab.isStreaming) {
+      if (tab.isStreaming && tab.conversationId) {
         abortMessage(tab.conversationId);
       }
 
@@ -251,6 +288,18 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     async (text: string, attachments?: AttachedFile[]) => {
       if (!activeTabId) return;
 
+      const tab = useAppStore.getState().tabs[activeTabId];
+      if (!tab) return;
+
+      // Lazy creation: if this is a draft tab, create the conversation first
+      if (tab.conversationId === null) {
+        const model = lastSelectedModel || models[0]?.id || 'gpt-4o';
+        const conv = await createConversation(model, cwd);
+        useAppStore.getState().materializeTabConversation(activeTabId, conv.id);
+        setActiveConversationId(conv.id);
+        useAppStore.getState().addConversation(conv);
+      }
+
       let fileRefs: Array<{ id: string; originalName: string; mimeType: string; size: number; path: string }> | undefined;
       if (attachments && attachments.length > 0) {
         try {
@@ -262,7 +311,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
 
       sendMessage(activeTabId, text, fileRefs);
     },
-    [activeTabId, sendMessage],
+    [activeTabId, sendMessage, lastSelectedModel, models, createConversation, cwd, setActiveConversationId],
   );
 
   const handleBashSend = useCallback(
@@ -279,7 +328,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   const handleAbort = useCallback(() => {
     if (!activeTabId) return;
     const tab = useAppStore.getState().tabs[activeTabId];
-    if (tab) {
+    if (tab?.conversationId) {
       abortMessage(tab.conversationId);
     }
   }, [activeTabId, abortMessage]);
@@ -322,6 +371,56 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   const activeConvId = activeTab?.conversationId;
   const activeConversation = conversations.find((c) => c.id === activeConvId);
 
+  // Shortcuts panel state
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const setTabMode = useAppStore((s) => s.setTabMode);
+
+  const handleClearConversation = useCallback(() => {
+    if (activeTabId) {
+      useAppStore.getState().clearTabStreaming(activeTabId);
+      useAppStore.getState().setTabMessages(activeTabId, []);
+    }
+  }, [activeTabId]);
+
+  // Global keyboard shortcuts
+  useGlobalShortcuts({
+    onNewTab: handleNewTab,
+    onCloseTab: () => { if (activeTabId) handleCloseTab(activeTabId); },
+    onSelectTabByIndex: (index: number) => {
+      const tabOrder = useAppStore.getState().tabOrder;
+      if (index < tabOrder.length) {
+        handleSelectTab(tabOrder[index]);
+      }
+    },
+    onNextTab: () => {
+      const { tabOrder, activeTabId: currentTabId } = useAppStore.getState();
+      if (tabOrder.length <= 1 || !currentTabId) return;
+      const currentIndex = tabOrder.indexOf(currentTabId);
+      const nextIndex = (currentIndex + 1) % tabOrder.length;
+      handleSelectTab(tabOrder[nextIndex]);
+    },
+    onPrevTab: () => {
+      const { tabOrder, activeTabId: currentTabId } = useAppStore.getState();
+      if (tabOrder.length <= 1 || !currentTabId) return;
+      const currentIndex = tabOrder.indexOf(currentTabId);
+      const prevIndex = (currentIndex - 1 + tabOrder.length) % tabOrder.length;
+      handleSelectTab(tabOrder[prevIndex]);
+    },
+    onToggleAiMode: () => { if (activeTabId) setTabMode(activeTabId, 'copilot'); },
+    onToggleBashMode: () => { if (activeTabId) setTabMode(activeTabId, 'terminal'); },
+    onOpenSettings: () => setSettingsOpen(true),
+    onClearConversation: handleClearConversation,
+    onToggleTheme: toggleTheme,
+    onTriggerUpload: () => {
+      // Trigger file input click via custom event
+      document.dispatchEvent(new CustomEvent('shortcut:upload'));
+    },
+    onToggleModelSelector: () => {
+      document.dispatchEvent(new CustomEvent('shortcut:modelSelector'));
+    },
+    onShowShortcuts: () => setShortcutsOpen((v) => !v),
+  });
+
   return (
     <div className="flex flex-col h-full bg-bg-primary">
       <TopBar
@@ -331,6 +430,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         onThemeToggle={toggleTheme}
         onHomeClick={handleHomeClick}
         onSettingsClick={() => setSettingsOpen(!settingsOpen)}
+        onShortcutsClick={() => setShortcutsOpen(true)}
       />
 
       <TabBar
@@ -338,6 +438,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         onSelectTab={handleSelectTab}
         onCloseTab={handleCloseTab}
         onSwitchConversation={handleSwitchConversation}
+        onDeleteConversation={handleDeleteConversation}
         conversations={conversations.map((c) => ({
           id: c.id,
           title: c.title,
@@ -359,14 +460,9 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
             disabled={!activeTabId}
             currentModel={activeConversation?.model || defaultModel}
             onModelChange={handleModelChange}
-            currentCwd={activeConversation?.cwd}
+            currentCwd={activeConversation?.cwd || cwd}
             onCwdChange={handleCwdChange}
-            onClearConversation={() => {
-              if (activeTabId) {
-                useAppStore.getState().clearTabStreaming(activeTabId);
-                useAppStore.getState().setTabMessages(activeTabId, []);
-              }
-            }}
+            onClearConversation={handleClearConversation}
             onSettingsOpen={() => setSettingsOpen(true)}
           />
         </div>
@@ -382,6 +478,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         onLogout={onLogout}
       />
 
+      <ShortcutsPanel open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </div>
   );
 }

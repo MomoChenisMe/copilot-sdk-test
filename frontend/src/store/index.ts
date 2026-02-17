@@ -11,9 +11,16 @@ export interface ModelInfo {
   name: string;
 }
 
+export interface UsageInfo {
+  inputTokens: number;
+  outputTokens: number;
+  contextWindowUsed: number;
+  contextWindowMax: number;
+}
+
 export interface TabState {
   id: string;
-  conversationId: string;
+  conversationId: string | null;
   title: string;
   mode: 'copilot' | 'terminal';
   messages: Message[];
@@ -26,6 +33,7 @@ export interface TabState {
   copilotError: string | null;
   messagesLoaded: boolean;
   createdAt: number;
+  usage: UsageInfo;
 }
 
 export interface AppState {
@@ -152,7 +160,8 @@ export interface AppState {
   tabLimitWarning: boolean;
 
   // Actions — Tab management
-  openTab: (conversationId: string, title: string) => void;
+  openTab: (conversationId: string | null, title: string) => void;
+  materializeTabConversation: (tabId: string, conversationId: string) => void;
   closeTab: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
   reorderTabs: (tabIds: string[]) => void;
@@ -176,6 +185,10 @@ export interface AppState {
   updateTabToolInTurnSegments: (tabId: string, toolCallId: string, updates: Partial<ToolRecord>) => void;
   setTabCopilotError: (tabId: string, error: string | null) => void;
   setTabMode: (tabId: string, mode: 'copilot' | 'terminal') => void;
+
+  // Actions — Per-tab usage
+  updateTabUsage: (tabId: string, inputTokens: number, outputTokens: number) => void;
+  updateTabContextWindow: (tabId: string, contextWindowUsed: number, contextWindowMax: number) => void;
 }
 
 function readThemeFromStorage(): Theme {
@@ -389,13 +402,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Tab management actions
   openTab: (conversationId, title) => {
     const state = get();
-    // If a tab already has this conversationId, just activate it
-    const existingTabId = Object.keys(state.tabs).find(
-      (id) => state.tabs[id].conversationId === conversationId,
-    );
-    if (existingTabId) {
-      set({ activeTabId: existingTabId });
-      return;
+    // If conversationId is provided and a tab already has it, just activate it
+    if (conversationId !== null) {
+      const existingTabId = Object.keys(state.tabs).find(
+        (id) => state.tabs[id].conversationId === conversationId,
+      );
+      if (existingTabId) {
+        set({ activeTabId: existingTabId });
+        return;
+      }
     }
     const tabId = crypto.randomUUID();
     const tab: TabState = {
@@ -413,11 +428,21 @@ export const useAppStore = create<AppState>((set, get) => ({
       copilotError: null,
       messagesLoaded: false,
       createdAt: Date.now(),
+      usage: { inputTokens: 0, outputTokens: 0, contextWindowUsed: 0, contextWindowMax: 0 },
     };
     const newTabs = { ...state.tabs, [tabId]: tab };
     const newOrder = [...state.tabOrder, tabId];
     set({ tabs: newTabs, tabOrder: newOrder, activeTabId: tabId, tabLimitWarning: newOrder.length >= 15 });
     persistOpenTabs(newTabs, newOrder);
+  },
+
+  materializeTabConversation: (tabId, conversationId) => {
+    const state = get();
+    const tab = state.tabs[tabId];
+    if (!tab) return;
+    const newTabs = { ...state.tabs, [tabId]: { ...tab, conversationId, messagesLoaded: true } };
+    set({ tabs: newTabs });
+    persistOpenTabs(newTabs, state.tabOrder);
   },
 
   closeTab: (tabId) => {
@@ -465,6 +490,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       turnSegments: [],
       copilotError: null,
       messagesLoaded: false,
+      usage: { inputTokens: 0, outputTokens: 0, contextWindowUsed: 0, contextWindowMax: 0 },
     };
     const newTabs = { ...state.tabs, [tabId]: updatedTab };
     set({ tabs: newTabs });
@@ -504,6 +530,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           copilotError: null,
           messagesLoaded: false,
           createdAt: Date.now(),
+          usage: { inputTokens: 0, outputTokens: 0, contextWindowUsed: 0, contextWindowMax: 0 },
         };
         tabOrder.push(tabId);
       }
@@ -648,11 +675,53 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (!tab) return state;
       return { tabs: { ...state.tabs, [tabId]: { ...tab, mode } } };
     }),
+
+  // Usage tracking actions
+  updateTabUsage: (tabId, inputTokens, outputTokens) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return {
+        tabs: {
+          ...state.tabs,
+          [tabId]: {
+            ...tab,
+            usage: {
+              ...tab.usage,
+              inputTokens: tab.usage.inputTokens + inputTokens,
+              outputTokens: tab.usage.outputTokens + outputTokens,
+            },
+          },
+        },
+      };
+    }),
+
+  updateTabContextWindow: (tabId, contextWindowUsed, contextWindowMax) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return {
+        tabs: {
+          ...state.tabs,
+          [tabId]: {
+            ...tab,
+            usage: {
+              ...tab.usage,
+              contextWindowUsed,
+              contextWindowMax,
+            },
+          },
+        },
+      };
+    }),
 }));
 
 function persistOpenTabs(tabs: Record<string, TabState>, tabOrder: string[]) {
   try {
-    const data = tabOrder.map((id) => ({ id: tabs[id].id, title: tabs[id].title, conversationId: tabs[id].conversationId }));
+    // Exclude draft tabs (null conversationId) from persistence
+    const data = tabOrder
+      .filter((id) => tabs[id]?.conversationId !== null)
+      .map((id) => ({ id: tabs[id].id, title: tabs[id].title, conversationId: tabs[id].conversationId }));
     localStorage.setItem('ai-terminal:openTabs', JSON.stringify(data));
   } catch { /* noop */ }
 }

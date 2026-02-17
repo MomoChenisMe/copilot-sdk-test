@@ -9,10 +9,11 @@ interface TabBarProps {
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
   onSwitchConversation: (tabId: string, conversationId: string) => void;
+  onDeleteConversation?: (conversationId: string) => void;
   conversations: Array<{ id: string; title: string; pinned?: boolean; updatedAt?: string }>;
 }
 
-export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation, conversations }: TabBarProps) {
+export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation, onDeleteConversation, conversations }: TabBarProps) {
   const { t } = useTranslation();
   const tabOrder = useAppStore((s) => s.tabOrder);
   const tabs = useAppStore((s) => s.tabs);
@@ -29,7 +30,7 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
         const tab = tabs[tabId];
         if (!tab) return null;
         const isActive = activeTabId === tabId;
-        const isStreaming = !!activeStreams[tab.conversationId];
+        const isStreaming = tab.conversationId ? !!activeStreams[tab.conversationId] : false;
 
         return (
           <div key={tabId} className="relative">
@@ -98,6 +99,7 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
                 onNewTab();
                 setPopoverTabId(null);
               }}
+              onDelete={onDeleteConversation}
               anchorRef={{ current: tabTitleRefs.current[tabId] ?? null }}
             />
           </div>

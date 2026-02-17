@@ -230,6 +230,92 @@ describe('EventRelay', () => {
     });
   });
 
+  // --- Usage tracking events ---
+
+  it('should relay assistant.usage as copilot:usage', () => {
+    const { send, handlers } = setup();
+
+    handlers.get('assistant.usage')!({
+      type: 'assistant.usage',
+      inputTokens: 150,
+      outputTokens: 80,
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      type: 'copilot:usage',
+      data: { inputTokens: 150, outputTokens: 80 },
+    });
+  });
+
+  it('should relay nested assistant.usage (data wrapper)', () => {
+    const { send, handlers } = setup();
+
+    handlers.get('assistant.usage')!({
+      type: 'assistant.usage',
+      data: { inputTokens: 200, outputTokens: 100 },
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      type: 'copilot:usage',
+      data: { inputTokens: 200, outputTokens: 100 },
+    });
+  });
+
+  it('should relay session.usage_info as copilot:context_window', () => {
+    const { send, handlers } = setup();
+
+    handlers.get('session.usage_info')!({
+      type: 'session.usage_info',
+      contextWindowUsed: 12000,
+      contextWindowMax: 128000,
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      type: 'copilot:context_window',
+      data: { contextWindowUsed: 12000, contextWindowMax: 128000 },
+    });
+  });
+
+  it('should relay nested session.usage_info (data wrapper)', () => {
+    const { send, handlers } = setup();
+
+    handlers.get('session.usage_info')!({
+      type: 'session.usage_info',
+      data: { contextWindowUsed: 50000, contextWindowMax: 128000 },
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      type: 'copilot:context_window',
+      data: { contextWindowUsed: 50000, contextWindowMax: 128000 },
+    });
+  });
+
+  // --- Compaction events ---
+
+  it('should relay session.compaction_start as copilot:compaction_start', () => {
+    const { send, handlers } = setup();
+
+    handlers.get('session.compaction_start')!({
+      type: 'session.compaction_start',
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      type: 'copilot:compaction_start',
+    });
+  });
+
+  it('should relay session.compaction_complete as copilot:compaction_complete', () => {
+    const { send, handlers } = setup();
+
+    handlers.get('session.compaction_complete')!({
+      type: 'session.compaction_complete',
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      type: 'copilot:compaction_complete',
+    });
+  });
+
   // --- Nested event structure tests (SDK wraps payload in { type, data: {...} }) ---
 
   describe('nested event structure (e.data wrapper)', () => {

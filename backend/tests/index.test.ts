@@ -11,6 +11,7 @@ const { mockHashSync, mockDb } = vi.hoisted(() => {
       all: vi.fn(() => []),
     })),
     close: vi.fn(),
+    transaction: vi.fn((fn: Function) => fn),
   };
   return { mockHashSync: _mockHashSync, mockDb: _mockDb };
 });
@@ -159,6 +160,67 @@ vi.mock('../src/skills/file-store.js', () => ({
 
 vi.mock('../src/skills/routes.js', () => ({
   createSkillsRoutes: vi.fn(() => vi.fn()),
+}));
+
+vi.mock('../src/memory/memory-store.js', () => ({
+  MemoryStore: vi.fn(() => ({
+    ensureDirectories: vi.fn(),
+    readMemory: vi.fn(() => ''),
+    writeMemory: vi.fn(),
+    appendMemory: vi.fn(),
+    readDailyLog: vi.fn(() => ''),
+    appendDailyLog: vi.fn(),
+    listDailyLogs: vi.fn(() => []),
+  })),
+}));
+
+vi.mock('../src/memory/memory-index.js', () => ({
+  MemoryIndex: vi.fn(() => ({
+    addFact: vi.fn(),
+    getFact: vi.fn(),
+    updateFact: vi.fn(),
+    removeFact: vi.fn(),
+    searchBM25: vi.fn(() => []),
+    getAllFacts: vi.fn(() => []),
+    getStats: vi.fn(() => ({ totalFacts: 0 })),
+    reindexFromFiles: vi.fn(),
+  })),
+}));
+
+vi.mock('../src/memory/memory-tools.js', () => ({
+  createMemoryTools: vi.fn(() => []),
+}));
+
+vi.mock('../src/memory/memory-routes.js', () => ({
+  createAutoMemoryRoutes: vi.fn(() => vi.fn()),
+}));
+
+vi.mock('../src/memory/memory-extractor.js', () => ({
+  MemoryExtractor: vi.fn(() => ({
+    shouldExtract: vi.fn(() => false),
+    extractCandidates: vi.fn(() => []),
+    reconcile: vi.fn(() => []),
+    apply: vi.fn(),
+    markExtracted: vi.fn(),
+  })),
+}));
+
+vi.mock('../src/memory/compaction-monitor.js', () => ({
+  CompactionMonitor: vi.fn(() => ({
+    onUsageInfo: vi.fn(),
+    onCompactionComplete: vi.fn(),
+  })),
+}));
+
+vi.mock('../src/memory/memory-config.js', () => ({
+  readMemoryConfig: vi.fn(() => ({
+    enabled: true,
+    autoExtract: true,
+    flushThreshold: 0.75,
+    extractIntervalSeconds: 60,
+    minNewMessages: 4,
+  })),
+  writeMemoryConfig: vi.fn(),
 }));
 
 import { createApp } from '../src/index.js';

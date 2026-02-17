@@ -134,6 +134,10 @@ export class StreamManager extends EventEmitter {
     StreamManager.instance = null;
   }
 
+  updateSelfControlTools(tools: any[]): void {
+    this.selfControlTools = tools;
+  }
+
   async startStream(conversationId: string, options: StartStreamOptions): Promise<void> {
     if (this.isShuttingDown) {
       throw new Error('Cannot start stream during shutdown');

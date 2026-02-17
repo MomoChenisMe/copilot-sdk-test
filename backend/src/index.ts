@@ -32,6 +32,15 @@ import { BuiltinSkillStore } from './skills/builtin-store.js';
 import { createSkillsRoutes } from './skills/routes.js';
 import { createUploadRoutes } from './upload/routes.js';
 import { createSelfControlTools } from './copilot/self-control-tools.js';
+import { createConfigRoutes, readBraveApiKey } from './config-routes.js';
+import { createWebSearchTool } from './copilot/tools/web-search.js';
+import { MemoryStore } from './memory/memory-store.js';
+import { MemoryIndex } from './memory/memory-index.js';
+import { createMemoryTools } from './memory/memory-tools.js';
+import { createAutoMemoryRoutes } from './memory/memory-routes.js';
+import { MemoryExtractor } from './memory/memory-extractor.js';
+import { CompactionMonitor } from './memory/compaction-monitor.js';
+import { readMemoryConfig } from './memory/memory-config.js';
 
 const log = createLogger('main');
 
@@ -50,6 +59,25 @@ export function createApp() {
   // Prompts file store
   const promptStore = new PromptFileStore(config.promptsPath);
   promptStore.ensureDirectories();
+
+  // Auto Memory system
+  const memoryBasePath = path.resolve(config.promptsPath, 'auto-memory');
+  const memoryStore = new MemoryStore(memoryBasePath);
+  memoryStore.ensureDirectories();
+  const memoryDb = initDb(path.resolve(memoryBasePath, 'memory-index.db'));
+  const memoryIndex = new MemoryIndex(memoryDb);
+  memoryIndex.reindexFromFiles(memoryStore);
+  const memoryConfig = readMemoryConfig(memoryBasePath);
+  const memoryExtractor = new MemoryExtractor(memoryStore, memoryIndex, {
+    extractIntervalSeconds: memoryConfig.extractIntervalSeconds,
+    minNewMessages: memoryConfig.minNewMessages,
+  });
+  const compactionMonitor = new CompactionMonitor({
+    flushThreshold: memoryConfig.flushThreshold,
+    onFlush: (conversationId) => {
+      log.info({ conversationId }, 'Compaction flush triggered — extracting memory');
+    },
+  });
 
   // Skills file stores
   const skillStore = new SkillFileStore(config.skillsPath);
@@ -81,6 +109,9 @@ export function createApp() {
   app.use('/api/memory', authMiddleware, createMemoryRoutes(promptStore));
   app.use('/api/skills', authMiddleware, createSkillsRoutes(skillStore, builtinSkillStore));
   app.use('/api/upload', authMiddleware, createUploadRoutes(path.resolve(config.dbPath, '../uploads')));
+  app.use('/api/auto-memory', authMiddleware, createAutoMemoryRoutes(memoryStore, memoryIndex, memoryBasePath));
+
+  // Config routes (Brave API key etc.) — mounted after streamManager below
 
   // Config endpoint (returns non-sensitive config values)
   app.get('/api/config', authMiddleware, (_req, res) => {
@@ -102,7 +133,7 @@ export function createApp() {
   const wss = createWsServer(httpServer, sessionStore);
 
   // StreamManager for background streaming
-  const promptComposer = new PromptComposer(promptStore, config.maxPromptLength);
+  const promptComposer = new PromptComposer(promptStore, config.maxPromptLength, memoryStore);
   const mergedSkillStore = {
     getSkillDirectories: () => [
       ...builtinSkillStore.getSkillDirectories(),
@@ -114,6 +145,21 @@ export function createApp() {
     skillStore,
     builtinSkillStore,
   });
+
+  // Add memory tools
+  if (memoryConfig.enabled) {
+    const memoryTools = createMemoryTools(memoryStore, memoryIndex);
+    selfControlTools.push(...memoryTools);
+    log.info('Memory tools enabled (4 tools: read_memory, append_memory, search_memory, append_daily_log)');
+  }
+
+  // Conditionally add web search tool if Brave API key is configured
+  const braveApiKey = readBraveApiKey(promptStore);
+  const webSearchTool = createWebSearchTool(braveApiKey);
+  if (webSearchTool) {
+    selfControlTools.push(webSearchTool);
+    log.info('Web search tool enabled (Brave API key configured)');
+  }
   const streamManager = StreamManager.getInstance({
     sessionManager,
     repo,
@@ -123,6 +169,24 @@ export function createApp() {
     selfControlTools,
   });
 
+  // Config routes (Brave API key etc.) — mounted after streamManager so callback can update tools
+  app.use('/api/config', authMiddleware, createConfigRoutes(promptStore, {
+    onBraveApiKeyChange: (newKey: string) => {
+      // Remove existing web_search tool and rebuild selfControlTools
+      const filtered = selfControlTools.filter((t: any) => t.name !== 'web_search');
+      selfControlTools.length = 0;
+      selfControlTools.push(...filtered);
+      const newTool = createWebSearchTool(newKey);
+      if (newTool) {
+        selfControlTools.push(newTool);
+        log.info('Web search tool updated with new Brave API key');
+      } else {
+        log.info('Web search tool removed (empty Brave API key)');
+      }
+      streamManager.updateSelfControlTools([...selfControlTools]);
+    },
+  }));
+
   // Register WS handlers
   registerHandler('copilot', createCopilotHandler(streamManager, repo));
   registerHandler('terminal', createTerminalHandler(config.defaultCwd));
@@ -130,6 +194,28 @@ export function createApp() {
     log.info({ cwd: newCwd }, 'Working directory changed');
   }));
   registerHandler('bash', createBashExecHandler(config.defaultCwd));
+
+  // Memory extraction on stream:idle
+  if (memoryConfig.enabled && memoryConfig.autoExtract) {
+    streamManager.on('stream:idle', async (conversationId: string) => {
+      try {
+        const messages = repo.getMessages(conversationId);
+        if (!memoryExtractor.shouldExtract(conversationId, messages.length)) return;
+        const mapped = messages
+          .filter((m: any) => m.role === 'user' || m.role === 'assistant')
+          .map((m: any) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+        const candidates = memoryExtractor.extractCandidates(mapped);
+        if (candidates.length > 0) {
+          const actions = memoryExtractor.reconcile(candidates);
+          memoryExtractor.apply(actions);
+          log.info({ conversationId, candidates: candidates.length, actions: actions.length }, 'Memory extraction completed');
+        }
+        memoryExtractor.markExtracted(conversationId);
+      } catch (err) {
+        log.error({ err, conversationId }, 'Memory extraction failed');
+      }
+    });
+  }
 
   // Graceful shutdown
   setupGracefulShutdown([
@@ -141,6 +227,7 @@ export function createApp() {
     },
     async () => {
       db.close();
+      memoryDb.close();
     },
     async () => {
       wss.close();

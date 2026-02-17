@@ -306,6 +306,39 @@ describe('useTabCopilot', () => {
     });
   });
 
+  // --- Usage tracking ---
+  describe('usage tracking events', () => {
+    it('should accumulate tokens on copilot:usage', () => {
+      renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        emit({ type: 'copilot:usage', data: { inputTokens: 100, outputTokens: 50, conversationId: 'conv-A' } });
+        emit({ type: 'copilot:usage', data: { inputTokens: 200, outputTokens: 80, conversationId: 'conv-A' } });
+      });
+      const tab = useAppStore.getState().tabs[tabIdA];
+      expect(tab.usage.inputTokens).toBe(300);
+      expect(tab.usage.outputTokens).toBe(130);
+    });
+
+    it('should update context window on copilot:context_window', () => {
+      renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        emit({ type: 'copilot:context_window', data: { contextWindowUsed: 50000, contextWindowMax: 128000, conversationId: 'conv-A' } });
+      });
+      const tab = useAppStore.getState().tabs[tabIdA];
+      expect(tab.usage.contextWindowUsed).toBe(50000);
+      expect(tab.usage.contextWindowMax).toBe(128000);
+    });
+
+    it('should route usage events to the correct tab', () => {
+      renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        emit({ type: 'copilot:usage', data: { inputTokens: 100, outputTokens: 50, conversationId: 'conv-B' } });
+      });
+      expect(useAppStore.getState().tabs[tabIdA].usage.inputTokens).toBe(0);
+      expect(useAppStore.getState().tabs[tabIdB].usage.inputTokens).toBe(100);
+    });
+  });
+
   // --- Tab close dedup cleanup ---
   describe('Tab close dedup cleanup', () => {
     it('should not throw when receiving events after tab is closed', () => {

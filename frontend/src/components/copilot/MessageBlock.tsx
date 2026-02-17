@@ -2,6 +2,9 @@ import { useTranslation } from 'react-i18next';
 import type { Message, MessageMetadata, AttachmentMeta, TurnSegment } from '../../lib/api';
 import { useAppStore } from '../../store';
 import { Markdown } from '../shared/Markdown';
+import { useLightbox } from '../shared/LightboxContext';
+import { BashPrompt } from './BashPrompt';
+import { BashOutput } from './BashOutput';
 import { ReasoningBlock } from './ReasoningBlock';
 import { ToolRecord } from './ToolRecord';
 import { ToolRecordErrorBoundary } from './ToolRecordErrorBoundary';
@@ -52,6 +55,7 @@ interface MessageBlockProps {
 export function MessageBlock({ message }: MessageBlockProps) {
   const { t } = useTranslation();
   const skills = useAppStore((s) => s.skills);
+  const { openLightbox } = useLightbox();
   const isUser = message.role === 'user';
 
   if (isUser) {
@@ -77,23 +81,34 @@ export function MessageBlock({ message }: MessageBlockProps) {
         >
           {attachments && attachments.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-2">
-              {attachments.map((a: AttachmentMeta) =>
-                a.mimeType.startsWith('image/') ? (
-                  <img
-                    key={a.id}
-                    src={`/api/upload/${a.id}`}
-                    alt={a.originalName}
-                    className="w-24 h-24 rounded-lg object-cover"
-                  />
-                ) : (
-                  <span
-                    key={a.id}
-                    className="inline-flex items-center px-2 py-1 rounded-md bg-bg-tertiary text-xs text-text-secondary"
-                  >
-                    {a.originalName}
-                  </span>
-                ),
-              )}
+              {(() => {
+                const imageAttachments = attachments.filter((a: AttachmentMeta) => a.mimeType.startsWith('image/'));
+                return attachments.map((a: AttachmentMeta) =>
+                  a.mimeType.startsWith('image/') ? (
+                    <img
+                      key={a.id}
+                      src={`/api/upload/${a.id}`}
+                      alt={a.originalName}
+                      className="w-24 h-24 rounded-lg object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                      onClick={() => {
+                        const images = imageAttachments.map((img: AttachmentMeta) => ({
+                          src: `/api/upload/${img.id}`,
+                          alt: img.originalName,
+                        }));
+                        const idx = imageAttachments.findIndex((img: AttachmentMeta) => img.id === a.id);
+                        openLightbox(images, idx);
+                      }}
+                    />
+                  ) : (
+                    <span
+                      key={a.id}
+                      className="inline-flex items-center px-2 py-1 rounded-md bg-bg-tertiary text-xs text-text-secondary"
+                    >
+                      {a.originalName}
+                    </span>
+                  ),
+                );
+              })()}
             </div>
           )}
           {renderUserContent(message.content, skills)}
@@ -103,33 +118,30 @@ export function MessageBlock({ message }: MessageBlockProps) {
   }
 
   // Parse metadata for assistant messages
-  const metadata = message.metadata as (MessageMetadata & { exitCode?: number }) | null | undefined;
+  const metadata = message.metadata as (MessageMetadata & {
+    exitCode?: number;
+    user?: string;
+    hostname?: string;
+    gitBranch?: string;
+    cwd?: string;
+  }) | null | undefined;
   const isTerminalOutput = typeof metadata?.exitCode === 'number';
 
-  // Terminal output rendering
+  // Terminal output rendering with Oh My Posh style
   if (isTerminalOutput) {
-    const exitCode = metadata.exitCode!;
-    const hasContent = !!message.content.trim();
+    const { user, hostname, gitBranch } = metadata;
+    const hasBashEnv = !!(user && hostname);
     return (
       <div className="mb-4">
-        {hasContent && (
-          <pre
-            data-testid="terminal-output"
-            className="text-xs leading-relaxed font-mono whitespace-pre-wrap bg-bg-tertiary rounded-lg p-3 text-text-primary overflow-x-auto"
-          >
-            {message.content}
-          </pre>
+        {hasBashEnv && (
+          <BashPrompt
+            user={user}
+            hostname={hostname}
+            cwd={metadata.cwd ?? ''}
+            gitBranch={gitBranch}
+          />
         )}
-        <span
-          data-testid="exit-code-badge"
-          className={`inline-flex items-center ${hasContent ? 'mt-1' : ''} px-1.5 py-0.5 rounded text-xs font-medium ${
-            exitCode === 0
-              ? 'bg-green-500/10 text-green-600 dark:text-green-400'
-              : 'bg-error/15 text-error'
-          }`}
-        >
-          {exitCode === 0 ? '✓' : `exit ${exitCode}`}
-        </span>
+        <BashOutput content={message.content} exitCode={metadata.exitCode!} />
       </div>
     );
   }

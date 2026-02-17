@@ -677,7 +677,7 @@ describe('MessageBlock', () => {
     expect(screen.queryByTestId('bash-command')).toBeNull();
   });
 
-  it('renders assistant message with monospace when metadata has exitCode', () => {
+  it('renders assistant message with BashOutput when metadata has exitCode', () => {
     render(
       <MessageBlock
         message={makeMessage({
@@ -688,9 +688,10 @@ describe('MessageBlock', () => {
       />
     );
 
-    const pre = screen.getByTestId('terminal-output');
-    expect(pre).toBeTruthy();
-    expect(pre.textContent).toContain('file1.txt');
+    // BashOutput renders lines with bash-line-N testIds
+    const line1 = screen.getByTestId('bash-line-1');
+    expect(line1).toBeTruthy();
+    expect(line1.textContent).toContain('file1.txt');
   });
 
   it('renders exit code badge for non-zero exit', () => {
@@ -739,7 +740,8 @@ describe('MessageBlock', () => {
     const badge = screen.getByTestId('exit-code-badge');
     expect(badge).toBeTruthy();
     expect(badge.textContent).toContain('✓');
-    expect(screen.queryByTestId('terminal-output')).toBeNull();
+    // Empty content should not render any bash lines
+    expect(screen.queryByTestId('bash-line-1')).toBeNull();
   });
 
   // WARNING FIX: bash tool with error status should also show ToolResultBlock

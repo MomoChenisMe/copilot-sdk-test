@@ -11,6 +11,7 @@ interface UseBashModeOptions {
 
 export function useBashMode({ subscribe, send, tabId, onCwdChange }: UseBashModeOptions) {
   const outputBufferRef = useRef('');
+  const cwdRef = useRef('');
   const onCwdChangeRef = useRef(onCwdChange);
   onCwdChangeRef.current = onCwdChange;
 
@@ -30,6 +31,7 @@ export function useBashMode({ subscribe, send, tabId, onCwdChange }: UseBashMode
       // Start streaming state
       useAppStore.getState().setTabIsStreaming(tabId, true);
       outputBufferRef.current = '';
+      cwdRef.current = cwd;
 
       // Send to backend
       send({
@@ -54,12 +56,16 @@ export function useBashMode({ subscribe, send, tabId, onCwdChange }: UseBashMode
       if (type === 'bash:cwd' && payload) {
         const newCwd = String(payload.cwd ?? '');
         if (newCwd) {
+          cwdRef.current = newCwd;
           onCwdChangeRef.current?.(newCwd);
         }
       }
 
       if (type === 'bash:done' && payload) {
         const exitCode = (payload.exitCode as number) ?? 0;
+        const user = (payload.user as string) ?? '';
+        const hostname = (payload.hostname as string) ?? '';
+        const gitBranch = (payload.gitBranch as string) ?? '';
         const finalOutput = outputBufferRef.current;
 
         // Finalize: add assistant message with accumulated output
@@ -68,7 +74,7 @@ export function useBashMode({ subscribe, send, tabId, onCwdChange }: UseBashMode
           conversationId: '',
           role: 'assistant' as const,
           content: finalOutput,
-          metadata: { exitCode },
+          metadata: { exitCode, user, hostname, gitBranch, cwd: cwdRef.current },
           createdAt: new Date().toISOString(),
         };
         useAppStore.getState().addTabMessage(tabId, assistantMsg);

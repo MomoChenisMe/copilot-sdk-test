@@ -114,7 +114,10 @@
     "memory": {
       "preferences": "偏好設定",
       "projects": "專案",
-      "solutions": "解決方案"
+      "solutions": "解決方案",
+      "autoMemory": "自動記憶",
+      "autoExtract": "自動提取",
+      "totalFacts": "記憶事實總數"
     },
     "deleteDialog": {
       "message": "確定要刪除此項目嗎？",

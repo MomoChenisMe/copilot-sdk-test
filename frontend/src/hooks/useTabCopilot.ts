@@ -213,6 +213,22 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
           break;
         }
 
+        case 'copilot:usage':
+          state.updateTabUsage(
+            tabId,
+            (data.inputTokens as number) ?? 0,
+            (data.outputTokens as number) ?? 0,
+          );
+          break;
+
+        case 'copilot:context_window':
+          state.updateTabContextWindow(
+            tabId,
+            (data.contextWindowUsed as number) ?? 0,
+            (data.contextWindowMax as number) ?? 0,
+          );
+          break;
+
         case 'copilot:error':
           state.setTabCopilotError(tabId, data.message as string);
           state.setTabIsStreaming(tabId, false);
@@ -231,6 +247,7 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
       if (!tab) return;
 
       const conversationId = tab.conversationId;
+      if (!conversationId) return; // Draft tab — must be materialized first
 
       // Auto-title: if this is the first message, set conversation title from prompt
       const isFirstMessage = tab.messages.length === 0;

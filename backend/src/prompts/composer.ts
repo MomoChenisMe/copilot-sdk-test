@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { PromptFileStore } from './file-store.js';
+import type { MemoryStore } from '../memory/memory-store.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('prompt-composer');
@@ -12,6 +13,7 @@ export class PromptComposer {
   constructor(
     private store: PromptFileStore,
     private maxPromptLength: number = DEFAULT_MAX_LENGTH,
+    private memoryStore?: MemoryStore,
   ) {}
 
   compose(activePresets: string[], cwd?: string): string {
@@ -40,7 +42,13 @@ export class PromptComposer {
     const preferences = this.store.readFile('memory/preferences.md');
     if (preferences.trim()) sections.push(preferences);
 
-    // 5. .ai-terminal.md from cwd
+    // 5. MEMORY.md from auto-memory system
+    if (this.memoryStore) {
+      const memory = this.memoryStore.readMemory();
+      if (memory.trim()) sections.push(memory);
+    }
+
+    // 6. .ai-terminal.md from cwd
     if (cwd) {
       try {
         const projectPromptPath = path.join(cwd, '.ai-terminal.md');

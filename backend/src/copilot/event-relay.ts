@@ -115,6 +115,50 @@ export class EventRelay {
     );
 
     this.unsubscribes.push(
+      session.on('assistant.usage', (event) => {
+        const e = event as any;
+        const d = e.data ?? e;
+        log.debug({ event: e }, 'assistant.usage');
+        this.send({
+          type: 'copilot:usage',
+          data: {
+            inputTokens: d.inputTokens,
+            outputTokens: d.outputTokens,
+          },
+        });
+      }),
+    );
+
+    this.unsubscribes.push(
+      session.on('session.usage_info', (event) => {
+        const e = event as any;
+        const d = e.data ?? e;
+        log.debug({ event: e }, 'session.usage_info');
+        this.send({
+          type: 'copilot:context_window',
+          data: {
+            contextWindowUsed: d.contextWindowUsed,
+            contextWindowMax: d.contextWindowMax,
+          },
+        });
+      }),
+    );
+
+    this.unsubscribes.push(
+      session.on('session.compaction_start', () => {
+        log.debug('session.compaction_start');
+        this.send({ type: 'copilot:compaction_start' });
+      }),
+    );
+
+    this.unsubscribes.push(
+      session.on('session.compaction_complete', () => {
+        log.debug('session.compaction_complete');
+        this.send({ type: 'copilot:compaction_complete' });
+      }),
+    );
+
+    this.unsubscribes.push(
       session.on('session.idle', () => {
         log.debug('session.idle');
         this.send({ type: 'copilot:idle' });

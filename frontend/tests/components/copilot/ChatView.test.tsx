@@ -238,4 +238,95 @@ describe('ChatView', () => {
     // Should render streaming text
     expect(screen.getByTestId('streaming-text')).toBeTruthy();
   });
+
+  // === Tab switch loading state ===
+  describe('tab switch loading', () => {
+    it('shows loading indicator when messagesLoaded is false on an existing conversation tab', () => {
+      const tabId = 'tab-loading';
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: {
+          [tabId]: {
+            id: tabId,
+            conversationId: 'conv-1',
+            title: 'Loading Tab',
+            mode: 'copilot',
+            messages: [],
+            streamingText: '',
+            isStreaming: false,
+            toolRecords: [],
+            reasoningText: '',
+            turnContentSegments: [],
+            turnSegments: [],
+            copilotError: null,
+            messagesLoaded: false,
+            createdAt: Date.now(),
+          },
+        },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} />);
+      expect(screen.getByTestId('messages-loading')).toBeTruthy();
+    });
+
+    it('shows empty prompt when messagesLoaded is true and messages are empty', () => {
+      const tabId = 'tab-loaded';
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: {
+          [tabId]: {
+            id: tabId,
+            conversationId: 'conv-1',
+            title: 'Loaded Tab',
+            mode: 'copilot',
+            messages: [],
+            streamingText: '',
+            isStreaming: false,
+            toolRecords: [],
+            reasoningText: '',
+            turnContentSegments: [],
+            turnSegments: [],
+            copilotError: null,
+            messagesLoaded: true,
+            createdAt: Date.now(),
+          },
+        },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} />);
+      expect(screen.getByText('Send a message to start...')).toBeTruthy();
+    });
+
+    it('shows empty prompt for draft tab (null conversationId)', () => {
+      const tabId = 'tab-draft';
+      useAppStore.setState({
+        activeConversationId: null,
+        tabs: {
+          [tabId]: {
+            id: tabId,
+            conversationId: null,
+            title: 'New Chat',
+            mode: 'copilot',
+            messages: [],
+            streamingText: '',
+            isStreaming: false,
+            toolRecords: [],
+            reasoningText: '',
+            turnContentSegments: [],
+            turnSegments: [],
+            copilotError: null,
+            messagesLoaded: false,
+            createdAt: Date.now(),
+          },
+        },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} />);
+      // Draft tab should show empty prompt, not loading
+      expect(screen.getByText('Send a message to start...')).toBeTruthy();
+    });
+  });
 });

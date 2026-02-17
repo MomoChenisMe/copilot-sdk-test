@@ -38,6 +38,29 @@ vi.mock('../../../src/lib/prompts-api', () => ({
     deletePreset: vi.fn().mockResolvedValue({ ok: true }),
   },
   memoryApi: mockMemoryApi,
+  skillsApi: {
+    list: vi.fn().mockResolvedValue({ skills: [] }),
+    get: vi.fn().mockResolvedValue({ name: 'test', description: '', content: '', builtin: false }),
+    put: vi.fn().mockResolvedValue({ ok: true }),
+    delete: vi.fn().mockResolvedValue({ ok: true }),
+  },
+}));
+
+vi.mock('../../../src/lib/api', () => ({
+  configApi: {
+    get: vi.fn().mockResolvedValue({ defaultCwd: '/home' }),
+    getBraveApiKey: vi.fn().mockResolvedValue({ hasKey: false, maskedKey: '' }),
+    putBraveApiKey: vi.fn().mockResolvedValue({ ok: true }),
+  },
+  memoryApi: {
+    getMain: vi.fn().mockResolvedValue({ content: '' }),
+    putMain: vi.fn().mockResolvedValue({ ok: true }),
+    listDailyLogs: vi.fn().mockResolvedValue({ dates: [] }),
+    searchMemory: vi.fn().mockResolvedValue({ results: [] }),
+    getConfig: vi.fn().mockResolvedValue({ enabled: true, autoExtract: true, flushThreshold: 0.75, extractIntervalSeconds: 60, minNewMessages: 4 }),
+    putConfig: vi.fn().mockResolvedValue({ ok: true }),
+    getStats: vi.fn().mockResolvedValue({ totalFacts: 0, dailyLogCount: 0 }),
+  },
 }));
 
 import { SettingsPanel } from '../../../src/components/settings/SettingsPanel';

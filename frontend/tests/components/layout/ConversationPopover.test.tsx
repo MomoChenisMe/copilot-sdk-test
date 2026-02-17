@@ -298,4 +298,51 @@ describe('ConversationPopover', () => {
     const popover = screen.getByTestId('conversation-popover');
     expect(popover.className).toContain('shadow-lg');
   });
+
+  // === Conversation deletion ===
+  describe('conversation deletion', () => {
+    it('shows delete button on hover over a conversation item', async () => {
+      render(<ConversationPopover {...defaultProps} onDelete={vi.fn()} />);
+      const item = screen.getByTestId('popover-item-conv-2');
+      fireEvent.mouseEnter(item);
+      expect(screen.getByTestId('delete-conv-conv-2')).toBeTruthy();
+    });
+
+    it('does not show delete button when onDelete is not provided', () => {
+      render(<ConversationPopover {...defaultProps} />);
+      const item = screen.getByTestId('popover-item-conv-2');
+      fireEvent.mouseEnter(item);
+      expect(screen.queryByTestId('delete-conv-conv-2')).toBeNull();
+    });
+
+    it('shows confirmation text after clicking delete', () => {
+      render(<ConversationPopover {...defaultProps} onDelete={vi.fn()} />);
+      const item = screen.getByTestId('popover-item-conv-2');
+      fireEvent.mouseEnter(item);
+      fireEvent.click(screen.getByTestId('delete-conv-conv-2'));
+      expect(screen.getByTestId('confirm-delete-conv-2')).toBeTruthy();
+    });
+
+    it('calls onDelete after confirming deletion', () => {
+      const onDelete = vi.fn();
+      render(<ConversationPopover {...defaultProps} onDelete={onDelete} />);
+      const item = screen.getByTestId('popover-item-conv-2');
+      fireEvent.mouseEnter(item);
+      fireEvent.click(screen.getByTestId('delete-conv-conv-2'));
+      fireEvent.click(screen.getByTestId('confirm-delete-conv-2'));
+      expect(onDelete).toHaveBeenCalledWith('conv-2');
+    });
+
+    it('cancels deletion when clicking cancel', () => {
+      const onDelete = vi.fn();
+      render(<ConversationPopover {...defaultProps} onDelete={onDelete} />);
+      const item = screen.getByTestId('popover-item-conv-2');
+      fireEvent.mouseEnter(item);
+      fireEvent.click(screen.getByTestId('delete-conv-conv-2'));
+      fireEvent.click(screen.getByTestId('cancel-delete-conv-2'));
+      expect(onDelete).not.toHaveBeenCalled();
+      // Confirm UI should be gone
+      expect(screen.queryByTestId('confirm-delete-conv-2')).toBeNull();
+    });
+  });
 });

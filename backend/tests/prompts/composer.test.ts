@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { PromptComposer } from '../../src/prompts/composer.js';
 import { PromptFileStore } from '../../src/prompts/file-store.js';
+import { MemoryStore } from '../../src/memory/memory-store.js';
 
 describe('PromptComposer', () => {
   let tmpDir: string;
@@ -117,5 +118,56 @@ describe('PromptComposer', () => {
     const result = composer.compose(['active']);
     expect(result).toContain('Active preset');
     expect(result).not.toContain('Inactive preset');
+  });
+
+  describe('MEMORY.md injection', () => {
+    it('should include MEMORY.md content when memoryStore is provided', () => {
+      const memDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mem-'));
+      const memStore = new MemoryStore(memDir);
+      memStore.ensureDirectories();
+      memStore.writeMemory('- User prefers dark mode\n- Project uses pnpm');
+
+      const composerWithMem = new PromptComposer(store, 50_000, memStore);
+      fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
+      fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
+
+      const result = composerWithMem.compose([]);
+      expect(result).toContain('User prefers dark mode');
+      expect(result).toContain('Project uses pnpm');
+
+      fs.rmSync(memDir, { recursive: true, force: true });
+    });
+
+    it('should not include MEMORY.md section when empty', () => {
+      const memDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mem-'));
+      const memStore = new MemoryStore(memDir);
+      memStore.ensureDirectories();
+
+      const composerWithMem = new PromptComposer(store, 50_000, memStore);
+      fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
+      fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
+
+      const result = composerWithMem.compose([]);
+      expect(result).toBe('Profile');
+
+      fs.rmSync(memDir, { recursive: true, force: true });
+    });
+
+    it('should place MEMORY.md after preferences section', () => {
+      const memDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mem-'));
+      const memStore = new MemoryStore(memDir);
+      memStore.ensureDirectories();
+      memStore.writeMemory('Memory facts here');
+
+      const composerWithMem = new PromptComposer(store, 50_000, memStore);
+      fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
+      fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
+      fs.writeFileSync(path.join(tmpDir, 'memory', 'preferences.md'), 'Preferences');
+
+      const result = composerWithMem.compose([]);
+      expect(result.indexOf('Preferences')).toBeLessThan(result.indexOf('Memory facts here'));
+
+      fs.rmSync(memDir, { recursive: true, force: true });
+    });
   });
 });

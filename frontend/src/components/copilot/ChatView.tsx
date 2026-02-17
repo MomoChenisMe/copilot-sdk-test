@@ -2,6 +2,7 @@ import { useRef, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Sparkles, Plus, X } from 'lucide-react';
 import { useAppStore } from '../../store';
+import { modelSupportsAttachments } from '../../lib/model-capabilities';
 import { MessageBlock } from './MessageBlock';
 import { StreamingText } from './StreamingText';
 import { ToolRecord } from './ToolRecord';
@@ -11,6 +12,7 @@ import { ReasoningBlock } from './ReasoningBlock';
 import { ModelSelector } from './ModelSelector';
 import { CwdSelector } from './CwdSelector';
 import { Input } from '../shared/Input';
+import { UsageBar } from './UsageBar';
 import type { SlashCommand } from '../shared/SlashCommandMenu';
 
 const INLINE_RESULT_TOOLS = ['bash', 'shell', 'execute', 'run'];
@@ -143,6 +145,12 @@ export function ChatView({
 
   const showStreamingBlock = isStreaming || streamingText || toolRecords.length > 0 || turnSegments.length > 0 || copilotError;
 
+  // Model-based attachment gating
+  const canAttach = !isTerminalMode && modelSupportsAttachments(currentModel);
+  const attachmentsDisabledReason = !isTerminalMode && !modelSupportsAttachments(currentModel)
+    ? t('input.modelNoAttachments', 'This model does not support file attachments')
+    : undefined;
+
   // Welcome screen — no active conversation/tab
   if (!tabId && !activeConversationId) {
     return (
@@ -165,6 +173,20 @@ export function ChatView({
               <Plus size={18} />
               {t('chat.startConversation')}
             </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Loading state — tab has a conversation but messages haven't loaded yet
+  if (tab && tab.conversationId && !tab.messagesLoaded && messages.length === 0 && !showStreamingBlock) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex-1 overflow-y-auto flex items-center justify-center">
+          <div data-testid="messages-loading" className="flex items-center gap-2 text-text-muted text-sm">
+            <div className="w-4 h-4 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
+            {t('chat.loading', 'Loading...')}
           </div>
         </div>
       </div>
@@ -214,7 +236,8 @@ export function ChatView({
               disabled={disabled}
               slashCommands={isTerminalMode ? undefined : slashCommands}
               onSlashCommand={isTerminalMode ? undefined : handleSlashCommand}
-              enableAttachments={!isTerminalMode}
+              enableAttachments={canAttach}
+              attachmentsDisabledReason={attachmentsDisabledReason}
               placeholder={isTerminalMode ? t('terminal.placeholder', '$ enter command...') : undefined}
             />
           </div>
@@ -317,6 +340,20 @@ export function ChatView({
         </div>
       </div>
 
+      {/* Usage bar */}
+      {tab?.usage && (
+        <div className="px-4">
+          <div className="max-w-3xl mx-auto">
+            <UsageBar
+              inputTokens={tab.usage.inputTokens}
+              outputTokens={tab.usage.outputTokens}
+              contextWindowUsed={tab.usage.contextWindowUsed}
+              contextWindowMax={tab.usage.contextWindowMax}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Input area (shrink-0) */}
       <div className="shrink-0 pb-4 pt-2 px-4">
         <div className="max-w-3xl mx-auto">
@@ -353,7 +390,8 @@ export function ChatView({
             disabled={disabled}
             slashCommands={isTerminalMode ? undefined : slashCommands}
             onSlashCommand={isTerminalMode ? undefined : handleSlashCommand}
-            enableAttachments={!isTerminalMode}
+            enableAttachments={canAttach}
+            attachmentsDisabledReason={attachmentsDisabledReason}
             placeholder={isTerminalMode ? t('terminal.placeholder', '$ enter command...') : undefined}
           />
         </div>

@@ -112,4 +112,51 @@ describe('bash-exec handler', () => {
     );
     expect(cwdCalls).toHaveLength(0);
   });
+
+  it('should include user and hostname in bash:done event', async () => {
+    onMessage({ type: 'bash:exec', data: { command: 'echo hello', cwd: '/tmp' } });
+
+    await new Promise((r) => setTimeout(r, 2000));
+
+    const doneCalls = send.mock.calls.filter(
+      (c: any[]) => c[0]?.type === 'bash:done',
+    );
+    expect(doneCalls).toHaveLength(1);
+    const doneData = doneCalls[0][0].data;
+    expect(doneData.user).toBeTruthy();
+    expect(typeof doneData.user).toBe('string');
+    expect(doneData.hostname).toBeTruthy();
+    expect(typeof doneData.hostname).toBe('string');
+  });
+
+  it('should include gitBranch in bash:done when inside a git repo', async () => {
+    // Run in the project root (which should be a git repo)
+    const projectRoot = process.cwd();
+    onMessage({ type: 'bash:exec', data: { command: 'echo test', cwd: projectRoot } });
+
+    await new Promise((r) => setTimeout(r, 2000));
+
+    const doneCalls = send.mock.calls.filter(
+      (c: any[]) => c[0]?.type === 'bash:done',
+    );
+    expect(doneCalls).toHaveLength(1);
+    const doneData = doneCalls[0][0].data;
+    // Should have a gitBranch string (may be 'main', 'master', or other)
+    expect(typeof doneData.gitBranch).toBe('string');
+    expect(doneData.gitBranch.length).toBeGreaterThan(0);
+  });
+
+  it('should include empty gitBranch when not in a git repo', async () => {
+    onMessage({ type: 'bash:exec', data: { command: 'echo test', cwd: '/tmp' } });
+
+    await new Promise((r) => setTimeout(r, 2000));
+
+    const doneCalls = send.mock.calls.filter(
+      (c: any[]) => c[0]?.type === 'bash:done',
+    );
+    expect(doneCalls).toHaveLength(1);
+    const doneData = doneCalls[0][0].data;
+    // /tmp is not a git repo, gitBranch should be empty string
+    expect(doneData.gitBranch).toBe('');
+  });
 });

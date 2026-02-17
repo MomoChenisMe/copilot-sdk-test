@@ -161,6 +161,41 @@ export interface AppConfig {
 
 export const configApi = {
   get: () => apiGet<AppConfig>('/api/config'),
+  getBraveApiKey: () => apiGet<{ hasKey: boolean; maskedKey: string }>('/api/config/brave-api-key'),
+  putBraveApiKey: (apiKey: string) => apiPut<{ ok: true }>('/api/config/brave-api-key', { apiKey }),
+};
+
+// --- Auto Memory API ---
+
+export interface MemoryConfig {
+  enabled: boolean;
+  autoExtract: boolean;
+  flushThreshold: number;
+  extractIntervalSeconds: number;
+  minNewMessages: number;
+}
+
+export interface MemorySearchResult {
+  content: string;
+  category: string;
+  source: string;
+}
+
+export interface MemoryStats {
+  totalFacts: number;
+  dailyLogCount: number;
+}
+
+export const memoryApi = {
+  getMain: () => apiGet<{ content: string }>('/api/auto-memory/main'),
+  putMain: (content: string) => apiPut<{ ok: true }>('/api/auto-memory/main', { content }),
+  listDailyLogs: () => apiGet<{ dates: string[] }>('/api/auto-memory/daily'),
+  getDailyLog: (date: string) => apiGet<{ content: string }>(`/api/auto-memory/daily/${date}`),
+  searchMemory: (query: string) =>
+    apiGet<{ results: MemorySearchResult[] }>(`/api/auto-memory/search?q=${encodeURIComponent(query)}`),
+  getConfig: () => apiGet<MemoryConfig>('/api/auto-memory/config'),
+  putConfig: (config: Partial<MemoryConfig>) => apiPut<{ ok: true }>('/api/auto-memory/config', config),
+  getStats: () => apiGet<MemoryStats>('/api/auto-memory/stats'),
 };
 
 export class ApiError extends Error {

@@ -50,6 +50,25 @@ vi.mock('../../../src/lib/prompts-api', () => ({
   },
 }));
 
+// Mock configApi and memoryApi
+vi.mock('../../../src/lib/api', () => ({
+  configApi: {
+    get: vi.fn().mockResolvedValue({ defaultCwd: '/home' }),
+    getBraveApiKey: vi.fn().mockResolvedValue({ hasKey: false, maskedKey: '' }),
+    putBraveApiKey: vi.fn().mockResolvedValue({ ok: true }),
+  },
+  memoryApi: {
+    getMain: vi.fn().mockResolvedValue({ content: '- User prefers TypeScript' }),
+    putMain: vi.fn().mockResolvedValue({ ok: true }),
+    listDailyLogs: vi.fn().mockResolvedValue({ dates: ['2026-02-17'] }),
+    searchMemory: vi.fn().mockResolvedValue({ results: [{ content: 'TypeScript fact', category: 'general', source: 'MEMORY.md' }] }),
+    getConfig: vi.fn().mockResolvedValue({ enabled: true, autoExtract: true, flushThreshold: 0.75, extractIntervalSeconds: 60, minNewMessages: 4 }),
+    putConfig: vi.fn().mockResolvedValue({ ok: true }),
+    getStats: vi.fn().mockResolvedValue({ totalFacts: 5, dailyLogCount: 2 }),
+  },
+}));
+
+import { configApi, memoryApi as autoMemoryApi } from '../../../src/lib/api';
 import { SettingsPanel } from '../../../src/components/settings/SettingsPanel';
 
 describe('SettingsPanel', () => {
@@ -599,6 +618,121 @@ describe('SettingsPanel', () => {
       fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
       await waitFor(() => {
         expect(screen.getByTestId('skill-toggle-tdd-workflow')).toBeTruthy();
+      });
+    });
+  });
+
+  // === Brave API Key in General Tab ===
+  describe('Brave API Key (General tab)', () => {
+    it('should show API key input field on General tab', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('brave-api-key-input')).toBeTruthy();
+      });
+    });
+
+    it('should show save button disabled when input is empty', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
+      await waitFor(() => {
+        const saveBtn = screen.getByTestId('brave-save-key');
+        expect(saveBtn.hasAttribute('disabled')).toBe(true);
+      });
+    });
+
+    it('should call putBraveApiKey when save is clicked', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('brave-api-key-input')).toBeTruthy();
+      });
+      fireEvent.change(screen.getByTestId('brave-api-key-input'), {
+        target: { value: 'BSA_test123' },
+      });
+      fireEvent.click(screen.getByTestId('brave-save-key'));
+      await waitFor(() => {
+        expect(configApi.putBraveApiKey).toHaveBeenCalledWith('BSA_test123');
+      });
+    });
+
+    it('should show masked key and clear button when key exists', async () => {
+      (configApi.getBraveApiKey as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        hasKey: true,
+        maskedKey: 'BSA_****',
+      });
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('brave-masked-key')).toBeTruthy();
+        expect(screen.getByTestId('brave-clear-key')).toBeTruthy();
+      });
+    });
+
+    it('should clear key when clear button is clicked', async () => {
+      (configApi.getBraveApiKey as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        hasKey: true,
+        maskedKey: 'BSA_****',
+      });
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('brave-clear-key')).toBeTruthy();
+      });
+      fireEvent.click(screen.getByTestId('brave-clear-key'));
+      await waitFor(() => {
+        expect(configApi.putBraveApiKey).toHaveBeenCalledWith('');
+      });
+    });
+  });
+
+  describe('Auto Memory (Memory tab)', () => {
+    it('should show auto-memory section in Memory tab', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('auto-memory-section')).toBeTruthy();
+      });
+    });
+
+    it('should display MEMORY.md content in editor', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('auto-memory-editor')).toBeTruthy();
+        expect((screen.getByTestId('auto-memory-editor') as HTMLTextAreaElement).value).toBe('- User prefers TypeScript');
+      });
+    });
+
+    it('should save MEMORY.md on save button click', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('auto-memory-editor')).toBeTruthy();
+      });
+      fireEvent.change(screen.getByTestId('auto-memory-editor'), {
+        target: { value: '- Updated memory content' },
+      });
+      fireEvent.click(screen.getByTestId('save-auto-memory'));
+      await waitFor(() => {
+        expect(autoMemoryApi.putMain).toHaveBeenCalledWith('- Updated memory content');
+      });
+    });
+
+    it('should show auto-extract toggle', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('auto-extract-toggle')).toBeTruthy();
+      });
+    });
+
+    it('should show memory stats', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('memory-stats')).toBeTruthy();
+        expect(screen.getByTestId('memory-stats').textContent).toContain('5');
       });
     });
   });

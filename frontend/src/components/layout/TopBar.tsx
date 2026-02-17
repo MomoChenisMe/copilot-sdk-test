@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Sun, Moon, Settings } from 'lucide-react';
+import { Sun, Moon, Settings, Keyboard } from 'lucide-react';
 import type { WsStatus } from '../../lib/ws-types';
 import type { Theme } from '../../store';
 import { ConnectionBadge } from '../shared/ConnectionBadge';
@@ -11,9 +11,10 @@ interface TopBarProps {
   onThemeToggle: () => void;
   onHomeClick: () => void;
   onSettingsClick?: () => void;
+  onShortcutsClick?: () => void;
 }
 
-export function TopBar({ title, status, theme, onThemeToggle, onHomeClick, onSettingsClick }: TopBarProps) {
+export function TopBar({ title, status, theme, onThemeToggle, onHomeClick, onSettingsClick, onShortcutsClick }: TopBarProps) {
   const { t } = useTranslation();
   return (
     <header className="h-12 flex items-center gap-2 px-4 bg-bg-primary border-b border-border-subtle shrink-0">
@@ -29,6 +30,15 @@ export function TopBar({ title, status, theme, onThemeToggle, onHomeClick, onSet
 
       {/* Right: Settings + Theme + Connection */}
       <div className="flex items-center gap-1">
+        {onShortcutsClick && (
+          <button
+            onClick={onShortcutsClick}
+            className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
+            aria-label={t('topBar.shortcuts', 'Keyboard shortcuts')}
+          >
+            <Keyboard size={18} />
+          </button>
+        )}
         {onSettingsClick && (
           <button
             onClick={onSettingsClick}

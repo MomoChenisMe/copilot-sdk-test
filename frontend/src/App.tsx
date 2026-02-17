@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from './hooks/useAuth';
 import { LoginPage } from './components/auth/LoginPage';
 import { AppShell } from './components/layout/AppShell';
+import { LightboxProvider } from './components/shared/LightboxContext';
 
 export function App() {
   const { t } = useTranslation();
@@ -22,5 +23,9 @@ export function App() {
   }
 
   // Authenticated — show main app
-  return <AppShell onLogout={logout} />;
+  return (
+    <LightboxProvider>
+      <AppShell onLogout={logout} />
+    </LightboxProvider>
+  );
 }
