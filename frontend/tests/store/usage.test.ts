@@ -22,8 +22,16 @@ describe('Usage tracking in TabState', () => {
     expect(tab.usage).toEqual({
       inputTokens: 0,
       outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
       contextWindowUsed: 0,
       contextWindowMax: 0,
+      premiumRequestsUsed: 0,
+      premiumRequestsLocal: 0,
+      premiumRequestsTotal: 0,
+      premiumResetDate: null,
+      premiumUnlimited: false,
+      model: null,
     });
   });
 
@@ -58,6 +66,21 @@ describe('Usage tracking in TabState', () => {
     expect(() => {
       useAppStore.getState().updateTabUsage('nonexistent', 100, 50);
       useAppStore.getState().updateTabContextWindow('nonexistent', 100, 128000);
+    }).not.toThrow();
+  });
+
+  it('should increment premiumRequestsLocal with incrementTabPremiumLocal', () => {
+    const tabId = openTabAndGetId('conv-1', 'Chat');
+    useAppStore.getState().incrementTabPremiumLocal(tabId);
+    useAppStore.getState().incrementTabPremiumLocal(tabId);
+    useAppStore.getState().incrementTabPremiumLocal(tabId);
+    const tab = useAppStore.getState().tabs[tabId];
+    expect(tab.usage.premiumRequestsLocal).toBe(3);
+  });
+
+  it('should no-op incrementTabPremiumLocal for non-existent tab', () => {
+    expect(() => {
+      useAppStore.getState().incrementTabPremiumLocal('nonexistent');
     }).not.toThrow();
   });
 

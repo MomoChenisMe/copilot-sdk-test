@@ -61,11 +61,13 @@ export function ToolRecord({ record }: ToolRecordProps) {
               </pre>
             </div>
           )}
-          {record.error && (
+          {record.error != null && (
             <div>
               <p className="text-text-muted mb-1 font-sans text-xs">{t('tool.error')}</p>
               <pre className="bg-code-bg p-3 rounded-lg text-error overflow-x-auto text-xs">
-                {record.error}
+                {typeof record.error === 'string'
+                  ? record.error
+                  : safeStringify(record.error)}
               </pre>
             </div>
           )}

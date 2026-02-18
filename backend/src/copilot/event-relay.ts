@@ -105,7 +105,10 @@ export class EventRelay {
         if (d.success) {
           data.result = d.result;
         } else {
-          data.error = d.error;
+          // SDK may return error as an object {message, code} — normalize to string
+          data.error = typeof d.error === 'string'
+            ? d.error
+            : d.error?.message ?? JSON.stringify(d.error);
         }
         this.send({
           type: 'copilot:tool_end',
@@ -119,13 +122,23 @@ export class EventRelay {
         const e = event as any;
         const d = e.data ?? e;
         log.debug({ event: e }, 'assistant.usage');
-        this.send({
-          type: 'copilot:usage',
-          data: {
-            inputTokens: d.inputTokens,
-            outputTokens: d.outputTokens,
-          },
-        });
+        const usageData: Record<string, unknown> = {
+          inputTokens: d.inputTokens,
+          outputTokens: d.outputTokens,
+        };
+        if (d.cacheReadTokens != null) usageData.cacheReadTokens = d.cacheReadTokens;
+        if (d.cacheWriteTokens != null) usageData.cacheWriteTokens = d.cacheWriteTokens;
+        if (d.model != null) usageData.model = d.model;
+        if (d.cost != null) usageData.cost = d.cost;
+        this.send({ type: 'copilot:usage', data: usageData });
+
+        // Forward quota snapshots as a separate event
+        if (d.quotaSnapshots) {
+          this.send({
+            type: 'copilot:quota',
+            data: { quotaSnapshots: d.quotaSnapshots },
+          });
+        }
       }),
     );
 
@@ -155,6 +168,21 @@ export class EventRelay {
       session.on('session.compaction_complete', () => {
         log.debug('session.compaction_complete');
         this.send({ type: 'copilot:compaction_complete' });
+      }),
+    );
+
+    this.unsubscribes.push(
+      session.on('session.shutdown', (event) => {
+        const e = event as any;
+        const d = e.data ?? e;
+        log.debug({ event: e }, 'session.shutdown');
+        this.send({
+          type: 'copilot:shutdown',
+          data: {
+            totalPremiumRequests: d.totalPremiumRequests,
+            modelMetrics: d.modelMetrics,
+          },
+        });
       }),
     );
 

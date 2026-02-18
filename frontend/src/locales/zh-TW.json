@@ -20,7 +20,8 @@
     "welcomeDescription": "您的 AI 開發夥伴。開始對話以探索更多可能。",
     "startConversation": "開始新對話",
     "emptyPrompt": "發送訊息以開始...",
-    "assistant": "助手"
+    "assistant": "助手",
+    "waitingForResponse": "等待你的回應..."
   },
   "model": {
     "loading": "載入中...",
@@ -93,8 +94,10 @@
       "agent": "Agent 規則",
       "presets": "預設模板",
       "memory": "記憶",
-      "skills": "技能"
+      "skills": "技能",
+      "apiKeys": "API 金鑰"
     },
+    "back": "返回",
     "general": {
       "language": "語言",
       "logout": "登出"
@@ -150,6 +153,48 @@
     "modeAI": "AI",
     "modeBash": "Bash",
     "exitCode": "exit {{code}}"
+  },
+  "scrollToBottom": {
+    "label": "捲動到底部"
+  },
+  "userInput": {
+    "submit": "送出",
+    "typeResponse": "輸入你的回應..."
+  },
+  "planMode": {
+    "plan": "計畫",
+    "act": "執行",
+    "active": "計畫模式已啟用 — AI 只會規劃但不會執行工具",
+    "tooltip": "切換計畫與執行模式",
+    "planComplete": "規劃完成！是否切換到執行模式開始實作？",
+    "switchToAct": "切換到執行模式",
+    "stayInPlan": "繼續規劃"
+  },
+  "usage": {
+    "tokens": "Tokens",
+    "context": "Context",
+    "input": "輸入",
+    "output": "輸出",
+    "cacheRead": "Cache 讀取",
+    "cacheWrite": "Cache 寫入",
+    "premiumRequests": "Premium Requests",
+    "resets": "重置於",
+    "contextWindow": "Context Window",
+    "model": "模型",
+    "unlimited": "無限制"
+  },
+  "artifacts": {
+    "title": "Artifacts",
+    "copy": "複製",
+    "download": "下載",
+    "close": "關閉"
+  },
+  "directoryPicker": {
+    "search": "搜尋目錄...",
+    "parent": "上層目錄",
+    "empty": "找不到目錄",
+    "useCurrent": "使用目前目錄",
+    "select": "選擇"
   },
   "sidebar": {
     "conversations": "對話紀錄",

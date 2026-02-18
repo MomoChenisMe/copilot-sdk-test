@@ -1,0 +1,40 @@
+import { Lightbulb, Zap } from 'lucide-react';
+
+interface PlanActToggleProps {
+  planMode: boolean;
+  onToggle: (planMode: boolean) => void;
+  disabled?: boolean;
+}
+
+export default function PlanActToggle({ planMode, onToggle, disabled }: PlanActToggleProps) {
+  return (
+    <div className="inline-flex rounded-lg border border-border overflow-hidden">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => onToggle(true)}
+        className={`flex items-center gap-1 px-2 py-1.5 text-xs font-medium transition-colors ${
+          planMode
+            ? 'bg-accent text-white'
+            : 'bg-bg-tertiary text-text-secondary hover:bg-bg-secondary'
+        } disabled:opacity-50 disabled:cursor-not-allowed`}
+      >
+        <Lightbulb size={12} />
+        Plan
+      </button>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => onToggle(false)}
+        className={`flex items-center gap-1 px-2 py-1.5 text-xs font-medium transition-colors ${
+          !planMode
+            ? 'bg-accent text-white'
+            : 'bg-bg-tertiary text-text-secondary hover:bg-bg-secondary'
+        } disabled:opacity-50 disabled:cursor-not-allowed`}
+      >
+        <Zap size={12} />
+        Act
+      </button>
+    </div>
+  );
+}

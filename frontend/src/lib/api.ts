@@ -93,6 +93,7 @@ export interface MessageMetadata {
   reasoning?: string;
   turnSegments?: TurnSegment[];
   attachments?: AttachmentMeta[];
+  usage?: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number };
 }
 
 // --- Conversation API ---
@@ -196,6 +197,29 @@ export const memoryApi = {
   getConfig: () => apiGet<MemoryConfig>('/api/auto-memory/config'),
   putConfig: (config: Partial<MemoryConfig>) => apiPut<{ ok: true }>('/api/auto-memory/config', config),
   getStats: () => apiGet<MemoryStats>('/api/auto-memory/stats'),
+};
+
+// --- Directory API ---
+
+export interface DirectoryEntry {
+  name: string;
+  path: string;
+}
+
+export interface DirectoryListResult {
+  currentPath: string;
+  parentPath: string;
+  directories: DirectoryEntry[];
+}
+
+export const directoryApi = {
+  list: (dirPath?: string, showHidden?: boolean) => {
+    const params = new URLSearchParams();
+    if (dirPath) params.set('path', dirPath);
+    if (showHidden) params.set('showHidden', 'true');
+    const qs = params.toString();
+    return apiGet<DirectoryListResult>(`/api/directories${qs ? `?${qs}` : ''}`);
+  },
 };
 
 export class ApiError extends Error {

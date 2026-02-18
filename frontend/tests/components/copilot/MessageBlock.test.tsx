@@ -11,9 +11,13 @@ vi.mock('../../../src/components/shared/Markdown', () => ({
   ),
 }));
 
-// Mock lucide-react Sparkles icon
+// Mock lucide-react icons
 vi.mock('lucide-react', () => ({
   Sparkles: (props: any) => <svg data-testid="sparkles-icon" {...props} />,
+  FileText: (props: any) => <svg data-testid="icon-filetext" {...props} />,
+  Code: (props: any) => <svg data-testid="icon-code" {...props} />,
+  Globe: (props: any) => <svg data-testid="icon-globe" {...props} />,
+  Image: (props: any) => <svg data-testid="icon-image" {...props} />,
 }));
 
 // Mock ToolRecord component
@@ -742,6 +746,49 @@ describe('MessageBlock', () => {
     expect(badge.textContent).toContain('✓');
     // Empty content should not render any bash lines
     expect(screen.queryByTestId('bash-line-1')).toBeNull();
+  });
+
+  // --- Artifact card detection (Feature 3) ---
+
+  it('renders artifact cards when message contains artifact blocks', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'assistant',
+          content: 'Here is a doc:\n```artifact type="markdown" title="My Doc"\n# Hello\n```\nDone.',
+        })}
+      />
+    );
+
+    expect(screen.getByTestId('artifact-card-0')).toBeTruthy();
+    expect(screen.getByText('My Doc')).toBeTruthy();
+  });
+
+  it('does not render artifact cards when no artifacts in message', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'assistant',
+          content: 'Regular message with ```code block``` here.',
+        })}
+      />
+    );
+
+    expect(screen.queryByTestId('artifact-card-0')).toBeNull();
+  });
+
+  it('renders multiple artifact cards', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'assistant',
+          content: '```artifact type="markdown" title="Doc A"\nfoo\n```\n```artifact type="code" title="Code B" language="js"\nbar\n```',
+        })}
+      />
+    );
+
+    expect(screen.getByTestId('artifact-card-0')).toBeTruthy();
+    expect(screen.getByTestId('artifact-card-1')).toBeTruthy();
   });
 
   // WARNING FIX: bash tool with error status should also show ToolResultBlock

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Conversation, Message, ToolRecord, TurnSegment } from '../lib/api';
 import type { SkillItem } from '../lib/prompts-api';
+import type { ParsedArtifact } from '../lib/artifact-parser';
 
 export type { ToolRecord, TurnSegment };
 
@@ -14,8 +15,23 @@ export interface ModelInfo {
 export interface UsageInfo {
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
   contextWindowUsed: number;
   contextWindowMax: number;
+  premiumRequestsUsed: number;
+  premiumRequestsLocal: number;
+  premiumRequestsTotal: number;
+  premiumResetDate: string | null;
+  premiumUnlimited: boolean;
+  model: string | null;
+}
+
+export interface UserInputRequest {
+  requestId: string;
+  question: string;
+  choices?: string[];
+  allowFreeform?: boolean;
 }
 
 export interface TabState {
@@ -34,6 +50,12 @@ export interface TabState {
   messagesLoaded: boolean;
   createdAt: number;
   usage: UsageInfo;
+  planMode: boolean;
+  showPlanCompletePrompt: boolean;
+  userInputRequest: UserInputRequest | null;
+  artifacts: ParsedArtifact[];
+  activeArtifactId: string | null;
+  artifactsPanelOpen: boolean;
 }
 
 export interface AppState {
@@ -187,8 +209,17 @@ export interface AppState {
   setTabMode: (tabId: string, mode: 'copilot' | 'terminal') => void;
 
   // Actions — Per-tab usage
-  updateTabUsage: (tabId: string, inputTokens: number, outputTokens: number) => void;
+  updateTabUsage: (tabId: string, inputTokens: number, outputTokens: number, cacheReadTokens?: number, cacheWriteTokens?: number, model?: string) => void;
   updateTabContextWindow: (tabId: string, contextWindowUsed: number, contextWindowMax: number) => void;
+  updateTabQuota: (tabId: string, premiumRequestsUsed: number, premiumRequestsTotal: number, premiumResetDate: string | null, premiumUnlimited?: boolean) => void;
+  incrementTabPremiumLocal: (tabId: string) => void;
+  setTabPlanMode: (tabId: string, planMode: boolean) => void;
+  setTabUserInputRequest: (tabId: string, request: UserInputRequest | null) => void;
+
+  // Actions — Per-tab artifacts
+  addTabArtifacts: (tabId: string, artifacts: ParsedArtifact[]) => void;
+  setTabActiveArtifact: (tabId: string, artifactId: string | null) => void;
+  setTabArtifactsPanelOpen: (tabId: string, open: boolean) => void;
 }
 
 function readThemeFromStorage(): Theme {
@@ -428,7 +459,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       copilotError: null,
       messagesLoaded: false,
       createdAt: Date.now(),
-      usage: { inputTokens: 0, outputTokens: 0, contextWindowUsed: 0, contextWindowMax: 0 },
+      usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, contextWindowUsed: 0, contextWindowMax: 0, premiumRequestsUsed: 0, premiumRequestsLocal: 0, premiumRequestsTotal: 0, premiumResetDate: null, premiumUnlimited: false, model: null },
+      planMode: false,
+      showPlanCompletePrompt: false,
+      userInputRequest: null,
+      artifacts: [],
+      activeArtifactId: null,
+      artifactsPanelOpen: false,
     };
     const newTabs = { ...state.tabs, [tabId]: tab };
     const newOrder = [...state.tabOrder, tabId];
@@ -490,7 +527,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       turnSegments: [],
       copilotError: null,
       messagesLoaded: false,
-      usage: { inputTokens: 0, outputTokens: 0, contextWindowUsed: 0, contextWindowMax: 0 },
+      usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, contextWindowUsed: 0, contextWindowMax: 0, premiumRequestsUsed: 0, premiumRequestsLocal: 0, premiumRequestsTotal: 0, premiumResetDate: null, premiumUnlimited: false, model: null },
+      planMode: false,
+      showPlanCompletePrompt: false,
+      userInputRequest: null,
+      artifacts: [],
+      activeArtifactId: null,
+      artifactsPanelOpen: false,
     };
     const newTabs = { ...state.tabs, [tabId]: updatedTab };
     set({ tabs: newTabs });
@@ -530,7 +573,13 @@ export const useAppStore = create<AppState>((set, get) => ({
           copilotError: null,
           messagesLoaded: false,
           createdAt: Date.now(),
-          usage: { inputTokens: 0, outputTokens: 0, contextWindowUsed: 0, contextWindowMax: 0 },
+          usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, contextWindowUsed: 0, contextWindowMax: 0, premiumRequestsUsed: 0, premiumRequestsLocal: 0, premiumRequestsTotal: 0, premiumResetDate: null, premiumUnlimited: false, model: null },
+          planMode: false,
+          showPlanCompletePrompt: false,
+          userInputRequest: null,
+          artifacts: [],
+          activeArtifactId: null,
+          artifactsPanelOpen: false,
         };
         tabOrder.push(tabId);
       }
@@ -677,21 +726,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     }),
 
   // Usage tracking actions
-  updateTabUsage: (tabId, inputTokens, outputTokens) =>
+  updateTabUsage: (tabId, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, model) =>
     set((state) => {
       const tab = state.tabs[tabId];
       if (!tab) return state;
+      const updatedUsage = {
+        ...tab.usage,
+        inputTokens: tab.usage.inputTokens + inputTokens,
+        outputTokens: tab.usage.outputTokens + outputTokens,
+      };
+      if (cacheReadTokens != null) updatedUsage.cacheReadTokens = tab.usage.cacheReadTokens + cacheReadTokens;
+      if (cacheWriteTokens != null) updatedUsage.cacheWriteTokens = tab.usage.cacheWriteTokens + cacheWriteTokens;
+      if (model != null) updatedUsage.model = model;
       return {
         tabs: {
           ...state.tabs,
-          [tabId]: {
-            ...tab,
-            usage: {
-              ...tab.usage,
-              inputTokens: tab.usage.inputTokens + inputTokens,
-              outputTokens: tab.usage.outputTokens + outputTokens,
-            },
-          },
+          [tabId]: { ...tab, usage: updatedUsage },
         },
       };
     }),
@@ -711,6 +761,125 @@ export const useAppStore = create<AppState>((set, get) => ({
               contextWindowMax,
             },
           },
+        },
+      };
+    }),
+
+  updateTabQuota: (tabId, premiumRequestsUsed, premiumRequestsTotal, premiumResetDate, premiumUnlimited) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return {
+        tabs: {
+          ...state.tabs,
+          [tabId]: {
+            ...tab,
+            usage: {
+              ...tab.usage,
+              premiumRequestsUsed,
+              premiumRequestsTotal,
+              premiumResetDate,
+              ...(premiumUnlimited != null && { premiumUnlimited }),
+            },
+          },
+        },
+      };
+    }),
+
+  incrementTabPremiumLocal: (tabId) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return {
+        tabs: {
+          ...state.tabs,
+          [tabId]: {
+            ...tab,
+            usage: {
+              ...tab.usage,
+              premiumRequestsLocal: tab.usage.premiumRequestsLocal + 1,
+            },
+          },
+        },
+      };
+    }),
+
+  setTabPlanMode: (tabId, planMode) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return {
+        tabs: {
+          ...state.tabs,
+          [tabId]: { ...tab, planMode, showPlanCompletePrompt: false },
+        },
+      };
+    }),
+
+  setTabShowPlanCompletePrompt: (tabId: string, show: boolean) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return {
+        tabs: {
+          ...state.tabs,
+          [tabId]: { ...tab, showPlanCompletePrompt: show },
+        },
+      };
+    }),
+
+  setTabUserInputRequest: (tabId, request) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return {
+        tabs: {
+          ...state.tabs,
+          [tabId]: { ...tab, userInputRequest: request },
+        },
+      };
+    }),
+
+  // Artifacts actions
+  addTabArtifacts: (tabId, artifacts) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      // Merge new artifacts, avoid duplicates by id AND by title+type
+      const existingIds = new Set(tab.artifacts.map((a) => a.id));
+      const existingKeys = new Set(tab.artifacts.map((a) => `${a.type}|${a.title}`));
+      const newOnes = artifacts.filter(
+        (a) => !existingIds.has(a.id) && !existingKeys.has(`${a.type}|${a.title}`),
+      );
+      if (newOnes.length === 0) return state;
+      return {
+        tabs: {
+          ...state.tabs,
+          [tabId]: { ...tab, artifacts: [...tab.artifacts, ...newOnes] },
+        },
+      };
+    }),
+
+  setTabActiveArtifact: (tabId, artifactId) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return {
+        tabs: {
+          ...state.tabs,
+          [tabId]: { ...tab, activeArtifactId: artifactId },
+        },
+      };
+    }),
+
+  setTabArtifactsPanelOpen: (tabId, open) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return {
+        tabs: {
+          ...state.tabs,
+          [tabId]: { ...tab, artifactsPanelOpen: open },
         },
       };
     }),

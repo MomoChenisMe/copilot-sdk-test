@@ -10,11 +10,13 @@ import { useModels } from '../../hooks/useModels';
 import { useSkills } from '../../hooks/useSkills';
 import { useGlobalShortcuts } from '../../hooks/useGlobalShortcuts';
 import { conversationApi, configApi } from '../../lib/api';
+import { sumUsageFromMessages } from '../../lib/usage-utils';
 import { uploadFiles } from '../../lib/upload-api';
 import type { AttachedFile } from '../shared/AttachmentPreview';
 import { TopBar } from './TopBar';
 import { TabBar } from './TabBar';
 import { ChatView } from '../copilot/ChatView';
+import { ArtifactsPanel } from '../copilot/ArtifactsPanel';
 import { SettingsPanel } from '../settings/SettingsPanel';
 import { ShortcutsPanel } from '../shared/ShortcutsPanel';
 
@@ -47,7 +49,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const switchTabConversation = useAppStore((s) => s.switchTabConversation);
 
-  const { sendMessage, abortMessage, cleanupDedup } = useTabCopilot({ subscribe, send });
+  const { sendMessage, abortMessage, sendUserInputResponse, cleanupDedup } = useTabCopilot({ subscribe, send });
 
   const handleBashCwdChange = useCallback(
     async (newCwd: string) => {
@@ -133,6 +135,11 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       if (restoredTab?.conversationId && !restoredTab.messagesLoaded) {
         conversationApi.getMessages(restoredTab.conversationId).then((msgs) => {
           useAppStore.getState().setTabMessages(restoredTabId, msgs);
+          // Restore usage from message metadata
+          const usage = sumUsageFromMessages(msgs);
+          if (usage.inputTokens > 0 || usage.outputTokens > 0) {
+            useAppStore.getState().updateTabUsage(restoredTabId, usage.inputTokens, usage.outputTokens, usage.cacheReadTokens || undefined, usage.cacheWriteTokens || undefined);
+          }
         }).catch(() => {
           // Mark as loaded even on error to exit the loading spinner
           useAppStore.getState().setTabMessages(restoredTabId, []);
@@ -181,6 +188,11 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         try {
           const msgs = await conversationApi.getMessages(conversationId);
           useAppStore.getState().setTabMessages(tabId, msgs);
+          // Restore usage from message metadata
+          const usage = sumUsageFromMessages(msgs);
+          if (usage.inputTokens > 0 || usage.outputTokens > 0) {
+            useAppStore.getState().updateTabUsage(tabId, usage.inputTokens, usage.outputTokens, usage.cacheReadTokens || undefined, usage.cacheWriteTokens || undefined);
+          }
         } catch {
           // ignore
         }
@@ -271,6 +283,11 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       try {
         const msgs = await conversationApi.getMessages(newConversationId);
         useAppStore.getState().setTabMessages(tabId, msgs);
+        // Restore usage from message metadata
+        const usage = sumUsageFromMessages(msgs);
+        if (usage.inputTokens > 0 || usage.outputTokens > 0) {
+          useAppStore.getState().updateTabUsage(tabId, usage.inputTokens, usage.outputTokens, usage.cacheReadTokens || undefined, usage.cacheWriteTokens || undefined);
+        }
       } catch {
         // ignore
       }
@@ -448,23 +465,50 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       />
 
       <div className="flex-1 overflow-hidden relative">
-        {/* Main content area */}
-        <div className="h-full flex flex-col">
-          <ChatView
-            tabId={activeTabId}
-            onNewConversation={handleNewTab}
-            onSend={handleSend}
-            onAbort={handleAbort}
-            onBashSend={handleBashSend}
-            isStreaming={activeTab?.isStreaming ?? false}
-            disabled={!activeTabId}
-            currentModel={activeConversation?.model || defaultModel}
-            onModelChange={handleModelChange}
-            currentCwd={activeConversation?.cwd || cwd}
-            onCwdChange={handleCwdChange}
-            onClearConversation={handleClearConversation}
-            onSettingsOpen={() => setSettingsOpen(true)}
-          />
+        {/* Main content area: flex row for ChatView + ArtifactsPanel */}
+        <div className="h-full flex flex-row">
+          {/* Chat area — shrinks when artifacts panel is open on desktop */}
+          <div className="flex-1 flex flex-col min-w-0 h-full">
+            <ChatView
+              tabId={activeTabId}
+              onNewConversation={handleNewTab}
+              onSend={handleSend}
+              onAbort={handleAbort}
+              onBashSend={handleBashSend}
+              isStreaming={activeTab?.isStreaming ?? false}
+              disabled={!activeTabId}
+              currentModel={activeConversation?.model || defaultModel}
+              onModelChange={handleModelChange}
+              currentCwd={activeConversation?.cwd || cwd}
+              onCwdChange={handleCwdChange}
+              onClearConversation={handleClearConversation}
+              onSettingsOpen={() => setSettingsOpen(true)}
+              onUserInputResponse={(requestId, answer, wasFreeform) => {
+                const tab = activeTabId ? useAppStore.getState().tabs[activeTabId] : null;
+                if (tab?.conversationId) {
+                  sendUserInputResponse(tab.conversationId, requestId, answer, wasFreeform);
+                }
+              }}
+            />
+          </div>
+
+          {/* Artifacts panel — full overlay on mobile, side panel on desktop */}
+          {activeTab?.artifactsPanelOpen && activeTab.artifacts.length > 0 && (
+            <ArtifactsPanel
+              artifacts={activeTab.artifacts}
+              activeArtifactId={activeTab.activeArtifactId}
+              onSelectArtifact={(id) => {
+                if (activeTabId) {
+                  useAppStore.getState().setTabActiveArtifact(activeTabId, id);
+                }
+              }}
+              onClose={() => {
+                if (activeTabId) {
+                  useAppStore.getState().setTabArtifactsPanelOpen(activeTabId, false);
+                }
+              }}
+            />
+          )}
         </div>
       </div>
 

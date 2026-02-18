@@ -33,6 +33,7 @@ import { createSkillsRoutes } from './skills/routes.js';
 import { createUploadRoutes } from './upload/routes.js';
 import { createSelfControlTools } from './copilot/self-control-tools.js';
 import { createConfigRoutes, readBraveApiKey } from './config-routes.js';
+import { createDirectoryRoutes } from './directory/routes.js';
 import { createWebSearchTool } from './copilot/tools/web-search.js';
 import { MemoryStore } from './memory/memory-store.js';
 import { MemoryIndex } from './memory/memory-index.js';
@@ -110,6 +111,7 @@ export function createApp() {
   app.use('/api/skills', authMiddleware, createSkillsRoutes(skillStore, builtinSkillStore));
   app.use('/api/upload', authMiddleware, createUploadRoutes(path.resolve(config.dbPath, '../uploads')));
   app.use('/api/auto-memory', authMiddleware, createAutoMemoryRoutes(memoryStore, memoryIndex, memoryBasePath));
+  app.use('/api/directories', authMiddleware, createDirectoryRoutes());
 
   // Config routes (Brave API key etc.) — mounted after streamManager below
 

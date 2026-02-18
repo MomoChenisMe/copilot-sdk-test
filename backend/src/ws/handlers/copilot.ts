@@ -55,6 +55,7 @@ export function createCopilotHandler(
             try {
               const activePresets = (payload.activePresets as string[]) ?? [];
               const disabledSkills = (payload.disabledSkills as string[]) ?? [];
+              const mode = payload.mode as 'plan' | 'act' | undefined;
               await streamManager.startStream(conversationId, {
                 prompt,
                 sdkSessionId: conversation.sdkSessionId,
@@ -63,6 +64,7 @@ export function createCopilotHandler(
                 activePresets,
                 disabledSkills,
                 files,
+                ...(mode && { mode }),
               });
 
               // Auto-subscribe this connection to the stream
@@ -142,6 +144,46 @@ export function createCopilotHandler(
               log.error({ err }, 'Failed to abort stream');
             }
           })();
+          break;
+        }
+
+        case 'copilot:user_input_response': {
+          const conversationId = payload.conversationId as string | undefined;
+          const requestId = payload.requestId as string | undefined;
+          const answer = payload.answer as string | undefined;
+          const wasFreeform = (payload.wasFreeform as boolean) ?? false;
+
+          if (!conversationId) {
+            send({ type: 'copilot:error', data: { message: 'conversationId is required' } });
+            return;
+          }
+          if (!requestId) {
+            send({ type: 'copilot:error', data: { message: 'requestId is required' } });
+            return;
+          }
+          if (answer == null) {
+            send({ type: 'copilot:error', data: { message: 'answer is required' } });
+            return;
+          }
+
+          streamManager.handleUserInputResponse(conversationId, requestId, answer, wasFreeform);
+          break;
+        }
+
+        case 'copilot:set_mode': {
+          const conversationId = payload.conversationId as string | undefined;
+          const mode = payload.mode as string | undefined;
+
+          if (!conversationId) {
+            send({ type: 'copilot:error', data: { message: 'conversationId is required' } });
+            return;
+          }
+          if (!mode) {
+            send({ type: 'copilot:error', data: { message: 'mode is required' } });
+            return;
+          }
+
+          streamManager.setMode(conversationId, mode as 'plan' | 'act');
           break;
         }
 

@@ -17,11 +17,15 @@ export interface CreateSessionOptions {
   skillDirectories?: string[];
   disabledSkills?: string[];
   tools?: any[];
+  onPermissionRequest?: (...args: any[]) => any;
+  onUserInputRequest?: (...args: any[]) => any;
 }
 
 export interface ResumeSessionOptions {
   systemMessage?: SystemMessage;
   tools?: any[];
+  onPermissionRequest?: (...args: any[]) => any;
+  onUserInputRequest?: (...args: any[]) => any;
 }
 
 export interface GetOrCreateSessionOptions {
@@ -32,6 +36,8 @@ export interface GetOrCreateSessionOptions {
   skillDirectories?: string[];
   disabledSkills?: string[];
   tools?: any[];
+  onPermissionRequest?: (...args: any[]) => any;
+  onUserInputRequest?: (...args: any[]) => any;
 }
 
 export class SessionManager {
@@ -46,7 +52,8 @@ export class SessionManager {
       model: options.model,
       workingDirectory: options.workingDirectory,
       infiniteSessions: { enabled: true },
-      onPermissionRequest: autoApprovePermission,
+      onPermissionRequest: options.onPermissionRequest ?? autoApprovePermission,
+      ...(options.onUserInputRequest && { onUserInputRequest: options.onUserInputRequest }),
     };
 
     if (options.systemMessage) {
@@ -77,7 +84,8 @@ export class SessionManager {
     log.info({ sessionId: sdkSessionId }, 'Resuming SDK session');
 
     const resumeConfig: Record<string, unknown> = {
-      onPermissionRequest: autoApprovePermission,
+      onPermissionRequest: options?.onPermissionRequest ?? autoApprovePermission,
+      ...(options?.onUserInputRequest && { onUserInputRequest: options.onUserInputRequest }),
     };
 
     if (options?.systemMessage) {
@@ -98,6 +106,8 @@ export class SessionManager {
       return this.resumeSession(options.sdkSessionId, {
         systemMessage: options.systemMessage,
         tools: options.tools,
+        onPermissionRequest: options.onPermissionRequest,
+        onUserInputRequest: options.onUserInputRequest,
       });
     }
     return this.createSession({
@@ -107,6 +117,8 @@ export class SessionManager {
       skillDirectories: options.skillDirectories,
       disabledSkills: options.disabledSkills,
       tools: options.tools,
+      onPermissionRequest: options.onPermissionRequest,
+      onUserInputRequest: options.onUserInputRequest,
     });
   }
 

@@ -293,6 +293,80 @@ describe('SessionManager', () => {
     });
   });
 
+  describe('onPermissionRequest', () => {
+    it('should use custom onPermissionRequest in createSession when provided', async () => {
+      const customHandler = vi.fn().mockReturnValue({ kind: 'denied-by-rules' });
+
+      await sessionManager.createSession({
+        model: 'gpt-5',
+        workingDirectory: '/tmp',
+        onPermissionRequest: customHandler,
+      });
+
+      const config = mockClient.createSession.mock.calls[0][0];
+      expect(config.onPermissionRequest).toBe(customHandler);
+    });
+
+    it('should fallback to autoApprovePermission in createSession when no custom handler', async () => {
+      await sessionManager.createSession({
+        model: 'gpt-5',
+        workingDirectory: '/tmp',
+      });
+
+      const config = mockClient.createSession.mock.calls[0][0];
+      // Should be autoApprovePermission (always approves)
+      const result = config.onPermissionRequest({ kind: 'shell' }, { sessionId: 's-1' });
+      expect(result).toEqual({ kind: 'approved' });
+    });
+
+    it('should use custom onPermissionRequest in resumeSession when provided', async () => {
+      const customHandler = vi.fn().mockReturnValue({ kind: 'denied-by-rules' });
+
+      await sessionManager.resumeSession('sdk-session-123', {
+        onPermissionRequest: customHandler,
+      });
+
+      const resumeConfig = mockClient.resumeSession.mock.calls[0][1];
+      expect(resumeConfig.onPermissionRequest).toBe(customHandler);
+    });
+
+    it('should fallback to autoApprovePermission in resumeSession when no custom handler', async () => {
+      await sessionManager.resumeSession('sdk-session-123');
+
+      const resumeConfig = mockClient.resumeSession.mock.calls[0][1];
+      const result = resumeConfig.onPermissionRequest({ kind: 'write' }, { sessionId: 's-1' });
+      expect(result).toEqual({ kind: 'approved' });
+    });
+
+    it('should pass onPermissionRequest through getOrCreateSession (create path)', async () => {
+      const customHandler = vi.fn().mockReturnValue({ kind: 'denied-by-rules' });
+
+      await sessionManager.getOrCreateSession({
+        sdkSessionId: null,
+        model: 'gpt-5',
+        workingDirectory: '/tmp',
+        onPermissionRequest: customHandler,
+      });
+
+      const config = mockClient.createSession.mock.calls[0][0];
+      expect(config.onPermissionRequest).toBe(customHandler);
+    });
+
+    it('should pass onPermissionRequest through getOrCreateSession (resume path)', async () => {
+      const customHandler = vi.fn().mockReturnValue({ kind: 'denied-by-rules' });
+
+      await sessionManager.getOrCreateSession({
+        sdkSessionId: 'existing-session',
+        model: 'gpt-5',
+        workingDirectory: '/tmp',
+        onPermissionRequest: customHandler,
+      });
+
+      const resumeConfig = mockClient.resumeSession.mock.calls[0][1];
+      expect(resumeConfig.onPermissionRequest).toBe(customHandler);
+    });
+  });
+
   describe('getOrCreateSession', () => {
     it('should create session when no sdkSessionId exists', async () => {
       const session = await sessionManager.getOrCreateSession({

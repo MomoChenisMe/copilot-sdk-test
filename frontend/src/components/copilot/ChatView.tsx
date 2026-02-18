@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useMemo } from 'react';
+import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Sparkles, Plus, X } from 'lucide-react';
 import { useAppStore } from '../../store';
@@ -13,6 +13,9 @@ import { ModelSelector } from './ModelSelector';
 import { CwdSelector } from './CwdSelector';
 import { Input } from '../shared/Input';
 import { UsageBar } from './UsageBar';
+import { ScrollToBottom } from './ScrollToBottom';
+import PlanActToggle from './PlanActToggle';
+import { UserInputDialog } from './UserInputDialog';
 import type { SlashCommand } from '../shared/SlashCommandMenu';
 
 const INLINE_RESULT_TOOLS = ['bash', 'shell', 'execute', 'run'];
@@ -31,6 +34,7 @@ interface ChatViewProps {
   onCwdChange?: (newCwd: string) => void;
   onClearConversation?: () => void;
   onSettingsOpen?: () => void;
+  onUserInputResponse?: (requestId: string, answer: string, wasFreeform: boolean) => void;
 }
 
 export function ChatView({
@@ -47,6 +51,7 @@ export function ChatView({
   onCwdChange,
   onClearConversation,
   onSettingsOpen,
+  onUserInputResponse,
 }: ChatViewProps) {
   const { t } = useTranslation();
   const activeConversationId = useAppStore((s) => s.activeConversationId);
@@ -72,14 +77,48 @@ export function ChatView({
   const disabledSkills = useAppStore((s) => s.disabledSkills);
   const sdkCommands = useAppStore((s) => s.sdkCommands);
   const setTabMode = useAppStore((s) => s.setTabMode);
+  const setTabPlanMode = useAppStore((s) => s.setTabPlanMode);
+  const setTabUserInputRequest = useAppStore((s) => s.setTabUserInputRequest);
+  const userInputRequest = tab?.userInputRequest ?? null;
   const tabMode = tab?.mode ?? 'copilot';
   const isTerminalMode = tabMode === 'terminal';
+  const planMode = tab?.planMode ?? false;
+  const showPlanCompletePrompt = tab?.showPlanCompletePrompt ?? false;
+  const setTabShowPlanCompletePrompt = useAppStore((s) => s.setTabShowPlanCompletePrompt);
 
   const handleModeChange = useCallback(
     (mode: 'copilot' | 'terminal') => {
       if (tabId) setTabMode(tabId, mode);
     },
     [tabId, setTabMode],
+  );
+
+  const handlePlanModeToggle = useCallback(
+    (newPlanMode: boolean) => {
+      if (tabId) setTabPlanMode(tabId, newPlanMode);
+    },
+    [tabId, setTabPlanMode],
+  );
+
+  const handleSwitchToAct = useCallback(() => {
+    if (tabId) {
+      setTabPlanMode(tabId, false); // This also clears showPlanCompletePrompt
+    }
+  }, [tabId, setTabPlanMode]);
+
+  const handleDismissPlanPrompt = useCallback(() => {
+    if (tabId) {
+      setTabShowPlanCompletePrompt(tabId, false);
+    }
+  }, [tabId, setTabShowPlanCompletePrompt]);
+
+  const handleUserInputSubmit = useCallback(
+    (answer: string, wasFreeform: boolean) => {
+      if (!userInputRequest || !tabId) return;
+      onUserInputResponse?.(userInputRequest.requestId, answer, wasFreeform);
+      setTabUserInputRequest(tabId, null);
+    },
+    [userInputRequest, tabId, onUserInputResponse, setTabUserInputRequest],
   );
 
   const handleTerminalSend = useCallback(
@@ -91,20 +130,35 @@ export function ChatView({
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAutoScrolling = useRef(true);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     const threshold = 50;
-    isAutoScrolling.current =
-      el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+    isAutoScrolling.current = isAtBottom;
+    setShowScrollButton(!isAtBottom);
+    if (isAtBottom) setUnreadCount(0);
   }, []);
 
   useEffect(() => {
     if (isAutoScrolling.current && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    } else {
+      setUnreadCount((prev) => prev + 1);
     }
   }, [messages, streamingText, toolRecords]);
+
+  const scrollToBottom = useCallback(() => {
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: 'smooth',
+    });
+    setShowScrollButton(false);
+    setUnreadCount(0);
+  }, []);
 
   // Assemble slash commands from builtin + enabled skills
   const slashCommands: SlashCommand[] = useMemo(() => {
@@ -208,6 +262,7 @@ export function ChatView({
               {currentCwd && onCwdChange && (
                 <CwdSelector currentCwd={currentCwd} onCwdChange={onCwdChange} mode={tabMode} onModeChange={handleModeChange} />
               )}
+              {tabId && <PlanActToggle planMode={planMode} onToggle={handlePlanModeToggle} disabled={isStreaming} />}
             </div>
             {activePresets.length > 0 && (
               <div data-testid="preset-pills" className="mb-2 flex gap-1.5 overflow-x-auto whitespace-nowrap">
@@ -248,11 +303,19 @@ export function ChatView({
 
   return (
     <div className="flex flex-col h-full">
+      {/* Plan mode banner */}
+      {planMode && (
+        <div data-testid="plan-mode-banner" className="px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-amber-400 text-xs text-center">
+          {t('planMode.active', 'Plan mode active — AI will plan but not execute tools')}
+        </div>
+      )}
+
       {/* Messages area */}
+      <div className="flex-1 overflow-hidden relative">
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto"
+        className="h-full overflow-y-auto"
       >
         <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
           {/* Historical messages */}
@@ -337,7 +400,47 @@ export function ChatView({
               </div>
             </div>
           )}
+
+          {/* Waiting for user input indicator */}
+          {userInputRequest && (
+            <div data-testid="waiting-for-input" className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 text-sm">
+              <div className="w-4 h-4 border-2 border-amber-400/30 border-t-amber-400 rounded-full animate-spin shrink-0" />
+              {t('chat.waitingForResponse', 'Waiting for your response...')}
+            </div>
+          )}
+
+          {/* Plan mode complete prompt */}
+          {showPlanCompletePrompt && !isStreaming && (
+            <div data-testid="plan-complete-prompt" className="max-w-3xl mx-auto px-4 mb-4">
+              <div className="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                <span className="text-sm text-amber-600 dark:text-amber-400 flex-1">
+                  {t('planMode.planComplete')}
+                </span>
+                <button
+                  data-testid="switch-to-act-btn"
+                  onClick={handleSwitchToAct}
+                  className="px-3 py-1.5 text-xs font-medium text-white bg-accent rounded-lg hover:bg-accent/90 transition-colors"
+                >
+                  {t('planMode.switchToAct')}
+                </button>
+                <button
+                  data-testid="dismiss-plan-prompt-btn"
+                  onClick={handleDismissPlanPrompt}
+                  className="px-3 py-1.5 text-xs font-medium text-text-secondary bg-bg-tertiary rounded-lg hover:bg-bg-secondary transition-colors"
+                >
+                  {t('planMode.stayInPlan')}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
+      </div>
+
+      <ScrollToBottom
+        visible={showScrollButton}
+        unreadCount={unreadCount}
+        onClick={scrollToBottom}
+      />
       </div>
 
       {/* Usage bar */}
@@ -347,8 +450,16 @@ export function ChatView({
             <UsageBar
               inputTokens={tab.usage.inputTokens}
               outputTokens={tab.usage.outputTokens}
+              cacheReadTokens={tab.usage.cacheReadTokens}
+              cacheWriteTokens={tab.usage.cacheWriteTokens}
               contextWindowUsed={tab.usage.contextWindowUsed}
               contextWindowMax={tab.usage.contextWindowMax}
+              premiumRequestsUsed={tab.usage.premiumRequestsUsed}
+              premiumRequestsLocal={tab.usage.premiumRequestsLocal}
+              premiumRequestsTotal={tab.usage.premiumRequestsTotal}
+              premiumResetDate={tab.usage.premiumResetDate}
+              premiumUnlimited={tab.usage.premiumUnlimited}
+              model={tab.usage.model}
             />
           </div>
         </div>
@@ -362,6 +473,7 @@ export function ChatView({
             {currentCwd && onCwdChange && (
               <CwdSelector currentCwd={currentCwd} onCwdChange={onCwdChange} mode={tabMode} onModeChange={handleModeChange} />
             )}
+            {tabId && <PlanActToggle planMode={planMode} onToggle={handlePlanModeToggle} disabled={isStreaming} />}
           </div>
           {activePresets.length > 0 && (
             <div data-testid="preset-pills" className="mb-2 flex gap-1.5 overflow-x-auto whitespace-nowrap">
@@ -396,6 +508,16 @@ export function ChatView({
           />
         </div>
       </div>
+
+      {/* User input request dialog */}
+      {userInputRequest && (
+        <UserInputDialog
+          question={userInputRequest.question}
+          choices={userInputRequest.choices}
+          allowFreeform={userInputRequest.allowFreeform}
+          onSubmit={handleUserInputSubmit}
+        />
+      )}
     </div>
   );
 }

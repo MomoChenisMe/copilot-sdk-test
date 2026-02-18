@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { useAppStore } from '../store';
 import { conversationApi } from '../lib/api';
-import type { MessageMetadata } from '../lib/api';
+import type { MessageMetadata, TurnSegment } from '../lib/api';
 import type { WsMessage } from '../lib/ws-types';
 
 interface UseTabCopilotOptions {
@@ -161,7 +161,20 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
 
           const updatedTab = useAppStore.getState().tabs[tabId];
           if (updatedTab?.reasoningText) {
-            state.addTabTurnSegment(tabId, { type: 'reasoning', content: updatedTab.reasoningText });
+            // Replace existing reasoning segment to avoid duplicates
+            useAppStore.setState((s) => {
+              const t = s.tabs[tabId];
+              if (!t) return s;
+              const filtered = t.turnSegments.filter(seg => seg.type !== 'reasoning');
+              const reasoningSeg: TurnSegment = { type: 'reasoning', content: updatedTab.reasoningText };
+              const firstTextIdx = filtered.findIndex(seg => seg.type === 'text');
+              if (firstTextIdx >= 0) {
+                filtered.splice(firstTextIdx, 0, reasoningSeg);
+              } else {
+                filtered.push(reasoningSeg);
+              }
+              return { tabs: { ...s.tabs, [tabId]: { ...t, turnSegments: filtered } } };
+            });
           }
           break;
         }
@@ -180,13 +193,10 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
 
           // Build metadata
           let metadata: MessageMetadata | null = null;
-          if (currentTab.toolRecords.length > 0 || currentTab.reasoningText || currentTab.turnSegments.length > 0) {
+          if (currentTab.toolRecords.length > 0 || currentTab.turnSegments.length > 0) {
             metadata = {};
             if (currentTab.toolRecords.length > 0) {
               metadata.toolRecords = [...currentTab.toolRecords];
-            }
-            if (currentTab.reasoningText) {
-              metadata.reasoning = currentTab.reasoningText;
             }
             if (currentTab.turnSegments.length > 0) {
               metadata.turnSegments = [...currentTab.turnSegments];
@@ -205,11 +215,20 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
             });
           }
 
+          // Increment local premium request counter (each turn = 1 premium request)
+          state.incrementTabPremiumLocal(tabId);
+
           // Remove from active streams
           state.removeStream(conversationId);
           state.setTabIsStreaming(tabId, false);
           state.clearTabStreaming(tabId);
           dedup.receivedMessage = false;
+
+          // Show plan-complete prompt if we just finished in plan mode
+          const finalTab = useAppStore.getState().tabs[tabId];
+          if (finalTab?.planMode) {
+            state.setTabShowPlanCompletePrompt(tabId, true);
+          }
           break;
         }
 
@@ -218,8 +237,57 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
             tabId,
             (data.inputTokens as number) ?? 0,
             (data.outputTokens as number) ?? 0,
+            data.cacheReadTokens as number | undefined,
+            data.cacheWriteTokens as number | undefined,
+            data.model as string | undefined,
           );
           break;
+
+        case 'copilot:quota': {
+          // SDK sends quotaSnapshots as a dictionary with keys like "chat", "completions", "premium_interactions"
+          // We prefer "premium_interactions" which has actual usage data; fall back to first non-unlimited entry
+          const snapshots = data.quotaSnapshots as Record<string, { usedRequests?: number; entitlementRequests?: number; resetDate?: string; isUnlimitedEntitlement?: boolean; remainingPercentage?: number }> | undefined;
+          if (snapshots && typeof snapshots === 'object') {
+            const entries = Object.entries(snapshots);
+            // Priority: 1) premium_interactions key  2) first entry with !isUnlimitedEntitlement  3) first entry
+            const premiumEntry = entries.find(([k]) => k === 'premium_interactions');
+            const nonUnlimitedEntry = entries.find(([, v]) => v && !v.isUnlimitedEntitlement);
+            const [, snap] = premiumEntry ?? nonUnlimitedEntry ?? entries[0] ?? [];
+            if (snap) {
+              const unlimited = !!snap.isUnlimitedEntitlement;
+              state.updateTabQuota(
+                tabId,
+                snap.usedRequests ?? 0,
+                snap.entitlementRequests ?? 0,
+                snap.resetDate ?? null,
+                unlimited,
+              );
+            }
+          }
+          break;
+        }
+
+        case 'copilot:shutdown': {
+          // session.shutdown includes totalPremiumRequests
+          const totalPR = data.totalPremiumRequests as number | undefined;
+          if (totalPR != null && totalPR > 0) {
+            const currentTab = useAppStore.getState().tabs[tabId];
+            if (currentTab) {
+              // Only update used count if higher than what we already have (quota snapshot is more accurate for total)
+              const currentUsed = currentTab.usage.premiumRequestsUsed;
+              if (totalPR > currentUsed) {
+                state.updateTabQuota(
+                  tabId,
+                  totalPR,
+                  currentTab.usage.premiumRequestsTotal,
+                  currentTab.usage.premiumResetDate,
+                  currentTab.usage.premiumUnlimited,
+                );
+              }
+            }
+          }
+          break;
+        }
 
         case 'copilot:context_window':
           state.updateTabContextWindow(
@@ -227,6 +295,19 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
             (data.contextWindowUsed as number) ?? 0,
             (data.contextWindowMax as number) ?? 0,
           );
+          break;
+
+        case 'copilot:mode_changed':
+          state.setTabPlanMode(tabId, (data.mode as string) === 'plan');
+          break;
+
+        case 'copilot:user_input_request':
+          state.setTabUserInputRequest(tabId, {
+            requestId: data.requestId as string,
+            question: data.question as string,
+            choices: data.choices as string[] | undefined,
+            allowFreeform: (data.allowFreeform as boolean) ?? true,
+          });
           break;
 
         case 'copilot:error':
@@ -287,6 +368,9 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
       if (files && files.length > 0) {
         data.files = files;
       }
+      if (tab.planMode) {
+        data.mode = 'plan';
+      }
       send({
         type: 'copilot:send',
         data,
@@ -309,10 +393,20 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
     [send],
   );
 
+  const sendUserInputResponse = useCallback(
+    (conversationId: string, requestId: string, answer: string, wasFreeform: boolean) => {
+      send({
+        type: 'copilot:user_input_response',
+        data: { conversationId, requestId, answer, wasFreeform },
+      });
+    },
+    [send],
+  );
+
   // Cleanup dedup sets when tabs are closed
   const cleanupDedup = useCallback((conversationId: string) => {
     dedupMapRef.current.delete(conversationId);
   }, []);
 
-  return { sendMessage, abortMessage, cleanupDedup };
+  return { sendMessage, abortMessage, sendUserInputResponse, cleanupDedup };
 }

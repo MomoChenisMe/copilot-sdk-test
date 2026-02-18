@@ -1,13 +1,26 @@
 import { EventEmitter } from 'node:events';
+import { randomUUID } from 'node:crypto';
+import { homedir } from 'node:os';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { CopilotSession } from '@github/copilot-sdk';
 import type { SessionManager } from './session-manager.js';
 import type { ConversationRepository } from '../conversation/repository.js';
 import { EventRelay } from './event-relay.js';
 import type { WsMessage, SendFn } from '../ws/types.js';
 import type { PromptComposer } from '../prompts/composer.js';
+import { createPermissionHandler } from './permission.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('stream-manager');
+
+const USER_INPUT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
+interface PendingUserInput {
+  resolve: (value: { answer: string; wasFreeform: boolean }) => void;
+  reject: (reason: Error) => void;
+  timeoutId: ReturnType<typeof setTimeout>;
+}
 
 interface TurnSegment {
   type: 'text' | 'tool' | 'reasoning';
@@ -23,11 +36,19 @@ interface ToolRecord {
   error?: string;
 }
 
+interface UsageAccumulation {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+}
+
 interface AccumulationState {
   contentSegments: string[];
   toolRecords: ToolRecord[];
   reasoningText: string;
   turnSegments: TurnSegment[];
+  usage: UsageAccumulation;
 }
 
 function createEmptyAccumulation(): AccumulationState {
@@ -36,6 +57,7 @@ function createEmptyAccumulation(): AccumulationState {
     toolRecords: [],
     reasoningText: '',
     turnSegments: [],
+    usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
   };
 }
 
@@ -52,7 +74,15 @@ function persistAccumulated(
   const metadata: Record<string, unknown> = {};
   if (state.turnSegments.length > 0) metadata.turnSegments = state.turnSegments;
   if (state.toolRecords.length > 0) metadata.toolRecords = state.toolRecords;
-  if (state.reasoningText) metadata.reasoning = state.reasoningText;
+  if (state.usage.inputTokens > 0 || state.usage.outputTokens > 0) {
+    const usageMeta: Record<string, number> = {
+      inputTokens: state.usage.inputTokens,
+      outputTokens: state.usage.outputTokens,
+    };
+    if (state.usage.cacheReadTokens > 0) usageMeta.cacheReadTokens = state.usage.cacheReadTokens;
+    if (state.usage.cacheWriteTokens > 0) usageMeta.cacheWriteTokens = state.usage.cacheWriteTokens;
+    metadata.usage = usageMeta;
+  }
 
   repo.addMessage(conversationId, {
     role: 'assistant',
@@ -65,6 +95,7 @@ interface ConversationStream {
   conversationId: string;
   session: CopilotSession;
   status: 'running' | 'idle' | 'error';
+  mode: 'plan' | 'act';
   accumulation: AccumulationState;
   eventBuffer: WsMessage[];
   subscribers: Set<SendFn>;
@@ -72,6 +103,7 @@ interface ConversationStream {
   seenMessageIds: Set<string>;
   seenToolCallIds: Set<string>;
   seenReasoningIds: Set<string>;
+  pendingUserInputRequests: Map<string, PendingUserInput>;
 }
 
 export interface StreamManagerDeps {
@@ -99,6 +131,7 @@ export interface StartStreamOptions {
   activePresets?: string[];
   disabledSkills?: string[];
   files?: FileReference[];
+  mode?: 'plan' | 'act';
 }
 
 export class StreamManager extends EventEmitter {
@@ -157,6 +190,7 @@ export class StreamManager extends EventEmitter {
       conversationId,
       session: null as any, // Set after session creation
       status: 'running',
+      mode: options.mode ?? 'act',
       accumulation: createEmptyAccumulation(),
       eventBuffer: [],
       subscribers: new Set(),
@@ -164,6 +198,7 @@ export class StreamManager extends EventEmitter {
       seenMessageIds: new Set(),
       seenToolCallIds: new Set(),
       seenReasoningIds: new Set(),
+      pendingUserInputRequests: new Map(),
     };
 
     // Build accumulatingSend for this stream
@@ -176,14 +211,57 @@ export class StreamManager extends EventEmitter {
 
     // Async: get/create session and send message
     try {
+      const permissionHandler = createPermissionHandler(() => stream.mode);
+
+      const userInputHandler = (
+        request: { question: string; choices?: string[]; allowFreeform?: boolean },
+        _invocation: { sessionId: string },
+      ): Promise<{ answer: string; wasFreeform: boolean }> => {
+        return new Promise((resolve, reject) => {
+          const requestId = randomUUID();
+          const timeoutId = setTimeout(() => {
+            stream.pendingUserInputRequests.delete(requestId);
+            reject(new Error('User input request timed out'));
+          }, USER_INPUT_TIMEOUT_MS);
+
+          stream.pendingUserInputRequests.set(requestId, { resolve, reject, timeoutId });
+
+          const msg: WsMessage = {
+            type: 'copilot:user_input_request',
+            data: {
+              requestId,
+              question: request.question,
+              choices: request.choices,
+              allowFreeform: request.allowFreeform ?? true,
+              conversationId: stream.conversationId,
+            },
+          };
+          this.broadcast(stream, msg);
+        });
+      };
+
+      // Resolve CWD: expand ~ to home directory, ensure absolute path, validate existence
+      let resolvedCwd = options.cwd;
+      if (!resolvedCwd || resolvedCwd === '~') {
+        resolvedCwd = homedir();
+      } else if (resolvedCwd.startsWith('~/')) {
+        resolvedCwd = resolve(homedir(), resolvedCwd.slice(2));
+      }
+      if (!existsSync(resolvedCwd)) {
+        log.warn({ cwd: resolvedCwd, original: options.cwd }, 'CWD does not exist, falling back to home directory');
+        resolvedCwd = homedir();
+      }
+
       const sessionOpts: Parameters<typeof this.sessionManager.getOrCreateSession>[0] = {
         sdkSessionId: options.sdkSessionId,
         model: options.model,
-        workingDirectory: options.cwd,
+        workingDirectory: resolvedCwd,
+        onPermissionRequest: permissionHandler,
+        onUserInputRequest: userInputHandler,
       };
 
       if (this.promptComposer) {
-        const composed = this.promptComposer.compose(options.activePresets ?? [], options.cwd);
+        const composed = this.promptComposer.compose(options.activePresets ?? [], resolvedCwd);
         if (composed) {
           sessionOpts.systemMessage = { mode: 'append', content: composed };
         }
@@ -245,6 +323,13 @@ export class StreamManager extends EventEmitter {
     const stream = this.streams.get(conversationId);
     if (!stream || stream.status !== 'running') return;
 
+    // Reject all pending user input requests
+    for (const [id, pending] of stream.pendingUserInputRequests) {
+      clearTimeout(pending.timeoutId);
+      pending.reject(new Error('Stream aborted'));
+    }
+    stream.pendingUserInputRequests.clear();
+
     // Persist accumulated content
     persistAccumulated(this.repo, conversationId, stream.accumulation);
     stream.accumulation = createEmptyAccumulation();
@@ -266,6 +351,30 @@ export class StreamManager extends EventEmitter {
     this.emit('stream:idle', conversationId);
   }
 
+  handleUserInputResponse(conversationId: string, requestId: string, answer: string, wasFreeform: boolean): void {
+    const stream = this.streams.get(conversationId);
+    if (!stream) return;
+
+    const pending = stream.pendingUserInputRequests.get(requestId);
+    if (!pending) return;
+
+    clearTimeout(pending.timeoutId);
+    stream.pendingUserInputRequests.delete(requestId);
+    pending.resolve({ answer, wasFreeform });
+  }
+
+  setMode(conversationId: string, mode: 'plan' | 'act'): void {
+    const stream = this.streams.get(conversationId);
+    if (!stream) return;
+
+    stream.mode = mode;
+    const msg: WsMessage = {
+      type: 'copilot:mode_changed',
+      data: { mode, conversationId },
+    };
+    this.broadcast(stream, msg);
+  }
+
   getActiveStreamIds(): string[] {
     return [...this.streams.entries()]
       .filter(([, s]) => s.status === 'running')
@@ -278,6 +387,13 @@ export class StreamManager extends EventEmitter {
 
     const abortPromises: Promise<void>[] = [];
     for (const [conversationId, stream] of this.streams) {
+      // Reject all pending user input requests
+      for (const [, pending] of stream.pendingUserInputRequests) {
+        clearTimeout(pending.timeoutId);
+        pending.reject(new Error('Stream aborted'));
+      }
+      stream.pendingUserInputRequests.clear();
+
       if (stream.status === 'running') {
         persistAccumulated(this.repo, conversationId, stream.accumulation);
         stream.accumulation = createEmptyAccumulation();
@@ -342,15 +458,21 @@ export class StreamManager extends EventEmitter {
         const record = stream.accumulation.toolRecords.find((r) => r.toolCallId === toolCallId);
         if (!record) return;
         record.status = success ? 'success' : 'error';
-        if (success) record.result = msgData.result;
-        else record.error = msgData.error as string;
+        if (success) {
+          record.result = msgData.result;
+        } else {
+          const rawError = msgData.error;
+          record.error = typeof rawError === 'string'
+            ? rawError
+            : (rawError as any)?.message ?? JSON.stringify(rawError);
+        }
         const segment = stream.accumulation.turnSegments.find(
           (s) => s.type === 'tool' && s.toolCallId === toolCallId,
         );
         if (segment) {
           segment.status = success ? 'success' : 'error';
           if (success) segment.result = msgData.result;
-          else segment.error = msgData.error;
+          else segment.error = record.error; // Use already-normalized string
         }
         break;
       }
@@ -374,14 +496,32 @@ export class StreamManager extends EventEmitter {
             type: 'reasoning',
             content: stream.accumulation.reasoningText,
           };
-          // Insert before first text segment to maintain canonical order
-          // (reasoning complete event may arrive after message complete)
-          const firstTextIdx = stream.accumulation.turnSegments.findIndex((s) => s.type === 'text');
-          if (firstTextIdx >= 0) {
-            stream.accumulation.turnSegments.splice(firstTextIdx, 0, segment);
+          // Replace any existing reasoning segment to avoid duplicates
+          const existingIdx = stream.accumulation.turnSegments.findIndex((s) => s.type === 'reasoning');
+          if (existingIdx >= 0) {
+            stream.accumulation.turnSegments[existingIdx] = segment;
           } else {
-            stream.accumulation.turnSegments.push(segment);
+            // Insert before first text segment to maintain canonical order
+            const firstTextIdx = stream.accumulation.turnSegments.findIndex((s) => s.type === 'text');
+            if (firstTextIdx >= 0) {
+              stream.accumulation.turnSegments.splice(firstTextIdx, 0, segment);
+            } else {
+              stream.accumulation.turnSegments.push(segment);
+            }
           }
+        }
+        break;
+      }
+      case 'copilot:usage': {
+        const input = (msgData.inputTokens as number) ?? 0;
+        const output = (msgData.outputTokens as number) ?? 0;
+        stream.accumulation.usage.inputTokens += input;
+        stream.accumulation.usage.outputTokens += output;
+        if (msgData.cacheReadTokens != null) {
+          stream.accumulation.usage.cacheReadTokens += msgData.cacheReadTokens as number;
+        }
+        if (msgData.cacheWriteTokens != null) {
+          stream.accumulation.usage.cacheWriteTokens += msgData.cacheWriteTokens as number;
         }
         break;
       }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { autoApprovePermission } from '../../src/copilot/permission.js';
+import { autoApprovePermission, createPermissionHandler } from '../../src/copilot/permission.js';
 
 describe('autoApprovePermission', () => {
   it('should approve shell permission', () => {
@@ -48,5 +48,54 @@ describe('autoApprovePermission', () => {
       { sessionId: 's-1' },
     );
     expect(result).toEqual({ kind: 'approved' });
+  });
+});
+
+describe('createPermissionHandler', () => {
+  it('should deny all requests in plan mode', () => {
+    let mode: 'plan' | 'act' = 'plan';
+    const handler = createPermissionHandler(() => mode);
+
+    const result = handler(
+      { kind: 'shell', toolCallId: 'tc-1' },
+      { sessionId: 's-1' },
+    );
+    expect(result).toEqual({ kind: 'denied-by-rules' });
+  });
+
+  it('should approve all requests in act mode', () => {
+    let mode: 'plan' | 'act' = 'act';
+    const handler = createPermissionHandler(() => mode);
+
+    const result = handler(
+      { kind: 'shell', toolCallId: 'tc-1' },
+      { sessionId: 's-1' },
+    );
+    expect(result).toEqual({ kind: 'approved' });
+  });
+
+  it('should dynamically switch between modes via closure', () => {
+    let mode: 'plan' | 'act' = 'act';
+    const handler = createPermissionHandler(() => mode);
+
+    // Act mode → approved
+    expect(handler({ kind: 'shell' }, { sessionId: 's-1' })).toEqual({ kind: 'approved' });
+
+    // Switch to plan
+    mode = 'plan';
+    expect(handler({ kind: 'shell' }, { sessionId: 's-1' })).toEqual({ kind: 'denied-by-rules' });
+
+    // Switch back to act
+    mode = 'act';
+    expect(handler({ kind: 'write' }, { sessionId: 's-1' })).toEqual({ kind: 'approved' });
+  });
+
+  it('should deny all permission kinds in plan mode', () => {
+    const handler = createPermissionHandler(() => 'plan');
+    const kinds = ['shell', 'write', 'read', 'mcp', 'url'];
+
+    for (const kind of kinds) {
+      expect(handler({ kind }, { sessionId: 's-1' })).toEqual({ kind: 'denied-by-rules' });
+    }
   });
 });

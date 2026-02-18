@@ -1,16 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Globe, LogOut } from 'lucide-react';
+import { ArrowLeft, Globe, LogOut, X } from 'lucide-react';
 import { promptsApi, memoryApi, skillsApi } from '../../lib/prompts-api';
 import type { PresetItem, MemoryItem, SkillItem } from '../../lib/prompts-api';
-import { configApi, memoryApi as autoMemoryApi } from '../../lib/api';
+import { memoryApi as autoMemoryApi } from '../../lib/api';
 import type { MemoryConfig, MemoryStats } from '../../lib/api';
 import { useAppStore } from '../../store';
 import { Markdown } from '../shared/Markdown';
+import { ApiKeysTab } from './ApiKeysTab';
 
 const INVALID_NAME_RE = /[.]{2}|[/\\]|\0/;
 
-type TabId = 'general' | 'system-prompt' | 'profile' | 'agent' | 'presets' | 'memory' | 'skills';
+type TabId = 'general' | 'system-prompt' | 'profile' | 'agent' | 'presets' | 'memory' | 'skills' | 'api-keys';
 
 interface SettingsPanelProps {
   open: boolean;
@@ -30,75 +31,105 @@ const TABS: { id: TabId; labelKey: string }[] = [
   { id: 'presets', labelKey: 'settings.tabs.presets' },
   { id: 'memory', labelKey: 'settings.tabs.memory' },
   { id: 'skills', labelKey: 'settings.tabs.skills' },
+  { id: 'api-keys', labelKey: 'settings.tabs.apiKeys' },
 ];
 
 export function SettingsPanel({ open, onClose, activePresets, onTogglePreset, onLanguageToggle, language, onLogout }: SettingsPanelProps) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabId>('system-prompt');
 
+  // Escape key handler
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   return (
-    <>
-      {/* Overlay backdrop */}
-      <div
-        data-testid="settings-overlay"
-        className="fixed inset-0 bg-black/20 z-40"
-        onClick={onClose}
-      />
+    <div
+      data-testid="settings-panel"
+      className="fixed inset-0 z-50 bg-bg-primary flex flex-col"
+    >
+      {/* Header */}
+      <div className="h-12 flex items-center gap-3 px-4 border-b border-border-subtle shrink-0">
+        <button
+          data-testid="settings-back-button"
+          onClick={onClose}
+          className="p-1.5 rounded-lg hover:bg-bg-tertiary text-text-secondary"
+          aria-label={t('settings.back', 'Back')}
+        >
+          <ArrowLeft size={16} />
+        </button>
+        <h2 className="text-sm font-semibold text-text-primary">{t('settings.title')}</h2>
+      </div>
 
-      {/* Panel */}
-      <div
-        data-testid="settings-panel"
-        className="fixed inset-y-0 right-0 w-80 bg-bg-primary border-l border-border shadow-lg z-50 flex flex-col transition-transform duration-300"
-      >
-        {/* Header */}
-        <div className="h-12 flex items-center justify-between px-4 border-b border-border-subtle shrink-0">
-          <h2 className="text-sm font-semibold text-text-primary">{t('settings.title')}</h2>
+      {/* Mobile: horizontal tabs */}
+      <div className="flex overflow-x-auto border-b border-border-subtle md:hidden">
+        {TABS.map((tab) => (
           <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-bg-tertiary text-text-secondary"
-            aria-label={t('settings.close')}
+            key={tab.id}
+            aria-selected={activeTab === tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`shrink-0 px-3 py-2 text-xs font-medium transition-colors ${
+              activeTab === tab.id
+                ? 'text-accent border-b-2 border-accent'
+                : 'text-text-secondary hover:text-text-primary'
+            }`}
           >
-            <X size={16} />
+            {t(tab.labelKey)}
           </button>
-        </div>
+        ))}
+      </div>
 
-        {/* Tabs */}
-        <div className="flex overflow-x-auto border-b border-border-subtle" role="tablist">
+      {/* Desktop: sidebar + content */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left sidebar navigation (desktop) */}
+        <nav
+          data-testid="settings-sidebar"
+          className="hidden md:flex w-56 shrink-0 flex-col border-r border-border-subtle py-2 overflow-y-auto"
+          role="tablist"
+        >
           {TABS.map((tab) => (
             <button
               key={tab.id}
               role="tab"
               aria-selected={activeTab === tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`shrink-0 px-3 py-2 text-xs font-medium transition-colors ${
+              className={`text-left px-4 py-2 text-sm transition-colors ${
                 activeTab === tab.id
-                  ? 'text-accent border-b-2 border-accent'
-                  : 'text-text-secondary hover:text-text-primary'
+                  ? 'text-accent bg-accent-soft font-medium'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
               }`}
             >
               {t(tab.labelKey)}
             </button>
           ))}
-        </div>
+        </nav>
 
-        {/* Tab content */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {activeTab === 'general' && (
-            <GeneralTab language={language} onLanguageToggle={onLanguageToggle} onLogout={onLogout} />
-          )}
-          {activeTab === 'system-prompt' && <SystemPromptTab />}
-          {activeTab === 'profile' && <ProfileTab />}
-          {activeTab === 'agent' && <AgentTab />}
-          {activeTab === 'presets' && (
-            <PresetsTab activePresets={activePresets} onTogglePreset={onTogglePreset} />
-          )}
-          {activeTab === 'memory' && <MemoryTab />}
-          {activeTab === 'skills' && <SkillsTab />}
+        {/* Content area */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-2xl mx-auto">
+            {activeTab === 'general' && (
+              <GeneralTab language={language} onLanguageToggle={onLanguageToggle} onLogout={onLogout} />
+            )}
+            {activeTab === 'system-prompt' && <SystemPromptTab />}
+            {activeTab === 'profile' && <ProfileTab />}
+            {activeTab === 'agent' && <AgentTab />}
+            {activeTab === 'presets' && (
+              <PresetsTab activePresets={activePresets} onTogglePreset={onTogglePreset} />
+            )}
+            {activeTab === 'memory' && <MemoryTab />}
+            {activeTab === 'skills' && <SkillsTab />}
+            {activeTab === 'api-keys' && <ApiKeysTab />}
+          </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -115,46 +146,6 @@ function GeneralTab({
   const { t } = useTranslation();
   const displayLang = language === 'zh-TW' ? '繁體中文' : 'English';
 
-  const [braveKey, setBraveKey] = useState('');
-  const [braveHasKey, setBraveHasKey] = useState(false);
-  const [braveMasked, setBraveMasked] = useState('');
-  const [braveToast, setBraveToast] = useState<string | null>(null);
-
-  useEffect(() => {
-    configApi.getBraveApiKey().then((res) => {
-      setBraveHasKey(res.hasKey);
-      setBraveMasked(res.maskedKey);
-    }).catch(() => {});
-  }, []);
-
-  const handleSaveBraveKey = useCallback(async () => {
-    try {
-      await configApi.putBraveApiKey(braveKey);
-      setBraveHasKey(!!braveKey);
-      setBraveMasked(braveKey ? braveKey.slice(0, 4) + '****' : '');
-      setBraveKey('');
-      setBraveToast(t('settings.toast.saved', 'Saved'));
-      setTimeout(() => setBraveToast(null), 2000);
-    } catch {
-      setBraveToast(t('settings.toast.saveFailed', 'Save failed'));
-      setTimeout(() => setBraveToast(null), 2000);
-    }
-  }, [braveKey, t]);
-
-  const handleClearBraveKey = useCallback(async () => {
-    try {
-      await configApi.putBraveApiKey('');
-      setBraveHasKey(false);
-      setBraveMasked('');
-      setBraveKey('');
-      setBraveToast(t('settings.toast.saved', 'Saved'));
-      setTimeout(() => setBraveToast(null), 2000);
-    } catch {
-      setBraveToast(t('settings.toast.saveFailed', 'Save failed'));
-      setTimeout(() => setBraveToast(null), 2000);
-    }
-  }, [t]);
-
   return (
     <div className="flex flex-col gap-4">
       {/* Language */}
@@ -168,49 +159,6 @@ function GeneralTab({
           <Globe size={16} />
           {displayLang}
         </button>
-      </section>
-
-      {/* Brave Search API Key */}
-      <section>
-        <h3 className="text-xs font-semibold text-text-secondary uppercase mb-2">
-          {t('settings.general.braveApiKey', 'Brave Search API Key')}
-        </h3>
-        <p className="text-xs text-text-muted mb-2">
-          {t('settings.general.braveApiKeyDesc', 'Enable web search by providing a Brave Search API key. Get one at search.brave.com.')}
-        </p>
-        {braveHasKey && (
-          <div className="flex items-center gap-2 mb-2">
-            <span data-testid="brave-masked-key" className="text-xs font-mono text-text-secondary bg-bg-secondary px-2 py-1 rounded">
-              {braveMasked}
-            </span>
-            <button
-              data-testid="brave-clear-key"
-              onClick={handleClearBraveKey}
-              className="text-xs text-error hover:underline"
-            >
-              {t('settings.general.clearKey', 'Clear')}
-            </button>
-          </div>
-        )}
-        <div className="flex gap-2">
-          <input
-            data-testid="brave-api-key-input"
-            type="password"
-            value={braveKey}
-            onChange={(e) => setBraveKey(e.target.value)}
-            placeholder={braveHasKey ? t('settings.general.braveKeyReplace', 'Enter new key to replace...') : t('settings.general.braveKeyPlaceholder', 'BSA_...')}
-            className="flex-1 p-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-primary"
-          />
-          <button
-            data-testid="brave-save-key"
-            onClick={handleSaveBraveKey}
-            disabled={!braveKey.trim()}
-            className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {t('settings.save', 'Save')}
-          </button>
-        </div>
-        {braveToast && <span className="text-xs text-text-secondary mt-1">{braveToast}</span>}
       </section>
 
       {/* Logout */}

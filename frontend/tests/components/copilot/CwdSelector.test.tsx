@@ -1,12 +1,31 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom';
 import { CwdSelector } from '../../../src/components/copilot/CwdSelector';
+
+// Mock the API for DirectoryPicker
+vi.mock('../../../src/lib/api', () => ({
+  directoryApi: {
+    list: vi.fn().mockResolvedValue({
+      currentPath: '/home/user/projects',
+      parentPath: '/home/user',
+      directories: [
+        { name: 'alpha', path: '/home/user/projects/alpha' },
+        { name: 'beta', path: '/home/user/projects/beta' },
+      ],
+    }),
+  },
+}));
 
 describe('CwdSelector', () => {
   const defaultProps = {
     currentCwd: '/home/user/projects',
     onCwdChange: vi.fn(),
   };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('renders pill with FolderOpen icon and path text', () => {
     render(<CwdSelector {...defaultProps} />);
@@ -17,9 +36,7 @@ describe('CwdSelector', () => {
   it('truncates path longer than 25 characters', () => {
     render(<CwdSelector {...defaultProps} currentCwd="/very/long/path/to/my/awesome/project/directory" />);
     const pill = screen.getByTestId('cwd-selector');
-    // Should show "..." prefix with last 25 chars
     expect(pill.textContent).toContain('...');
-    // Full path in tooltip
     expect(pill.getAttribute('title')).toBe('/very/long/path/to/my/awesome/project/directory');
   });
 
@@ -29,66 +46,64 @@ describe('CwdSelector', () => {
     expect(pill.textContent).not.toContain('...');
   });
 
-  it('enters edit mode on click', () => {
+  it('opens DirectoryPicker popover on click', async () => {
     render(<CwdSelector {...defaultProps} />);
     fireEvent.click(screen.getByTestId('cwd-selector'));
-    const input = screen.getByRole('textbox');
-    expect(input).toBeTruthy();
-    expect((input as HTMLInputElement).value).toBe('/home/user/projects');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('directory-picker')).toBeInTheDocument();
+    });
   });
 
-  it('confirms path change on Enter', () => {
+  it('closes DirectoryPicker after selection', async () => {
     const onCwdChange = vi.fn();
     render(<CwdSelector {...defaultProps} onCwdChange={onCwdChange} />);
     fireEvent.click(screen.getByTestId('cwd-selector'));
-    const input = screen.getByRole('textbox');
-    fireEvent.change(input, { target: { value: '/new/path' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-    expect(onCwdChange).toHaveBeenCalledWith('/new/path');
-    // Should return to display mode
-    expect(screen.queryByRole('textbox')).toBeNull();
+
+    await waitFor(() => {
+      expect(screen.getByText('alpha')).toBeInTheDocument();
+    });
+
+    // Hover over alpha to highlight it (mouseEnter sets selectedIndex)
+    fireEvent.mouseEnter(screen.getByTestId('directory-item-alpha'));
+    // Click "Select" button to select the highlighted directory
+    fireEvent.click(screen.getByTestId('directory-select'));
+
+    expect(onCwdChange).toHaveBeenCalledWith('/home/user/projects/alpha');
+    // Picker should close
+    await waitFor(() => {
+      expect(screen.queryByTestId('directory-picker')).not.toBeInTheDocument();
+    });
   });
 
-  it('cancels edit on Escape', () => {
-    const onCwdChange = vi.fn();
-    render(<CwdSelector {...defaultProps} onCwdChange={onCwdChange} />);
+  it('closes DirectoryPicker when clicking outside', async () => {
+    render(
+      <div data-testid="outside">
+        <CwdSelector {...defaultProps} />
+      </div>,
+    );
     fireEvent.click(screen.getByTestId('cwd-selector'));
-    const input = screen.getByRole('textbox');
-    fireEvent.change(input, { target: { value: '/changed/path' } });
-    fireEvent.keyDown(input, { key: 'Escape' });
-    expect(onCwdChange).not.toHaveBeenCalled();
-    // Should return to display mode with original path
-    expect(screen.queryByRole('textbox')).toBeNull();
-    expect(screen.getByText('/home/user/projects')).toBeTruthy();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('directory-picker')).toBeInTheDocument();
+    });
+
+    // Click outside
+    fireEvent.mouseDown(screen.getByTestId('outside'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('directory-picker')).not.toBeInTheDocument();
+    });
   });
 
-  it('does not call onCwdChange when Enter pressed with empty value', () => {
-    const onCwdChange = vi.fn();
-    render(<CwdSelector {...defaultProps} onCwdChange={onCwdChange} />);
-    fireEvent.click(screen.getByTestId('cwd-selector'));
-    const input = screen.getByRole('textbox');
-    fireEvent.change(input, { target: { value: '' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-    expect(onCwdChange).not.toHaveBeenCalled();
-  });
-
-  it('does not call onCwdChange when Enter pressed with same value', () => {
-    const onCwdChange = vi.fn();
-    render(<CwdSelector {...defaultProps} onCwdChange={onCwdChange} />);
-    fireEvent.click(screen.getByTestId('cwd-selector'));
-    const input = screen.getByRole('textbox');
-    fireEvent.keyDown(input, { key: 'Enter' });
-    expect(onCwdChange).not.toHaveBeenCalled();
-  });
-
-  it('uses pill styling similar to ModelSelector', () => {
+  it('uses pill styling', () => {
     render(<CwdSelector {...defaultProps} />);
     const pill = screen.getByTestId('cwd-selector');
     expect(pill.className).toContain('text-xs');
     expect(pill.className).toContain('rounded-lg');
   });
 
-  // --- Mode toggle (F7) ---
+  // --- Mode toggle ---
 
   it('renders AI/Bash mode toggle buttons when mode and onModeChange are provided', () => {
     render(
@@ -96,7 +111,7 @@ describe('CwdSelector', () => {
         {...defaultProps}
         mode="copilot"
         onModeChange={vi.fn()}
-      />
+      />,
     );
     expect(screen.getByTestId('mode-toggle-copilot')).toBeTruthy();
     expect(screen.getByTestId('mode-toggle-terminal')).toBeTruthy();
@@ -108,7 +123,7 @@ describe('CwdSelector', () => {
         {...defaultProps}
         mode="copilot"
         onModeChange={vi.fn()}
-      />
+      />,
     );
     const copilotBtn = screen.getByTestId('mode-toggle-copilot');
     expect(copilotBtn.className).toContain('bg-accent');
@@ -120,7 +135,7 @@ describe('CwdSelector', () => {
         {...defaultProps}
         mode="terminal"
         onModeChange={vi.fn()}
-      />
+      />,
     );
     const terminalBtn = screen.getByTestId('mode-toggle-terminal');
     expect(terminalBtn.className).toContain('bg-accent');
@@ -133,7 +148,7 @@ describe('CwdSelector', () => {
         {...defaultProps}
         mode="copilot"
         onModeChange={onModeChange}
-      />
+      />,
     );
     fireEvent.click(screen.getByTestId('mode-toggle-terminal'));
     expect(onModeChange).toHaveBeenCalledWith('terminal');

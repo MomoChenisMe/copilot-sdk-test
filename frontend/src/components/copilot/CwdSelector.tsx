@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { FolderOpen, Sparkles, TerminalSquare } from 'lucide-react';
+import { DirectoryPicker } from './DirectoryPicker';
 
 interface CwdSelectorProps {
   currentCwd: string;
@@ -9,9 +10,7 @@ interface CwdSelectorProps {
 }
 
 export function CwdSelector({ currentCwd, onCwdChange, mode, onModeChange }: CwdSelectorProps) {
-  const [editing, setEditing] = useState(false);
-  const [editValue, setEditValue] = useState(currentCwd);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const maxDisplayLength = 25;
@@ -20,60 +19,33 @@ export function CwdSelector({ currentCwd, onCwdChange, mode, onModeChange }: Cwd
       ? '...' + currentCwd.slice(-maxDisplayLength)
       : currentCwd;
 
-  const handleClick = useCallback(() => {
-    setEditValue(currentCwd);
-    setEditing(true);
-  }, [currentCwd]);
+  const handleClick = () => {
+    setPickerOpen(true);
+  };
 
-  useEffect(() => {
-    if (editing && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
-  }, [editing]);
+  const handleSelect = (path: string) => {
+    onCwdChange(path);
+    setPickerOpen(false);
+  };
 
-  // Click outside to cancel
+  const handleClose = () => {
+    setPickerOpen(false);
+  };
+
+  // Click outside to close picker
   useEffect(() => {
-    if (!editing) return;
+    if (!pickerOpen) return;
     const handler = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setEditing(false);
+        setPickerOpen(false);
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [editing]);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const trimmed = editValue.trim();
-      if (trimmed && trimmed !== currentCwd) {
-        onCwdChange(trimmed);
-      }
-      setEditing(false);
-    } else if (e.key === 'Escape') {
-      setEditing(false);
-    }
-  };
-
-  if (editing) {
-    return (
-      <div ref={containerRef} className="inline-flex">
-        <input
-          ref={inputRef}
-          type="text"
-          value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          className="px-3 py-1.5 text-xs font-medium text-text-primary bg-bg-elevated border border-border-focus rounded-lg focus:outline-none min-w-48"
-        />
-      </div>
-    );
-  }
+  }, [pickerOpen]);
 
   return (
-    <div className="inline-flex items-center gap-1.5">
+    <div ref={containerRef} className="relative inline-flex items-center gap-1.5">
       <button
         data-testid="cwd-selector"
         onClick={handleClick}
@@ -83,6 +55,17 @@ export function CwdSelector({ currentCwd, onCwdChange, mode, onModeChange }: Cwd
         <FolderOpen size={12} className="shrink-0" />
         <span className="truncate">{displayPath}</span>
       </button>
+
+      {pickerOpen && (
+        <div data-testid="directory-picker">
+          <DirectoryPicker
+            currentPath={currentCwd}
+            onSelect={handleSelect}
+            onClose={handleClose}
+          />
+        </div>
+      )}
+
       {mode && onModeChange && (
         <div className="inline-flex rounded-lg border border-border overflow-hidden">
           <button

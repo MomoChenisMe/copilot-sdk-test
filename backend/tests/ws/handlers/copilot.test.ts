@@ -8,6 +8,8 @@ const { mockStreamManager, mockRepo } = vi.hoisted(() => {
     subscribe: vi.fn().mockReturnValue(_unsubFn),
     abortStream: vi.fn().mockResolvedValue(undefined),
     getActiveStreamIds: vi.fn().mockReturnValue([]),
+    setMode: vi.fn(),
+    handleUserInputResponse: vi.fn(),
     _unsubFn,
   };
 
@@ -45,6 +47,8 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
     mockStreamManager.subscribe.mockClear().mockReturnValue(mockStreamManager._unsubFn);
     mockStreamManager.abortStream.mockClear().mockResolvedValue(undefined);
     mockStreamManager.getActiveStreamIds.mockClear().mockReturnValue([]);
+    mockStreamManager.setMode.mockClear();
+    mockStreamManager.handleUserInputResponse.mockClear();
     mockStreamManager._unsubFn.mockClear();
     mockRepo.getById.mockClear().mockReturnValue({
       id: 'conv-1',
@@ -392,6 +396,155 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
 
     it('should handle disconnect with no active subscriptions', () => {
       expect(() => handlerObj.onDisconnect!(send)).not.toThrow();
+    });
+  });
+
+  // === Plan mode ===
+  describe('plan mode', () => {
+    it('should forward mode from copilot:send to streamManager.startStream', async () => {
+      handle({
+        type: 'copilot:send',
+        data: { conversationId: 'conv-1', prompt: 'Hello', mode: 'plan' },
+      });
+
+      await vi.waitFor(() => {
+        expect(mockStreamManager.startStream).toHaveBeenCalledWith(
+          'conv-1',
+          expect.objectContaining({ mode: 'plan' }),
+        );
+      });
+    });
+
+    it('should forward act mode from copilot:send', async () => {
+      handle({
+        type: 'copilot:send',
+        data: { conversationId: 'conv-1', prompt: 'Hello', mode: 'act' },
+      });
+
+      await vi.waitFor(() => {
+        expect(mockStreamManager.startStream).toHaveBeenCalledWith(
+          'conv-1',
+          expect.objectContaining({ mode: 'act' }),
+        );
+      });
+    });
+
+    it('should not include mode when not provided in copilot:send', async () => {
+      handle({
+        type: 'copilot:send',
+        data: { conversationId: 'conv-1', prompt: 'Hello' },
+      });
+
+      await vi.waitFor(() => {
+        expect(mockStreamManager.startStream).toHaveBeenCalled();
+        const opts = mockStreamManager.startStream.mock.calls[0][1];
+        expect(opts.mode).toBeUndefined();
+      });
+    });
+
+    it('should handle copilot:set_mode and call streamManager.setMode', () => {
+      handle({
+        type: 'copilot:set_mode',
+        data: { conversationId: 'conv-1', mode: 'plan' },
+      });
+
+      expect(mockStreamManager.setMode).toHaveBeenCalledWith('conv-1', 'plan');
+    });
+
+    it('should send error for copilot:set_mode without conversationId', () => {
+      handle({
+        type: 'copilot:set_mode',
+        data: { mode: 'plan' },
+      });
+
+      expect(send).toHaveBeenCalledWith({
+        type: 'copilot:error',
+        data: { message: 'conversationId is required' },
+      });
+      expect(mockStreamManager.setMode).not.toHaveBeenCalled();
+    });
+
+    it('should send error for copilot:set_mode without mode', () => {
+      handle({
+        type: 'copilot:set_mode',
+        data: { conversationId: 'conv-1' },
+      });
+
+      expect(send).toHaveBeenCalledWith({
+        type: 'copilot:error',
+        data: { message: 'mode is required' },
+      });
+      expect(mockStreamManager.setMode).not.toHaveBeenCalled();
+    });
+  });
+
+  // === User input response ===
+  describe('copilot:user_input_response', () => {
+    it('should call streamManager.handleUserInputResponse with correct args', () => {
+      handle({
+        type: 'copilot:user_input_response',
+        data: { conversationId: 'conv-1', requestId: 'req-1', answer: 'Option A', wasFreeform: false },
+      });
+
+      expect(mockStreamManager.handleUserInputResponse).toHaveBeenCalledWith(
+        'conv-1',
+        'req-1',
+        'Option A',
+        false,
+      );
+    });
+
+    it('should support freeform responses', () => {
+      handle({
+        type: 'copilot:user_input_response',
+        data: { conversationId: 'conv-1', requestId: 'req-2', answer: 'My custom text', wasFreeform: true },
+      });
+
+      expect(mockStreamManager.handleUserInputResponse).toHaveBeenCalledWith(
+        'conv-1',
+        'req-2',
+        'My custom text',
+        true,
+      );
+    });
+
+    it('should send error when conversationId is missing', () => {
+      handle({
+        type: 'copilot:user_input_response',
+        data: { requestId: 'req-1', answer: 'A' },
+      });
+
+      expect(send).toHaveBeenCalledWith({
+        type: 'copilot:error',
+        data: { message: 'conversationId is required' },
+      });
+      expect(mockStreamManager.handleUserInputResponse).not.toHaveBeenCalled();
+    });
+
+    it('should send error when requestId is missing', () => {
+      handle({
+        type: 'copilot:user_input_response',
+        data: { conversationId: 'conv-1', answer: 'A' },
+      });
+
+      expect(send).toHaveBeenCalledWith({
+        type: 'copilot:error',
+        data: { message: 'requestId is required' },
+      });
+      expect(mockStreamManager.handleUserInputResponse).not.toHaveBeenCalled();
+    });
+
+    it('should send error when answer is missing', () => {
+      handle({
+        type: 'copilot:user_input_response',
+        data: { conversationId: 'conv-1', requestId: 'req-1' },
+      });
+
+      expect(send).toHaveBeenCalledWith({
+        type: 'copilot:error',
+        data: { message: 'answer is required' },
+      });
+      expect(mockStreamManager.handleUserInputResponse).not.toHaveBeenCalled();
     });
   });
 

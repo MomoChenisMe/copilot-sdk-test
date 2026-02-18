@@ -20,7 +20,8 @@
     "welcomeDescription": "Your AI-powered development companion. Start a conversation to begin.",
     "startConversation": "Start New Conversation",
     "emptyPrompt": "Send a message to start...",
-    "assistant": "Assistant"
+    "assistant": "Assistant",
+    "waitingForResponse": "Waiting for your response..."
   },
   "model": {
     "loading": "Loading...",
@@ -93,8 +94,10 @@
       "agent": "Agent",
       "presets": "Presets",
       "memory": "Memory",
-      "skills": "Skills"
+      "skills": "Skills",
+      "apiKeys": "API Keys"
     },
+    "back": "Back",
     "general": {
       "language": "Language",
       "logout": "Logout"
@@ -150,6 +153,48 @@
     "modeAI": "AI",
     "modeBash": "Bash",
     "exitCode": "exit {{code}}"
+  },
+  "scrollToBottom": {
+    "label": "Scroll to bottom"
+  },
+  "userInput": {
+    "submit": "Submit",
+    "typeResponse": "Type your response..."
+  },
+  "planMode": {
+    "plan": "Plan",
+    "act": "Act",
+    "active": "Plan mode active — AI will plan but not execute tools",
+    "tooltip": "Toggle between plan and act modes",
+    "planComplete": "Planning complete! Ready to switch to Act mode and implement?",
+    "switchToAct": "Switch to Act",
+    "stayInPlan": "Stay in Plan"
+  },
+  "usage": {
+    "tokens": "Tokens",
+    "context": "Context",
+    "input": "Input",
+    "output": "Output",
+    "cacheRead": "Cache Read",
+    "cacheWrite": "Cache Write",
+    "premiumRequests": "Premium Requests",
+    "resets": "Resets",
+    "contextWindow": "Context Window",
+    "model": "Model",
+    "unlimited": "Unlimited"
+  },
+  "artifacts": {
+    "title": "Artifacts",
+    "copy": "Copy",
+    "download": "Download",
+    "close": "Close"
+  },
+  "directoryPicker": {
+    "search": "Search directories...",
+    "parent": "Parent Directory",
+    "empty": "No directories found",
+    "useCurrent": "Use Current",
+    "select": "Select"
   },
   "sidebar": {
     "conversations": "Conversations",

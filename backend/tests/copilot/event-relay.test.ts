@@ -143,6 +143,26 @@ describe('EventRelay', () => {
     });
   });
 
+  it('should normalize object error to string in tool.execution_complete', () => {
+    const { send, handlers } = setup();
+
+    handlers.get('tool.execution_complete')!({
+      type: 'tool.execution_complete',
+      toolCallId: 'tc-3',
+      success: false,
+      error: { message: 'Permission denied', code: 'failure' },
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      type: 'copilot:tool_end',
+      data: {
+        toolCallId: 'tc-3',
+        success: false,
+        error: 'Permission denied',
+      },
+    });
+  });
+
   it('should relay session.idle as copilot:idle', () => {
     const { send, handlers } = setup();
 
@@ -313,6 +333,92 @@ describe('EventRelay', () => {
 
     expect(send).toHaveBeenCalledWith({
       type: 'copilot:compaction_complete',
+    });
+  });
+
+  // --- Extended usage + quota events ---
+
+  it('should forward cacheReadTokens, cacheWriteTokens, model, cost from assistant.usage', () => {
+    const { send, handlers } = setup();
+
+    handlers.get('assistant.usage')!({
+      type: 'assistant.usage',
+      inputTokens: 100,
+      outputTokens: 50,
+      cacheReadTokens: 500,
+      cacheWriteTokens: 200,
+      model: 'gpt-4o',
+      cost: 0.003,
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      type: 'copilot:usage',
+      data: {
+        inputTokens: 100,
+        outputTokens: 50,
+        cacheReadTokens: 500,
+        cacheWriteTokens: 200,
+        model: 'gpt-4o',
+        cost: 0.003,
+      },
+    });
+  });
+
+  it('should send copilot:quota when assistant.usage includes quotaSnapshots', () => {
+    const { send, handlers } = setup();
+
+    const quotaSnapshots = [
+      { name: 'premium', used: 5, total: 300, resetDate: '2026-03-01T00:00:00Z' },
+    ];
+
+    handlers.get('assistant.usage')!({
+      type: 'assistant.usage',
+      inputTokens: 100,
+      outputTokens: 50,
+      quotaSnapshots,
+    });
+
+    // Should send both copilot:usage and copilot:quota
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'copilot:usage' }),
+    );
+    expect(send).toHaveBeenCalledWith({
+      type: 'copilot:quota',
+      data: { quotaSnapshots },
+    });
+  });
+
+  it('should not send copilot:quota when assistant.usage has no quotaSnapshots', () => {
+    const { send, handlers } = setup();
+
+    handlers.get('assistant.usage')!({
+      type: 'assistant.usage',
+      inputTokens: 100,
+      outputTokens: 50,
+    });
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'copilot:usage' }),
+    );
+  });
+
+  it('should relay session.shutdown as copilot:shutdown', () => {
+    const { send, handlers } = setup();
+
+    handlers.get('session.shutdown')!({
+      type: 'session.shutdown',
+      totalPremiumRequests: 42,
+      modelMetrics: { 'gpt-4o': { requests: 10 } },
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      type: 'copilot:shutdown',
+      data: {
+        totalPremiumRequests: 42,
+        modelMetrics: { 'gpt-4o': { requests: 10 } },
+      },
     });
   });
 

@@ -1,3 +1,4 @@
+import { useMemo, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Message, MessageMetadata, AttachmentMeta, TurnSegment } from '../../lib/api';
 import { useAppStore } from '../../store';
@@ -9,7 +10,8 @@ import { ReasoningBlock } from './ReasoningBlock';
 import { ToolRecord } from './ToolRecord';
 import { ToolRecordErrorBoundary } from './ToolRecordErrorBoundary';
 import { ToolResultBlock } from './ToolResultBlock';
-import { Sparkles } from 'lucide-react';
+import { parseArtifacts, parseToolArtifacts } from '../../lib/artifact-parser';
+import { Sparkles, FileText, Code, Globe, Image as ImageIcon } from 'lucide-react';
 
 const INLINE_RESULT_TOOLS = ['bash', 'shell', 'execute', 'run'];
 
@@ -150,6 +152,28 @@ export function MessageBlock({ message }: MessageBlockProps) {
   const toolRecords = metadata?.toolRecords;
   const reasoning = metadata?.reasoning;
 
+  // Detect artifacts from message content AND tool records
+  const artifacts = useMemo(() => {
+    const contentArtifacts = message.content ? parseArtifacts(message.content) : [];
+    const toolArtifacts = toolRecords ? parseToolArtifacts(toolRecords) : [];
+    return [...contentArtifacts, ...toolArtifacts];
+  }, [message.content, toolRecords]);
+
+  // Auto-open artifacts panel when new artifacts are detected
+  const autoOpenedRef = useRef(false);
+  useEffect(() => {
+    if (artifacts.length > 0 && !autoOpenedRef.current) {
+      autoOpenedRef.current = true;
+      const state = useAppStore.getState();
+      const tabId = state.activeTabId;
+      if (tabId) {
+        state.addTabArtifacts(tabId, artifacts);
+        state.setTabActiveArtifact(tabId, artifacts[0].id);
+        state.setTabArtifactsPanelOpen(tabId, true);
+      }
+    }
+  }, [artifacts]);
+
   // Render content area based on turnSegments availability
   const renderContent = () => {
     // New path: ordered turnSegments rendering
@@ -235,6 +259,39 @@ export function MessageBlock({ message }: MessageBlockProps) {
             {t('chat.assistant')}
           </span>
           {renderContent()}
+          {artifacts.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-3">
+              {artifacts.map((artifact, index) => {
+                const iconMap = {
+                  markdown: <FileText size={14} />,
+                  code: <Code size={14} />,
+                  html: <Globe size={14} />,
+                  svg: <ImageIcon size={14} />,
+                  mermaid: <ImageIcon size={14} />,
+                };
+                return (
+                  <button
+                    key={artifact.id}
+                    data-testid={`artifact-card-${index}`}
+                    onClick={() => {
+                      const state = useAppStore.getState();
+                      const tabId = state.activeTabId;
+                      if (tabId) {
+                        state.addTabArtifacts(tabId, [artifact]);
+                        state.setTabActiveArtifact(tabId, artifact.id);
+                        state.setTabArtifactsPanelOpen(tabId, true);
+                      }
+                    }}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-bg-secondary hover:bg-bg-tertiary transition-colors cursor-pointer"
+                  >
+                    <span className="text-accent">{iconMap[artifact.type]}</span>
+                    <span className="text-xs font-medium text-text-primary">{artifact.title}</span>
+                    <span className="text-xs text-text-tertiary">{artifact.type}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

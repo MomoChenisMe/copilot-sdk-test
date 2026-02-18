@@ -27,9 +27,31 @@ vi.mock('../../../src/components/copilot/ReasoningBlock', () => ({
   ),
 }));
 
+vi.mock('../../../src/components/copilot/ScrollToBottom', () => ({
+  ScrollToBottom: ({ visible, unreadCount, onClick }: { visible: boolean; unreadCount: number; onClick: () => void }) => (
+    <button
+      data-testid="scroll-to-bottom"
+      onClick={onClick}
+      className={visible ? 'opacity-100' : 'opacity-0 pointer-events-none'}
+    >
+      {unreadCount > 0 && <span data-testid="unread-badge">{unreadCount}</span>}
+    </button>
+  ),
+}));
+
 vi.mock('../../../src/components/copilot/ToolResultBlock', () => ({
   ToolResultBlock: ({ result, toolName, status }: { result: unknown; toolName: string; status?: string }) => (
     result != null ? <div data-testid={`tool-result-${toolName}`} data-status={status}>{String(result)}</div> : null
+  ),
+}));
+
+vi.mock('../../../src/components/copilot/PlanActToggle', () => ({
+  default: ({ planMode, onToggle }: { planMode: boolean; onToggle: (v: boolean) => void }) => (
+    <div data-testid="plan-act-toggle">
+      <button data-testid="toggle-plan" onClick={() => onToggle(true)}>Plan</button>
+      <button data-testid="toggle-act" onClick={() => onToggle(false)}>Act</button>
+      <span data-testid="current-mode">{planMode ? 'plan' : 'act'}</span>
+    </div>
   ),
 }));
 
@@ -327,6 +349,213 @@ describe('ChatView', () => {
       render(<ChatView {...defaultProps} tabId={tabId} />);
       // Draft tab should show empty prompt, not loading
       expect(screen.getByText('Send a message to start...')).toBeTruthy();
+    });
+  });
+
+  // === Plan mode ===
+  describe('plan mode', () => {
+    const tabId = 'tab-plan';
+    const makePlanTab = (planMode: boolean, extra?: Record<string, unknown>) => ({
+      id: tabId,
+      conversationId: 'conv-1',
+      title: 'Plan Tab',
+      mode: 'copilot' as const,
+      messages: [
+        { id: 'msg-1', conversationId: 'conv-1', role: 'user' as const, content: 'Hello', metadata: null, createdAt: '' },
+      ],
+      streamingText: '',
+      isStreaming: false,
+      toolRecords: [] as any[],
+      reasoningText: '',
+      turnContentSegments: [] as string[],
+      turnSegments: [] as any[],
+      copilotError: null,
+      messagesLoaded: true,
+      createdAt: Date.now(),
+      usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, contextWindowUsed: 0, contextWindowMax: 0, premiumRequestsUsed: 0, premiumRequestsTotal: 0, premiumResetDate: null, model: null },
+      planMode,
+      showPlanCompletePrompt: false,
+      ...extra,
+    });
+
+    it('renders PlanActToggle in input area', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makePlanTab(false) },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} />);
+      expect(screen.getByTestId('plan-act-toggle')).toBeTruthy();
+    });
+
+    it('shows plan mode banner when planMode is true', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makePlanTab(true) },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} />);
+      expect(screen.getByTestId('plan-mode-banner')).toBeTruthy();
+    });
+
+    it('does not show plan mode banner when planMode is false', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makePlanTab(false) },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} />);
+      expect(screen.queryByTestId('plan-mode-banner')).toBeNull();
+    });
+
+    it('calls setTabPlanMode when PlanActToggle is toggled', () => {
+      const setTabPlanMode = vi.fn();
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makePlanTab(false) },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+        setTabPlanMode,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} />);
+      fireEvent.click(screen.getByTestId('toggle-plan'));
+      expect(setTabPlanMode).toHaveBeenCalledWith(tabId, true);
+    });
+
+    it('shows plan complete prompt when showPlanCompletePrompt is true', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makePlanTab(true, { showPlanCompletePrompt: true }) },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} />);
+      expect(screen.getByTestId('plan-complete-prompt')).toBeTruthy();
+      expect(screen.getByTestId('switch-to-act-btn')).toBeTruthy();
+      expect(screen.getByTestId('dismiss-plan-prompt-btn')).toBeTruthy();
+    });
+
+    it('switch-to-act button calls setTabPlanMode with false', () => {
+      const setTabPlanMode = vi.fn();
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makePlanTab(true, { showPlanCompletePrompt: true }) },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+        setTabPlanMode,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} />);
+      fireEvent.click(screen.getByTestId('switch-to-act-btn'));
+      expect(setTabPlanMode).toHaveBeenCalledWith(tabId, false);
+    });
+
+    it('does not show plan complete prompt when not streaming but prompt is false', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makePlanTab(true, { showPlanCompletePrompt: false }) },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} />);
+      expect(screen.queryByTestId('plan-complete-prompt')).toBeNull();
+    });
+  });
+
+  // === Waiting for user input indicator ===
+  describe('waiting for user input', () => {
+    const tabId = 'tab-input';
+    const makeInputTab = (userInputRequest: unknown) => ({
+      id: tabId,
+      conversationId: 'conv-1',
+      title: 'Input Tab',
+      mode: 'copilot' as const,
+      messages: [
+        { id: 'msg-1', conversationId: 'conv-1', role: 'user' as const, content: 'Hello', metadata: null, createdAt: '' },
+      ],
+      streamingText: '',
+      isStreaming: false,
+      toolRecords: [] as any[],
+      reasoningText: '',
+      turnContentSegments: [] as string[],
+      turnSegments: [] as any[],
+      copilotError: null,
+      messagesLoaded: true,
+      createdAt: Date.now(),
+      userInputRequest,
+    });
+
+    it('shows waiting indicator when userInputRequest is present', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makeInputTab({ requestId: 'req-1', question: 'Pick one', choices: ['A', 'B'] }) },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} />);
+      expect(screen.getByTestId('waiting-for-input')).toBeTruthy();
+      expect(screen.getByText(/Waiting for your response/)).toBeTruthy();
+    });
+
+    it('does not show waiting indicator when userInputRequest is null', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makeInputTab(null) },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} />);
+      expect(screen.queryByTestId('waiting-for-input')).toBeNull();
+    });
+  });
+
+  // === Scroll-to-bottom button ===
+  describe('scroll-to-bottom button', () => {
+    const tabId = 'tab-scroll';
+    const tabState = {
+      id: tabId,
+      conversationId: 'conv-1',
+      title: 'Scroll Tab',
+      mode: 'copilot' as const,
+      messages: [
+        { id: 'msg-1', conversationId: 'conv-1', role: 'user' as const, content: 'Hello', metadata: null, createdAt: '' },
+        { id: 'msg-2', conversationId: 'conv-1', role: 'assistant' as const, content: 'Hi there', metadata: null, createdAt: '' },
+      ],
+      streamingText: '',
+      isStreaming: false,
+      toolRecords: [] as any[],
+      reasoningText: '',
+      turnContentSegments: [] as any[],
+      turnSegments: [] as any[],
+      copilotError: null,
+      messagesLoaded: true,
+      createdAt: Date.now(),
+    };
+
+    it('renders scroll-to-bottom button element', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: tabState },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} />);
+      expect(screen.getByTestId('scroll-to-bottom')).toBeTruthy();
+    });
+
+    it('scroll-to-bottom button is hidden by default (at bottom)', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: tabState },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} />);
+      const btn = screen.getByTestId('scroll-to-bottom');
+      // Should have opacity-0 since we're at the bottom initially
+      expect(btn.className).toContain('opacity-0');
     });
   });
 });

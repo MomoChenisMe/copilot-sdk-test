@@ -98,7 +98,7 @@ describe('SettingsPanel', () => {
       expect(screen.queryByTestId('settings-panel')).toBeNull();
     });
 
-    it('should render all 7 tab buttons using i18n keys', () => {
+    it('should render all 8 category tabs using i18n keys', () => {
       render(<SettingsPanel {...defaultProps} />);
       // Tab names should come from t('settings.tabs.*') — en.json values
       expect(screen.getByRole('tab', { name: /general/i })).toBeTruthy();
@@ -108,6 +108,7 @@ describe('SettingsPanel', () => {
       expect(screen.getByRole('tab', { name: /presets/i })).toBeTruthy();
       expect(screen.getByRole('tab', { name: /memory/i })).toBeTruthy();
       expect(screen.getByRole('tab', { name: /skills/i })).toBeTruthy();
+      expect(screen.getByRole('tab', { name: /api keys/i })).toBeTruthy();
     });
 
     it('should default to System Prompt tab', () => {
@@ -122,18 +123,30 @@ describe('SettingsPanel', () => {
       expect(screen.getByText('Settings')).toBeTruthy();
     });
 
-    it('should call onClose when close button is clicked', () => {
+    it('should call onClose when back button is clicked', () => {
       const onClose = vi.fn();
       render(<SettingsPanel {...defaultProps} onClose={onClose} />);
-      fireEvent.click(screen.getByRole('button', { name: /close/i }));
+      fireEvent.click(screen.getByTestId('settings-back-button'));
       expect(onClose).toHaveBeenCalledOnce();
     });
 
-    it('should call onClose when overlay backdrop is clicked', () => {
+    it('should call onClose when Escape key is pressed', () => {
       const onClose = vi.fn();
       render(<SettingsPanel {...defaultProps} onClose={onClose} />);
-      fireEvent.click(screen.getByTestId('settings-overlay'));
+      fireEvent.keyDown(document, { key: 'Escape' });
       expect(onClose).toHaveBeenCalledOnce();
+    });
+
+    it('should render full-page overlay with fixed positioning', () => {
+      render(<SettingsPanel {...defaultProps} />);
+      const panel = screen.getByTestId('settings-panel');
+      expect(panel.className).toContain('fixed');
+      expect(panel.className).toContain('inset-0');
+    });
+
+    it('should render left sidebar navigation', () => {
+      render(<SettingsPanel {...defaultProps} />);
+      expect(screen.getByTestId('settings-sidebar')).toBeTruthy();
     });
   });
 
@@ -622,66 +635,13 @@ describe('SettingsPanel', () => {
     });
   });
 
-  // === Brave API Key in General Tab ===
-  describe('Brave API Key (General tab)', () => {
-    it('should show API key input field on General tab', async () => {
+  // === API Keys Tab (integration) ===
+  describe('API Keys tab', () => {
+    it('should render API key input when API Keys tab is clicked', async () => {
       render(<SettingsPanel {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
+      fireEvent.click(screen.getByRole('tab', { name: /api keys/i }));
       await waitFor(() => {
         expect(screen.getByTestId('brave-api-key-input')).toBeTruthy();
-      });
-    });
-
-    it('should show save button disabled when input is empty', async () => {
-      render(<SettingsPanel {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
-      await waitFor(() => {
-        const saveBtn = screen.getByTestId('brave-save-key');
-        expect(saveBtn.hasAttribute('disabled')).toBe(true);
-      });
-    });
-
-    it('should call putBraveApiKey when save is clicked', async () => {
-      render(<SettingsPanel {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
-      await waitFor(() => {
-        expect(screen.getByTestId('brave-api-key-input')).toBeTruthy();
-      });
-      fireEvent.change(screen.getByTestId('brave-api-key-input'), {
-        target: { value: 'BSA_test123' },
-      });
-      fireEvent.click(screen.getByTestId('brave-save-key'));
-      await waitFor(() => {
-        expect(configApi.putBraveApiKey).toHaveBeenCalledWith('BSA_test123');
-      });
-    });
-
-    it('should show masked key and clear button when key exists', async () => {
-      (configApi.getBraveApiKey as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        hasKey: true,
-        maskedKey: 'BSA_****',
-      });
-      render(<SettingsPanel {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
-      await waitFor(() => {
-        expect(screen.getByTestId('brave-masked-key')).toBeTruthy();
-        expect(screen.getByTestId('brave-clear-key')).toBeTruthy();
-      });
-    });
-
-    it('should clear key when clear button is clicked', async () => {
-      (configApi.getBraveApiKey as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        hasKey: true,
-        maskedKey: 'BSA_****',
-      });
-      render(<SettingsPanel {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
-      await waitFor(() => {
-        expect(screen.getByTestId('brave-clear-key')).toBeTruthy();
-      });
-      fireEvent.click(screen.getByTestId('brave-clear-key'));
-      await waitFor(() => {
-        expect(configApi.putBraveApiKey).toHaveBeenCalledWith('');
       });
     });
   });

@@ -339,6 +339,102 @@ describe('useTabCopilot', () => {
     });
   });
 
+  // --- Plan mode ---
+  describe('plan mode', () => {
+    it('should include mode=plan in copilot:send when tab.planMode is true', () => {
+      useAppStore.getState().setTabPlanMode(tabIdA, true);
+      const { result } = renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        result.current.sendMessage(tabIdA, 'plan this');
+      });
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'copilot:send',
+        data: expect.objectContaining({ mode: 'plan' }),
+      }));
+    });
+
+    it('should not include mode when tab.planMode is false', () => {
+      const { result } = renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        result.current.sendMessage(tabIdA, 'act on this');
+      });
+      const sentData = (send.mock.calls[0][0] as WsMessage).data as Record<string, unknown>;
+      expect(sentData.mode).toBeUndefined();
+    });
+
+    it('should update tab planMode on copilot:mode_changed event', () => {
+      renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        emit({ type: 'copilot:mode_changed', data: { mode: 'plan', conversationId: 'conv-A' } });
+      });
+      expect(useAppStore.getState().tabs[tabIdA].planMode).toBe(true);
+
+      act(() => {
+        emit({ type: 'copilot:mode_changed', data: { mode: 'act', conversationId: 'conv-A' } });
+      });
+      expect(useAppStore.getState().tabs[tabIdA].planMode).toBe(false);
+    });
+
+    it('should show plan complete prompt when idle fires in plan mode', () => {
+      useAppStore.getState().setTabPlanMode(tabIdA, true);
+      useAppStore.getState().setTabIsStreaming(tabIdA, true);
+      useAppStore.getState().updateStreamStatus('conv-A', 'running');
+      renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        emit({ type: 'copilot:idle', data: { conversationId: 'conv-A' } });
+      });
+      expect(useAppStore.getState().tabs[tabIdA].showPlanCompletePrompt).toBe(true);
+    });
+
+    it('should not show plan complete prompt when idle fires in act mode', () => {
+      // planMode defaults to false
+      useAppStore.getState().setTabIsStreaming(tabIdA, true);
+      useAppStore.getState().updateStreamStatus('conv-A', 'running');
+      renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        emit({ type: 'copilot:idle', data: { conversationId: 'conv-A' } });
+      });
+      expect(useAppStore.getState().tabs[tabIdA].showPlanCompletePrompt).toBe(false);
+    });
+  });
+
+  // --- User input request ---
+  describe('user input request', () => {
+    it('should set userInputRequest on tab when copilot:user_input_request arrives', () => {
+      renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        emit({
+          type: 'copilot:user_input_request',
+          data: {
+            requestId: 'req-1',
+            question: 'Which approach?',
+            choices: ['A', 'B'],
+            allowFreeform: true,
+            conversationId: 'conv-A',
+          },
+        });
+      });
+      const tab = useAppStore.getState().tabs[tabIdA];
+      expect(tab.userInputRequest).toEqual({
+        requestId: 'req-1',
+        question: 'Which approach?',
+        choices: ['A', 'B'],
+        allowFreeform: true,
+      });
+    });
+
+    it('sendUserInputResponse should send copilot:user_input_response via WS', () => {
+      const { result } = renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        result.current.sendUserInputResponse('conv-A', 'req-1', 'Option A', false);
+      });
+      expect(send).toHaveBeenCalledWith({
+        type: 'copilot:user_input_response',
+        data: { conversationId: 'conv-A', requestId: 'req-1', answer: 'Option A', wasFreeform: false },
+      });
+    });
+  });
+
   // --- Tab close dedup cleanup ---
   describe('Tab close dedup cleanup', () => {
     it('should not throw when receiving events after tab is closed', () => {
