@@ -21,7 +21,8 @@
     "startConversation": "Start New Conversation",
     "emptyPrompt": "Send a message to start...",
     "assistant": "Assistant",
-    "waitingForResponse": "Waiting for your response..."
+    "waitingForResponse": "Waiting for your response...",
+    "recentConversations": "Recent Conversations"
   },
   "model": {
     "loading": "Loading...",
@@ -71,7 +72,9 @@
     "menu": "menu",
     "toggleTheme": "toggle theme",
     "home": "Home",
-    "newChat": "New chat"
+    "newChat": "New chat",
+    "shortcuts": "Keyboard shortcuts",
+    "settings": "Settings"
   },
   "tabBar": {
     "copilot": "Copilot",
@@ -80,7 +83,8 @@
     "closeTab": "Close Tab",
     "closeOthers": "Close Others",
     "rename": "Rename",
-    "tabLimit": "Tab limit reached. Consider closing unused tabs."
+    "tabLimit": "Tab limit reached. Consider closing unused tabs.",
+    "history": "History"
   },
   "settings": {
     "title": "Settings",
@@ -159,7 +163,10 @@
   },
   "userInput": {
     "submit": "Submit",
-    "typeResponse": "Type your response..."
+    "typeResponse": "Type your response...",
+    "skip": "Skip",
+    "timedOut": "Request timed out. The AI will continue without your input.",
+    "dismiss": "Dismiss"
   },
   "planMode": {
     "plan": "Plan",
@@ -195,6 +202,13 @@
     "empty": "No directories found",
     "useCurrent": "Use Current",
     "select": "Select"
+  },
+  "tasks": {
+    "title": "Tasks",
+    "empty": "No tasks",
+    "pending": "Pending",
+    "inProgress": "In Progress",
+    "completed": "Completed"
   },
   "sidebar": {
     "conversations": "Conversations",

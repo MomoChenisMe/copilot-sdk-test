@@ -32,6 +32,8 @@ import { BuiltinSkillStore } from './skills/builtin-store.js';
 import { createSkillsRoutes } from './skills/routes.js';
 import { createUploadRoutes } from './upload/routes.js';
 import { createSelfControlTools } from './copilot/self-control-tools.js';
+import { TaskRepository } from './task/repository.js';
+import { createTaskTools } from './copilot/tools/task-tools.js';
 import { createConfigRoutes, readBraveApiKey } from './config-routes.js';
 import { createDirectoryRoutes } from './directory/routes.js';
 import { createWebSearchTool } from './copilot/tools/web-search.js';
@@ -148,6 +150,11 @@ export function createApp() {
     builtinSkillStore,
   });
 
+  // Add task tools
+  const taskRepo = new TaskRepository(db);
+  const taskTools = createTaskTools(taskRepo, StreamManager.sessionConversationMap);
+  selfControlTools.push(...taskTools);
+
   // Add memory tools
   if (memoryConfig.enabled) {
     const memoryTools = createMemoryTools(memoryStore, memoryIndex);
@@ -190,12 +197,21 @@ export function createApp() {
   }));
 
   // Register WS handlers
-  registerHandler('copilot', createCopilotHandler(streamManager, repo));
+  const copilotHandler = createCopilotHandler(streamManager, repo);
+  registerHandler('copilot', copilotHandler);
   registerHandler('terminal', createTerminalHandler(config.defaultCwd));
   registerHandler('cwd', createCwdHandler((newCwd) => {
     log.info({ cwd: newCwd }, 'Working directory changed');
   }));
-  registerHandler('bash', createBashExecHandler(config.defaultCwd));
+  registerHandler('bash', createBashExecHandler(config.defaultCwd, (command, output, exitCode, cwd) => {
+    const convId = copilotHandler.lastConversationId;
+    if (convId) {
+      const truncated = output.length > 10000 ? output.slice(0, 10000) + '\n...[truncated]' : output;
+      const ctx = `$ ${command}\n${truncated}\n[exit code: ${exitCode}]`;
+      repo.addMessage(convId, { role: 'user', content: ctx, metadata: { bash: true, exitCode, cwd } });
+      copilotHandler.addBashContext(convId, ctx);
+    }
+  }));
 
   // Memory extraction on stream:idle
   if (memoryConfig.enabled && memoryConfig.autoExtract) {

@@ -1207,6 +1207,114 @@ describe('StreamManager', () => {
 
       expect(() => sm.handleUserInputResponse('conv-1', 'unknown-req', 'answer', false)).not.toThrow();
     });
+
+    describe('user input timeout event', () => {
+      it('should broadcast copilot:user_input_timeout before rejecting on timeout', async () => {
+        // Use fake timers for this test
+        vi.useFakeTimers();
+
+        await sm.startStream('conv-1', {
+          prompt: 'hello', sdkSessionId: null, model: 'gpt-5', cwd: '/tmp',
+        });
+        // Need real tick for async startStream
+        await vi.advanceTimersByTimeAsync(10);
+
+        const received: WsMessage[] = [];
+        sm.subscribe('conv-1', (msg) => received.push(msg));
+
+        const sessionOpts = mockSessionManager.getOrCreateSession.mock.calls[0][0];
+        const handlerPromise = sessionOpts.onUserInputRequest(
+          { question: 'Which approach?', choices: ['A', 'B'], allowFreeform: true },
+          { sessionId: 'sdk-session-1' },
+        );
+
+        // Attach a no-op catch to avoid unhandled rejection warning during timer advance
+        let rejectedError: Error | undefined;
+        const safePromise = handlerPromise.catch((err: Error) => { rejectedError = err; });
+
+        // Advance past the 5 minute timeout
+        await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 100);
+        await safePromise;
+
+        // Should have broadcast timeout event
+        const timeoutMsg = received.find((m) => m.type === 'copilot:user_input_timeout');
+        expect(timeoutMsg).toBeDefined();
+        expect((timeoutMsg!.data as any).question).toBe('Which approach?');
+        expect((timeoutMsg!.data as any).choices).toEqual(['A', 'B']);
+        expect((timeoutMsg!.data as any).allowFreeform).toBe(true);
+        expect(typeof (timeoutMsg!.data as any).requestId).toBe('string');
+
+        // Promise should have been rejected
+        expect(rejectedError).toBeDefined();
+        expect(rejectedError!.message).toMatch(/timed out/i);
+
+        vi.useRealTimers();
+      });
+
+      it('should NOT broadcast timeout when user responds before timeout', async () => {
+        await sm.startStream('conv-1', {
+          prompt: 'hello', sdkSessionId: null, model: 'gpt-5', cwd: '/tmp',
+        });
+        await tick();
+
+        const received: WsMessage[] = [];
+        sm.subscribe('conv-1', (msg) => received.push(msg));
+
+        const sessionOpts = mockSessionManager.getOrCreateSession.mock.calls[0][0];
+        const handlerPromise = sessionOpts.onUserInputRequest(
+          { question: 'Pick?', choices: ['A'] },
+          { sessionId: 'sdk-session-1' },
+        );
+
+        const requestMsg = received.find((m) => m.type === 'copilot:user_input_request');
+        const requestId = (requestMsg!.data as Record<string, unknown>).requestId as string;
+
+        // Respond before timeout
+        sm.handleUserInputResponse('conv-1', requestId, 'A', false);
+        await handlerPromise;
+
+        // Should NOT have timeout event
+        const timeoutMsg = received.find((m) => m.type === 'copilot:user_input_timeout');
+        expect(timeoutMsg).toBeUndefined();
+      });
+    });
+  });
+
+  // === sessionConversationMap ===
+  describe('sessionConversationMap', () => {
+    it('should map sessionId to conversationId after startStream', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello', sdkSessionId: null, model: 'gpt-5', cwd: '/tmp',
+      });
+      expect(StreamManager.sessionConversationMap.get('sdk-session-1')).toBe('conv-1');
+    });
+
+    it('should clean up mapping on idle', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello', sdkSessionId: null, model: 'gpt-5', cwd: '/tmp',
+      });
+      await tick();
+      fireEvent('session.idle', {});
+      await tick();
+      expect(StreamManager.sessionConversationMap.has('sdk-session-1')).toBe(false);
+    });
+
+    it('should clean up mapping on abort', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello', sdkSessionId: null, model: 'gpt-5', cwd: '/tmp',
+      });
+      await tick();
+      await sm.abortStream('conv-1');
+      expect(StreamManager.sessionConversationMap.has('sdk-session-1')).toBe(false);
+    });
+
+    it('resetInstance should clear the map', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello', sdkSessionId: null, model: 'gpt-5', cwd: '/tmp',
+      });
+      StreamManager.resetInstance();
+      expect(StreamManager.sessionConversationMap.size).toBe(0);
+    });
   });
 
   describe('startStream with promptComposer', () => {

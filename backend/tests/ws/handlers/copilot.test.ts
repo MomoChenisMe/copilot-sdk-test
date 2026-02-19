@@ -564,4 +564,144 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
       });
     });
   });
+
+  // === Bash context injection ===
+  describe('bash context injection', () => {
+    it('should have addBashContext method on the handler result', () => {
+      const result = createCopilotHandler(mockStreamManager as any, mockRepo as any);
+      expect(typeof (result as any).addBashContext).toBe('function');
+    });
+
+    it('should have lastConversationId getter on the handler result', () => {
+      const result = createCopilotHandler(mockStreamManager as any, mockRepo as any);
+      expect((result as any).lastConversationId).toBeNull();
+    });
+
+    it('addBashContext stores context in the pending map', () => {
+      const result = createCopilotHandler(mockStreamManager as any, mockRepo as any) as any;
+      result.addBashContext('conv-1', 'Command: ls\nOutput: file.txt');
+      // We can verify by sending a copilot:send and checking the prompt is prepended
+      // For now just ensure it doesn't throw
+      expect(() => result.addBashContext('conv-1', 'Another context')).not.toThrow();
+    });
+
+    it('lastConversationId returns the last conversation ID after copilot:send', () => {
+      const result = createCopilotHandler(mockStreamManager as any, mockRepo as any) as any;
+      expect(result.lastConversationId).toBeNull();
+
+      result.onMessage(
+        { type: 'copilot:send', data: { conversationId: 'conv-42', prompt: 'Hello' } },
+        send,
+      );
+
+      expect(result.lastConversationId).toBe('conv-42');
+    });
+
+    it('should prepend bash context to prompt when sending copilot:send', async () => {
+      const result = createCopilotHandler(mockStreamManager as any, mockRepo as any) as any;
+
+      result.addBashContext('conv-1', 'Command: ls\nOutput: file.txt');
+
+      result.onMessage(
+        { type: 'copilot:send', data: { conversationId: 'conv-1', prompt: 'What files are here?' } },
+        send,
+      );
+
+      await vi.waitFor(() => {
+        expect(mockStreamManager.startStream).toHaveBeenCalled();
+        const opts = mockStreamManager.startStream.mock.calls[0][1];
+        expect(opts.prompt).toContain('[Bash executed by user]');
+        expect(opts.prompt).toContain('Command: ls');
+        expect(opts.prompt).toContain('Output: file.txt');
+        expect(opts.prompt).toContain('What files are here?');
+      });
+    });
+
+    it('should not modify prompt when no bash context exists', async () => {
+      const result = createCopilotHandler(mockStreamManager as any, mockRepo as any) as any;
+
+      result.onMessage(
+        { type: 'copilot:send', data: { conversationId: 'conv-1', prompt: 'Hello plain' } },
+        send,
+      );
+
+      await vi.waitFor(() => {
+        expect(mockStreamManager.startStream).toHaveBeenCalled();
+        const opts = mockStreamManager.startStream.mock.calls[0][1];
+        expect(opts.prompt).toBe('Hello plain');
+      });
+    });
+
+    it('should join multiple bash contexts for the same conversation', async () => {
+      const result = createCopilotHandler(mockStreamManager as any, mockRepo as any) as any;
+
+      result.addBashContext('conv-1', 'Command: ls\nOutput: file1.txt');
+      result.addBashContext('conv-1', 'Command: cat file1.txt\nOutput: contents');
+
+      result.onMessage(
+        { type: 'copilot:send', data: { conversationId: 'conv-1', prompt: 'Summarize' } },
+        send,
+      );
+
+      await vi.waitFor(() => {
+        expect(mockStreamManager.startStream).toHaveBeenCalled();
+        const opts = mockStreamManager.startStream.mock.calls[0][1];
+        expect(opts.prompt).toContain('Command: ls');
+        expect(opts.prompt).toContain('Command: cat file1.txt');
+        expect(opts.prompt).toContain('Summarize');
+        // Both should be wrapped
+        const bashHeaders = (opts.prompt as string).match(/\[Bash executed by user\]/g);
+        expect(bashHeaders).toHaveLength(2);
+      });
+    });
+
+    it('should clear bash context after it is consumed by copilot:send', async () => {
+      const result = createCopilotHandler(mockStreamManager as any, mockRepo as any) as any;
+
+      result.addBashContext('conv-1', 'Command: ls\nOutput: file.txt');
+
+      // First send — should include bash context
+      result.onMessage(
+        { type: 'copilot:send', data: { conversationId: 'conv-1', prompt: 'First' } },
+        send,
+      );
+
+      await vi.waitFor(() => {
+        expect(mockStreamManager.startStream).toHaveBeenCalledTimes(1);
+        const opts = mockStreamManager.startStream.mock.calls[0][1];
+        expect(opts.prompt).toContain('[Bash executed by user]');
+      });
+
+      mockStreamManager.startStream.mockClear();
+
+      // Second send — should NOT include bash context (already consumed)
+      result.onMessage(
+        { type: 'copilot:send', data: { conversationId: 'conv-1', prompt: 'Second' } },
+        send,
+      );
+
+      await vi.waitFor(() => {
+        expect(mockStreamManager.startStream).toHaveBeenCalledTimes(1);
+        const opts = mockStreamManager.startStream.mock.calls[0][1];
+        expect(opts.prompt).toBe('Second');
+      });
+    });
+
+    it('should still save the original user prompt to repo (not the prepended version)', () => {
+      const result = createCopilotHandler(mockStreamManager as any, mockRepo as any) as any;
+
+      result.addBashContext('conv-1', 'Command: ls\nOutput: file.txt');
+
+      result.onMessage(
+        { type: 'copilot:send', data: { conversationId: 'conv-1', prompt: 'User message' } },
+        send,
+      );
+
+      // The repo should store the original prompt, not the prepended one
+      expect(mockRepo.addMessage).toHaveBeenCalledWith('conv-1', {
+        role: 'user',
+        content: 'User message',
+      });
+    });
+  });
 });

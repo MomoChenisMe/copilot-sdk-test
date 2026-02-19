@@ -17,6 +17,11 @@ export function useModels() {
     apiGet<ModelInfo[]>('/api/copilot/models')
       .then((data) => {
         setModels(data);
+        // Validate saved model still exists in the fetched model list
+        const saved = useAppStore.getState().lastSelectedModel;
+        if (saved && !data.some((m) => m.id === saved)) {
+          useAppStore.getState().setLastSelectedModel(data[0]?.id ?? '');
+        }
         setModelsLoading(false);
       })
       .catch((err: Error) => {

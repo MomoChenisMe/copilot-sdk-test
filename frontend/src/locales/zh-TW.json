@@ -21,7 +21,8 @@
     "startConversation": "開始新對話",
     "emptyPrompt": "發送訊息以開始...",
     "assistant": "助手",
-    "waitingForResponse": "等待你的回應..."
+    "waitingForResponse": "等待你的回應...",
+    "recentConversations": "最近的對話"
   },
   "model": {
     "loading": "載入中...",
@@ -71,7 +72,9 @@
     "menu": "選單",
     "toggleTheme": "切換主題",
     "home": "首頁",
-    "newChat": "新對話"
+    "newChat": "新對話",
+    "shortcuts": "鍵盤快捷鍵",
+    "settings": "設定"
   },
   "tabBar": {
     "copilot": "Copilot",
@@ -80,7 +83,8 @@
     "closeTab": "關閉頁籤",
     "closeOthers": "關閉其他",
     "rename": "重新命名",
-    "tabLimit": "已達頁籤上限，請先關閉不用的頁籤。"
+    "tabLimit": "已達頁籤上限，請先關閉不用的頁籤。",
+    "history": "歷史紀錄"
   },
   "settings": {
     "title": "設定",
@@ -159,7 +163,10 @@
   },
   "userInput": {
     "submit": "送出",
-    "typeResponse": "輸入你的回應..."
+    "typeResponse": "輸入你的回應...",
+    "skip": "跳過",
+    "timedOut": "請求已逾時。AI 將在沒有您的回應下繼續。",
+    "dismiss": "關閉"
   },
   "planMode": {
     "plan": "計畫",
@@ -195,6 +202,13 @@
     "empty": "找不到目錄",
     "useCurrent": "使用目前目錄",
     "select": "選擇"
+  },
+  "tasks": {
+    "title": "任務",
+    "empty": "沒有任務",
+    "pending": "待處理",
+    "inProgress": "進行中",
+    "completed": "已完成"
   },
   "sidebar": {
     "conversations": "對話紀錄",

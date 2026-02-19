@@ -305,6 +305,18 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     async (text: string, attachments?: AttachedFile[]) => {
       if (!activeTabId) return;
 
+      // !command syntax: route to bash handler
+      if (text.startsWith('!') && text.length > 1) {
+        const command = text.slice(1).trim();
+        if (command) {
+          const conv = conversations.find(
+            (c) => c.id === useAppStore.getState().tabs[activeTabId]?.conversationId,
+          );
+          sendBashCommand(command, conv?.cwd || cwd);
+          return;
+        }
+      }
+
       const tab = useAppStore.getState().tabs[activeTabId];
       if (!tab) return;
 
@@ -328,7 +340,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
 
       sendMessage(activeTabId, text, fileRefs);
     },
-    [activeTabId, sendMessage, lastSelectedModel, models, createConversation, cwd, setActiveConversationId],
+    [activeTabId, sendMessage, lastSelectedModel, models, createConversation, cwd, setActiveConversationId, sendBashCommand, conversations],
   );
 
   const handleBashSend = useCallback(
@@ -456,6 +468,15 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         onCloseTab={handleCloseTab}
         onSwitchConversation={handleSwitchConversation}
         onDeleteConversation={handleDeleteConversation}
+        onOpenConversation={(conversationId) => {
+          const conv = conversations.find((c) => c.id === conversationId);
+          openTab(conversationId, conv?.title || 'Chat');
+          // openTab sets activeTabId; now trigger message loading via handleSelectTab
+          const newActiveTabId = useAppStore.getState().activeTabId;
+          if (newActiveTabId) {
+            handleSelectTab(newActiveTabId);
+          }
+        }}
         conversations={conversations.map((c) => ({
           id: c.id,
           title: c.title,
@@ -487,6 +508,14 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
                 const tab = activeTabId ? useAppStore.getState().tabs[activeTabId] : null;
                 if (tab?.conversationId) {
                   sendUserInputResponse(tab.conversationId, requestId, answer, wasFreeform);
+                }
+              }}
+              onOpenConversation={(conversationId) => {
+                const conv = conversations.find((c) => c.id === conversationId);
+                openTab(conversationId, conv?.title || 'Chat');
+                const newActiveTabId = useAppStore.getState().activeTabId;
+                if (newActiveTabId) {
+                  handleSelectTab(newActiveTabId);
                 }
               }}
             />

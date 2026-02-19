@@ -70,4 +70,23 @@ function migrate(db: Database.Database) {
       INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
     END;
   `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tasks (
+      id TEXT PRIMARY KEY,
+      conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      subject TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      active_form TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK(status IN ('pending','in_progress','completed','deleted')),
+      owner TEXT,
+      blocks TEXT NOT NULL DEFAULT '[]',
+      blocked_by TEXT NOT NULL DEFAULT '[]',
+      metadata TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_tasks_conversation_id ON tasks(conversation_id, status);
+  `);
 }

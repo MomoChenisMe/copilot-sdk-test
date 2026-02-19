@@ -2,16 +2,19 @@ import { spawn, execSync } from 'node:child_process';
 import { realpathSync, existsSync } from 'node:fs';
 import { homedir, userInfo, hostname as osHostname } from 'node:os';
 import type { Readable } from 'node:stream';
-import type { WsHandler } from '../router.js';
+import type { WsHandler, WsMessage, SendFn } from '../types.js';
 import { createLogger } from '../../utils/logger.js';
 
 const log = createLogger('bash-exec');
 const TIMEOUT_MS = 30_000;
 const MAX_OUTPUT_BYTES = 512_000; // 500 KB
 
-export function createBashExecHandler(initialCwd?: string): WsHandler {
+export function createBashExecHandler(
+  initialCwd?: string,
+  onBashComplete?: (command: string, output: string, exitCode: number, cwd: string) => void,
+): WsHandler {
   return {
-    onMessage(message, send) {
+    onMessage(message: WsMessage, send: SendFn) {
       const { type, data } = message;
       const payload = (data ?? {}) as Record<string, unknown>;
 
@@ -35,6 +38,7 @@ export function createBashExecHandler(initialCwd?: string): WsHandler {
 
           let totalBytes = 0;
           let killed = false;
+          let accumulatedOutput = '';
 
           // Wrap the command to capture the final working directory via fd3.
           // This allows us to detect `cd` and persist directory changes.
@@ -66,8 +70,10 @@ export function createBashExecHandler(initialCwd?: string): WsHandler {
             send({ type: 'bash:done', data: { exitCode: 124 } });
           }, TIMEOUT_MS);
 
-          child.stdout.on('data', (data: Buffer) => {
+          child.stdout!.on('data', (data: Buffer) => {
             totalBytes += data.length;
+            const text = data.toString('utf-8');
+            accumulatedOutput += text;
             if (totalBytes > MAX_OUTPUT_BYTES) {
               if (!killed) {
                 killed = true;
@@ -81,16 +87,18 @@ export function createBashExecHandler(initialCwd?: string): WsHandler {
             }
             send({
               type: 'bash:output',
-              data: { output: data.toString('utf-8'), stream: 'stdout' },
+              data: { output: text, stream: 'stdout' },
             });
           });
 
-          child.stderr.on('data', (data: Buffer) => {
+          child.stderr!.on('data', (data: Buffer) => {
             totalBytes += data.length;
+            const text = data.toString('utf-8');
+            accumulatedOutput += text;
             if (totalBytes > MAX_OUTPUT_BYTES) return;
             send({
               type: 'bash:output',
-              data: { output: data.toString('utf-8'), stream: 'stderr' },
+              data: { output: text, stream: 'stderr' },
             });
           });
 
@@ -133,6 +141,16 @@ export function createBashExecHandler(initialCwd?: string): WsHandler {
                 type: 'bash:done',
                 data: { exitCode: code ?? 1, user, hostname, gitBranch },
               });
+
+              // Notify callback with accumulated output
+              if (onBashComplete) {
+                onBashComplete(command as string, accumulatedOutput, code ?? 1, newCwd || cwd);
+              }
+            } else {
+              // Killed (timeout/truncation) — still call callback with accumulated output so far
+              if (onBashComplete) {
+                onBashComplete(command as string, accumulatedOutput, code ?? 1, cwd);
+              }
             }
           });
 

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { FolderOpen, Sparkles, TerminalSquare } from 'lucide-react';
 import { DirectoryPicker } from './DirectoryPicker';
 
@@ -10,6 +11,7 @@ interface CwdSelectorProps {
 }
 
 export function CwdSelector({ currentCwd, onCwdChange, mode, onModeChange }: CwdSelectorProps) {
+  const { t } = useTranslation();
   const [pickerOpen, setPickerOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -78,7 +80,7 @@ export function CwdSelector({ currentCwd, onCwdChange, mode, onModeChange }: Cwd
             }`}
           >
             <Sparkles size={12} />
-            AI
+            {t('terminal.modeAI')}
           </button>
           <button
             data-testid="mode-toggle-terminal"
@@ -90,7 +92,7 @@ export function CwdSelector({ currentCwd, onCwdChange, mode, onModeChange }: Cwd
             }`}
           >
             <TerminalSquare size={12} />
-            Bash
+            {t('terminal.modeBash')}
           </button>
         </div>
       )}

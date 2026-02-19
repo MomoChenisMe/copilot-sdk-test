@@ -5,15 +5,31 @@ import { createLogger } from '../../utils/logger.js';
 
 const log = createLogger('ws-copilot');
 
+export interface CopilotHandlerResult extends WsHandlerObject {
+  addBashContext(conversationId: string, context: string): void;
+  readonly lastConversationId: string | null;
+}
+
 export function createCopilotHandler(
   streamManager: StreamManager,
   repo: ConversationRepository,
-): WsHandlerObject {
+): CopilotHandlerResult {
   // Per-connection state
   const activeSubscriptions = new Map<string, () => void>();
-  let lastConversationId: string | null = null;
+  let _lastConversationId: string | null = null;
+  const pendingBashContext = new Map<string, string[]>();
 
   return {
+    addBashContext(conversationId: string, context: string): void {
+      const existing = pendingBashContext.get(conversationId) ?? [];
+      existing.push(context);
+      pendingBashContext.set(conversationId, existing);
+    },
+
+    get lastConversationId(): string | null {
+      return _lastConversationId;
+    },
+
     onMessage(message: WsMessage, send: SendFn): void {
       const { type, data } = message;
       const payload = (data ?? {}) as Record<string, unknown>;
@@ -41,14 +57,22 @@ export function createCopilotHandler(
 
           // Save user message (with attachment metadata if files present)
           const files = (payload.files as Array<{ id: string; originalName: string; mimeType: string; size: number; path: string }>) ?? undefined;
-          const userMsg: Record<string, unknown> = { role: 'user', content: prompt };
+          const userMsg: { role: string; content: string; metadata?: unknown } = { role: 'user', content: prompt };
           if (files && files.length > 0) {
             userMsg.metadata = {
               attachments: files.map((f) => ({ id: f.id, originalName: f.originalName, mimeType: f.mimeType, size: f.size })),
             };
           }
           repo.addMessage(conversationId, userMsg);
-          lastConversationId = conversationId;
+          _lastConversationId = conversationId;
+
+          // Prepend any pending bash context to the prompt
+          let finalPrompt = prompt;
+          const bashContexts = pendingBashContext.get(conversationId);
+          if (bashContexts?.length) {
+            finalPrompt = bashContexts.map(ctx => `[Bash executed by user]\n${ctx}`).join('\n\n') + '\n\n' + prompt;
+            pendingBashContext.delete(conversationId);
+          }
 
           // Delegate to StreamManager
           void (async () => {
@@ -57,7 +81,7 @@ export function createCopilotHandler(
               const disabledSkills = (payload.disabledSkills as string[]) ?? [];
               const mode = payload.mode as 'plan' | 'act' | undefined;
               await streamManager.startStream(conversationId, {
-                prompt,
+                prompt: finalPrompt,
                 sdkSessionId: conversation.sdkSessionId,
                 model: conversation.model,
                 cwd: conversation.cwd,
@@ -126,14 +150,14 @@ export function createCopilotHandler(
         }
 
         case 'copilot:abort': {
-          const conversationId = (payload.conversationId as string) || lastConversationId;
+          const conversationId = (payload.conversationId as string) || _lastConversationId;
 
           if (!conversationId) {
             log.warn('copilot:abort without conversationId and no active conversation');
             return;
           }
 
-          if (!payload.conversationId && lastConversationId) {
+          if (!payload.conversationId && _lastConversationId) {
             log.warn('copilot:abort without conversationId is deprecated — pass conversationId explicitly');
           }
 

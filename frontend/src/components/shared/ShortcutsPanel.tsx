@@ -55,7 +55,7 @@ export function ShortcutsPanel({ open, onClose }: ShortcutsPanelProps) {
               className="flex items-center justify-between py-1.5"
             >
               <span className="text-sm text-text-secondary">
-                {t(def.action, def.action.split('.').pop())}
+                {t(def.action, def.action.split('.').pop() ?? def.action)}
               </span>
               <ShortcutHint keys={def.keys} />
             </div>

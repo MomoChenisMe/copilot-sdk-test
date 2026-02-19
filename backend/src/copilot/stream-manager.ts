@@ -136,6 +136,7 @@ export interface StartStreamOptions {
 
 export class StreamManager extends EventEmitter {
   private static instance: StreamManager | null = null;
+  static sessionConversationMap = new Map<string, string>();
   private streams = new Map<string, ConversationStream>();
   private maxConcurrency: number;
   private isShuttingDown = false;
@@ -165,6 +166,7 @@ export class StreamManager extends EventEmitter {
 
   static resetInstance(): void {
     StreamManager.instance = null;
+    StreamManager.sessionConversationMap.clear();
   }
 
   updateSelfControlTools(tools: any[]): void {
@@ -221,6 +223,17 @@ export class StreamManager extends EventEmitter {
           const requestId = randomUUID();
           const timeoutId = setTimeout(() => {
             stream.pendingUserInputRequests.delete(requestId);
+            // Broadcast timeout event before rejecting
+            this.broadcast(stream, {
+              type: 'copilot:user_input_timeout',
+              data: {
+                requestId,
+                conversationId: stream.conversationId,
+                question: request.question,
+                choices: request.choices,
+                allowFreeform: request.allowFreeform ?? true,
+              },
+            });
             reject(new Error('User input request timed out'));
           }, USER_INPUT_TIMEOUT_MS);
 
@@ -287,6 +300,7 @@ export class StreamManager extends EventEmitter {
       }
 
       stream.session = session;
+      StreamManager.sessionConversationMap.set(session.sessionId, conversationId);
       stream.relay.attach(session);
 
       await this.sessionManager.sendMessage(session, options.prompt, options.files);
@@ -329,6 +343,11 @@ export class StreamManager extends EventEmitter {
       pending.reject(new Error('Stream aborted'));
     }
     stream.pendingUserInputRequests.clear();
+
+    // Clean up session-conversation mapping
+    if (stream.session?.sessionId) {
+      StreamManager.sessionConversationMap.delete(stream.session.sessionId);
+    }
 
     // Persist accumulated content
     persistAccumulated(this.repo, conversationId, stream.accumulation);
@@ -531,6 +550,11 @@ export class StreamManager extends EventEmitter {
         stream.status = 'idle';
         stream.relay.detach();
         this.emit('stream:idle', stream.conversationId);
+
+        // Clean up session-conversation mapping
+        if (stream.session?.sessionId) {
+          StreamManager.sessionConversationMap.delete(stream.session.sessionId);
+        }
 
         // Clean up after broadcasting so the conversation can start a new stream
         // (broadcast happens below, after the switch)

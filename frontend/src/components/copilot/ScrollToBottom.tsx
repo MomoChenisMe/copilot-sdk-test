@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { ArrowDown } from 'lucide-react';
 
 interface ScrollToBottomProps {
@@ -7,6 +8,7 @@ interface ScrollToBottomProps {
 }
 
 export function ScrollToBottom({ visible, unreadCount, onClick }: ScrollToBottomProps) {
+  const { t } = useTranslation();
   return (
     <button
       data-testid="scroll-to-bottom"
@@ -19,7 +21,7 @@ export function ScrollToBottom({ visible, unreadCount, onClick }: ScrollToBottom
         transition-all duration-200
         ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'}
       `}
-      aria-label="Scroll to bottom"
+      aria-label={t('scrollToBottom.label')}
     >
       <ArrowDown size={16} />
       {unreadCount > 0 && (

@@ -47,4 +47,11 @@ describe('ScrollToBottom', () => {
     const svg = btn.querySelector('svg');
     expect(svg).toBeTruthy();
   });
+
+  it('uses i18n for aria-label', () => {
+    render(<ScrollToBottom visible={true} unreadCount={0} onClick={vi.fn()} />);
+    const btn = screen.getByTestId('scroll-to-bottom');
+    // en.json: scrollToBottom.label = "Scroll to bottom"
+    expect(btn).toHaveAttribute('aria-label', 'Scroll to bottom');
+  });
 });

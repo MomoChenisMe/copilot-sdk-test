@@ -126,6 +126,7 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
 
         case 'copilot:tool_end': {
           const toolCallId = data.toolCallId as string;
+          const toolName = data.toolName as string | undefined;
           const currentTab = useAppStore.getState().tabs[tabId];
           if (!currentTab?.toolRecords.find((r) => r.toolCallId === toolCallId)) break;
 
@@ -136,6 +137,38 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
           };
           state.updateTabToolRecord(tabId, toolCallId, updates);
           state.updateTabToolInTurnSegments(tabId, toolCallId, updates);
+
+          // Parse task tool results to update tab tasks
+          if (toolName?.startsWith('task_') && data.success && data.result) {
+            try {
+              const result = (typeof data.result === 'string' ? JSON.parse(data.result) : data.result) as Record<string, unknown>;
+              if (toolName === 'task_list' && Array.isArray(result.tasks)) {
+                const tasks = (result.tasks as Array<Record<string, unknown>>).map((t) => ({
+                  id: t.id as string,
+                  subject: t.subject as string,
+                  description: (t.description as string) ?? '',
+                  activeForm: (t.activeForm as string) ?? '',
+                  status: t.status as 'pending' | 'in_progress' | 'completed',
+                  owner: t.owner as string | undefined,
+                  blockedBy: (t.blockedBy as string[]) ?? [],
+                }));
+                state.setTabTasks(tabId, tasks);
+              } else if (result.task && typeof result.task === 'object') {
+                const t = result.task as Record<string, unknown>;
+                state.upsertTabTask(tabId, {
+                  id: t.id as string,
+                  subject: t.subject as string,
+                  description: (t.description as string) ?? '',
+                  activeForm: (t.activeForm as string) ?? '',
+                  status: t.status as 'pending' | 'in_progress' | 'completed',
+                  owner: t.owner as string | undefined,
+                  blockedBy: (t.blockedBy as string[]) ?? [],
+                });
+              }
+            } catch {
+              // Ignore parse errors
+            }
+          }
           break;
         }
 
@@ -165,7 +198,7 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
             useAppStore.setState((s) => {
               const t = s.tabs[tabId];
               if (!t) return s;
-              const filtered = t.turnSegments.filter(seg => seg.type !== 'reasoning');
+              const filtered: TurnSegment[] = t.turnSegments.filter(seg => seg.type !== 'reasoning');
               const reasoningSeg: TurnSegment = { type: 'reasoning', content: updatedTab.reasoningText };
               const firstTextIdx = filtered.findIndex(seg => seg.type === 'text');
               if (firstTextIdx >= 0) {
@@ -307,6 +340,16 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
             question: data.question as string,
             choices: data.choices as string[] | undefined,
             allowFreeform: (data.allowFreeform as boolean) ?? true,
+          });
+          break;
+
+        case 'copilot:user_input_timeout':
+          state.setTabUserInputRequest(tabId, {
+            requestId: data.requestId as string,
+            question: data.question as string,
+            choices: data.choices as string[] | undefined,
+            allowFreeform: (data.allowFreeform as boolean) ?? true,
+            timedOut: true,
           });
           break;
 

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Lightbulb, Zap } from 'lucide-react';
 
 interface PlanActToggleProps {
@@ -7,6 +8,7 @@ interface PlanActToggleProps {
 }
 
 export default function PlanActToggle({ planMode, onToggle, disabled }: PlanActToggleProps) {
+  const { t } = useTranslation();
   return (
     <div className="inline-flex rounded-lg border border-border overflow-hidden">
       <button
@@ -20,7 +22,7 @@ export default function PlanActToggle({ planMode, onToggle, disabled }: PlanActT
         } disabled:opacity-50 disabled:cursor-not-allowed`}
       >
         <Lightbulb size={12} />
-        Plan
+        {t('planMode.plan')}
       </button>
       <button
         type="button"
@@ -33,7 +35,7 @@ export default function PlanActToggle({ planMode, onToggle, disabled }: PlanActT
         } disabled:opacity-50 disabled:cursor-not-allowed`}
       >
         <Zap size={12} />
-        Act
+        {t('planMode.act')}
       </button>
     </div>
   );

@@ -72,4 +72,57 @@ describe('UserInputDialog', () => {
     render(<UserInputDialog {...defaultProps} />);
     expect(screen.getByTestId('user-input-overlay')).toBeInTheDocument();
   });
+
+  it('should use i18n for placeholder text', () => {
+    render(<UserInputDialog {...defaultProps} />);
+    expect(screen.getByPlaceholderText('Type your response...')).toBeInTheDocument();
+  });
+
+  // --- Skip button ---
+
+  it('should render Skip button when onSkip is provided', () => {
+    const onSkip = vi.fn();
+    render(<UserInputDialog {...defaultProps} onSkip={onSkip} />);
+    expect(screen.getByTestId('skip-button')).toBeInTheDocument();
+    expect(screen.getByText('Skip')).toBeInTheDocument();
+  });
+
+  it('should call onSkip when Skip button is clicked', () => {
+    const onSkip = vi.fn();
+    render(<UserInputDialog {...defaultProps} onSkip={onSkip} />);
+    fireEvent.click(screen.getByTestId('skip-button'));
+    expect(onSkip).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not render Skip button when onSkip is not provided', () => {
+    render(<UserInputDialog {...defaultProps} />);
+    expect(screen.queryByTestId('skip-button')).not.toBeInTheDocument();
+  });
+
+  // --- Timeout state ---
+
+  it('should show timeout banner when timedOut is true', () => {
+    render(<UserInputDialog {...defaultProps} timedOut={true} onDismissTimeout={vi.fn()} />);
+    expect(screen.getByTestId('timeout-banner')).toBeInTheDocument();
+    // en.json: userInput.timedOut
+    expect(screen.getByText(/timed out/i)).toBeInTheDocument();
+  });
+
+  it('should hide choices and freeform input when timed out', () => {
+    render(<UserInputDialog {...defaultProps} timedOut={true} onDismissTimeout={vi.fn()} />);
+    expect(screen.queryByText('Option A')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/type/i)).not.toBeInTheDocument();
+  });
+
+  it('should hide Skip button when timed out', () => {
+    render(<UserInputDialog {...defaultProps} timedOut={true} onSkip={vi.fn()} onDismissTimeout={vi.fn()} />);
+    expect(screen.queryByTestId('skip-button')).not.toBeInTheDocument();
+  });
+
+  it('should call onDismissTimeout when dismiss button is clicked', () => {
+    const onDismiss = vi.fn();
+    render(<UserInputDialog {...defaultProps} timedOut={true} onDismissTimeout={onDismiss} />);
+    fireEvent.click(screen.getByTestId('dismiss-timeout'));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
 });

@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Sparkles, Plus, X } from 'lucide-react';
+import { Sparkles, Plus, X, MessageSquare } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { modelSupportsAttachments } from '../../lib/model-capabilities';
 import { MessageBlock } from './MessageBlock';
@@ -16,6 +16,7 @@ import { UsageBar } from './UsageBar';
 import { ScrollToBottom } from './ScrollToBottom';
 import PlanActToggle from './PlanActToggle';
 import { UserInputDialog } from './UserInputDialog';
+import { TaskPanel } from './TaskPanel';
 import type { SlashCommand } from '../shared/SlashCommandMenu';
 
 const INLINE_RESULT_TOOLS = ['bash', 'shell', 'execute', 'run'];
@@ -35,6 +36,7 @@ interface ChatViewProps {
   onClearConversation?: () => void;
   onSettingsOpen?: () => void;
   onUserInputResponse?: (requestId: string, answer: string, wasFreeform: boolean) => void;
+  onOpenConversation?: (conversationId: string) => void;
 }
 
 export function ChatView({
@@ -52,6 +54,7 @@ export function ChatView({
   onClearConversation,
   onSettingsOpen,
   onUserInputResponse,
+  onOpenConversation,
 }: ChatViewProps) {
   const { t } = useTranslation();
   const activeConversationId = useAppStore((s) => s.activeConversationId);
@@ -84,6 +87,7 @@ export function ChatView({
   const isTerminalMode = tabMode === 'terminal';
   const planMode = tab?.planMode ?? false;
   const showPlanCompletePrompt = tab?.showPlanCompletePrompt ?? false;
+  const tasks = tab?.tasks ?? [];
   const setTabShowPlanCompletePrompt = useAppStore((s) => s.setTabShowPlanCompletePrompt);
 
   const handleModeChange = useCallback(
@@ -120,6 +124,17 @@ export function ChatView({
     },
     [userInputRequest, tabId, onUserInputResponse, setTabUserInputRequest],
   );
+
+  const handleUserInputSkip = useCallback(() => {
+    if (!userInputRequest || !tabId) return;
+    onUserInputResponse?.(userInputRequest.requestId, 'User chose to skip. Please decide on your own and continue.', true);
+    setTabUserInputRequest(tabId, null);
+  }, [userInputRequest, tabId, onUserInputResponse, setTabUserInputRequest]);
+
+  const handleTimeoutDismiss = useCallback(() => {
+    if (!tabId) return;
+    setTabUserInputRequest(tabId, null);
+  }, [tabId, setTabUserInputRequest]);
 
   const handleTerminalSend = useCallback(
     (text: string) => {
@@ -197,6 +212,10 @@ export function ChatView({
     [onClearConversation, onSettingsOpen, onNewConversation],
   );
 
+  // Recent conversations for welcome page
+  const conversations = useAppStore((s) => s.conversations);
+  const recentConversations = useMemo(() => conversations.slice(0, 10), [conversations]);
+
   const showStreamingBlock = isStreaming || streamingText || toolRecords.length > 0 || turnSegments.length > 0 || copilotError;
 
   // Model-based attachment gating
@@ -210,14 +229,14 @@ export function ChatView({
     return (
       <div className="flex flex-col h-full">
         <div className="flex-1 overflow-y-auto flex items-center justify-center">
-          <div className="text-center px-4">
+          <div className="text-center px-4 max-w-lg">
             <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-accent-soft flex items-center justify-center">
               <Sparkles size={28} className="text-accent" />
             </div>
             <h2 className="text-2xl font-semibold tracking-tight text-text-primary mb-2">
               {t('chat.welcomeTitle')}
             </h2>
-            <p className="text-sm leading-relaxed text-text-secondary mb-6 max-w-md">
+            <p className="text-sm leading-relaxed text-text-secondary mb-6 max-w-md mx-auto">
               {t('chat.welcomeDescription')}
             </p>
             <button
@@ -227,6 +246,33 @@ export function ChatView({
               <Plus size={18} />
               {t('chat.startConversation')}
             </button>
+
+            {/* Recent conversations */}
+            {recentConversations.length > 0 && (
+              <div data-testid="recent-conversations" className="mt-8 text-left">
+                <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2 px-1">
+                  {t('chat.recentConversations')}
+                </h3>
+                <div className="space-y-1">
+                  {recentConversations.map((conv) => (
+                    <button
+                      key={conv.id}
+                      data-testid={`recent-conv-${conv.id}`}
+                      onClick={() => onOpenConversation?.(conv.id)}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors"
+                    >
+                      <MessageSquare size={14} className="shrink-0 text-text-muted" />
+                      <span className="truncate flex-1">{conv.title}</span>
+                      {conv.model && (
+                        <span className="shrink-0 text-xs px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted">
+                          {conv.model.split('/').pop()?.split('-').slice(0, 2).join('-') || conv.model}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -318,6 +364,9 @@ export function ChatView({
         className="h-full overflow-y-auto"
       >
         <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+          {/* Task panel */}
+          {tasks.length > 0 && <TaskPanel tasks={tasks} />}
+
           {/* Historical messages */}
           {messages.map((msg) => (
             <MessageBlock key={msg.id} message={msg} />
@@ -515,7 +564,10 @@ export function ChatView({
           question={userInputRequest.question}
           choices={userInputRequest.choices}
           allowFreeform={userInputRequest.allowFreeform}
+          timedOut={userInputRequest.timedOut}
           onSubmit={handleUserInputSubmit}
+          onSkip={handleUserInputSkip}
+          onDismissTimeout={handleTimeoutDismiss}
         />
       )}
     </div>

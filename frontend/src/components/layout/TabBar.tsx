@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, X, AlertTriangle, ChevronDown } from 'lucide-react';
+import { Plus, X, AlertTriangle, ChevronDown, History } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { ConversationPopover } from './ConversationPopover';
 
@@ -10,10 +10,11 @@ interface TabBarProps {
   onCloseTab: (tabId: string) => void;
   onSwitchConversation: (tabId: string, conversationId: string) => void;
   onDeleteConversation?: (conversationId: string) => void;
+  onOpenConversation?: (conversationId: string) => void;
   conversations: Array<{ id: string; title: string; pinned?: boolean; updatedAt?: string }>;
 }
 
-export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation, onDeleteConversation, conversations }: TabBarProps) {
+export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation, onDeleteConversation, onOpenConversation, conversations }: TabBarProps) {
   const { t } = useTranslation();
   const tabOrder = useAppStore((s) => s.tabOrder);
   const tabs = useAppStore((s) => s.tabs);
@@ -22,7 +23,9 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
   const tabLimitWarning = useAppStore((s) => s.tabLimitWarning);
 
   const [popoverTabId, setPopoverTabId] = useState<string | null>(null);
+  const [globalHistoryOpen, setGlobalHistoryOpen] = useState(false);
   const tabTitleRefs = useRef<Record<string, HTMLSpanElement | null>>({});
+  const historyButtonRef = useRef<HTMLButtonElement | null>(null);
 
   return (
     <div className="h-10 flex items-center gap-1 px-2 bg-bg-primary border-b border-border-subtle shrink-0 overflow-x-auto flex-nowrap">
@@ -126,6 +129,35 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
       >
         <Plus size={16} />
       </button>
+
+      {/* Global history dropdown button */}
+      <div className="relative shrink-0">
+        <button
+          ref={historyButtonRef}
+          data-testid="history-dropdown-button"
+          onClick={() => setGlobalHistoryOpen(!globalHistoryOpen)}
+          className="p-1.5 text-text-muted hover:text-text-secondary hover:bg-bg-tertiary rounded-lg transition-colors"
+          title={t('tabBar.history')}
+        >
+          <History size={16} />
+        </button>
+        <ConversationPopover
+          open={globalHistoryOpen}
+          onClose={() => setGlobalHistoryOpen(false)}
+          conversations={conversations}
+          currentConversationId={null}
+          onSelect={(conversationId) => {
+            onOpenConversation?.(conversationId);
+            setGlobalHistoryOpen(false);
+          }}
+          onNew={() => {
+            onNewTab();
+            setGlobalHistoryOpen(false);
+          }}
+          onDelete={onDeleteConversation}
+          anchorRef={historyButtonRef}
+        />
+      </div>
     </div>
   );
 }

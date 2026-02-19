@@ -10,6 +10,7 @@ vi.mock('lucide-react', () => ({
   AlertTriangle: (props: any) => <svg data-testid="alert-triangle-icon" {...props} />,
   ChevronDown: (props: any) => <svg data-testid="chevron-down-icon" {...props} />,
   Search: (props: any) => <svg data-testid="search-icon" {...props} />,
+  History: (props: any) => <svg data-testid="history-icon" {...props} />,
 }));
 
 // Helper: open a tab and return its generated tabId

@@ -159,4 +159,72 @@ describe('bash-exec handler', () => {
     // /tmp is not a git repo, gitBranch should be empty string
     expect(doneData.gitBranch).toBe('');
   });
+
+  // === onBashComplete callback tests ===
+  describe('onBashComplete callback', () => {
+    it('should call onBashComplete after command completes with (command, output, exitCode, cwd)', async () => {
+      const onBashComplete = vi.fn();
+      const cbHandler = createBashExecHandler('/tmp', onBashComplete);
+      const cbSend = vi.fn();
+
+      const h = typeof cbHandler === 'function' ? cbHandler : cbHandler.onMessage;
+      h({ type: 'bash:exec', data: { command: 'echo hello', cwd: '/tmp' } }, cbSend);
+
+      await new Promise((r) => setTimeout(r, 3000));
+
+      expect(onBashComplete).toHaveBeenCalledTimes(1);
+      const [command, output, exitCode, cwd] = onBashComplete.mock.calls[0];
+      expect(command).toBe('echo hello');
+      expect(output).toContain('hello');
+      expect(exitCode).toBe(0);
+      expect(typeof cwd).toBe('string');
+      expect(cwd.length).toBeGreaterThan(0);
+    });
+
+    it('should accumulate both stdout and stderr in the output', async () => {
+      const onBashComplete = vi.fn();
+      const cbHandler = createBashExecHandler('/tmp', onBashComplete);
+      const cbSend = vi.fn();
+
+      const h = typeof cbHandler === 'function' ? cbHandler : cbHandler.onMessage;
+      h({ type: 'bash:exec', data: { command: 'echo out && echo err >&2', cwd: '/tmp' } }, cbSend);
+
+      await new Promise((r) => setTimeout(r, 3000));
+
+      expect(onBashComplete).toHaveBeenCalledTimes(1);
+      const [, output] = onBashComplete.mock.calls[0];
+      expect(output).toContain('out');
+      expect(output).toContain('err');
+    });
+
+    it('should work with non-zero exit codes', async () => {
+      const onBashComplete = vi.fn();
+      const cbHandler = createBashExecHandler('/tmp', onBashComplete);
+      const cbSend = vi.fn();
+
+      const h = typeof cbHandler === 'function' ? cbHandler : cbHandler.onMessage;
+      h({ type: 'bash:exec', data: { command: 'echo fail && exit 7', cwd: '/tmp' } }, cbSend);
+
+      await new Promise((r) => setTimeout(r, 3000));
+
+      expect(onBashComplete).toHaveBeenCalledTimes(1);
+      const [command, output, exitCode] = onBashComplete.mock.calls[0];
+      expect(command).toBe('echo fail && exit 7');
+      expect(output).toContain('fail');
+      expect(exitCode).toBe(7);
+    });
+
+    it('should work normally without errors when onBashComplete is not provided', async () => {
+      // This uses the default handler (no callback) — same as the beforeEach handler
+      onMessage({ type: 'bash:exec', data: { command: 'echo works', cwd: '/tmp' } });
+
+      await new Promise((r) => setTimeout(r, 2000));
+
+      const doneCalls = send.mock.calls.filter(
+        (c: any[]) => c[0]?.type === 'bash:done',
+      );
+      expect(doneCalls).toHaveLength(1);
+      expect(doneCalls[0][0].data.exitCode).toBe(0);
+    });
+  });
 });

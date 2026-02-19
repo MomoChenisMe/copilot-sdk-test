@@ -45,6 +45,16 @@ vi.mock('../../../src/components/copilot/ToolResultBlock', () => ({
   ),
 }));
 
+vi.mock('../../../src/components/copilot/TaskPanel', () => ({
+  TaskPanel: ({ tasks }: { tasks: Array<{ id: string; subject: string; status: string }> }) => (
+    <div data-testid="task-panel">
+      {tasks.map((t) => (
+        <div key={t.id} data-testid={`task-item-${t.id}`}>{t.subject} ({t.status})</div>
+      ))}
+    </div>
+  ),
+}));
+
 vi.mock('../../../src/components/copilot/PlanActToggle', () => ({
   default: ({ planMode, onToggle }: { planMode: boolean; onToggle: (v: boolean) => void }) => (
     <div data-testid="plan-act-toggle">
@@ -556,6 +566,112 @@ describe('ChatView', () => {
       const btn = screen.getByTestId('scroll-to-bottom');
       // Should have opacity-0 since we're at the bottom initially
       expect(btn.className).toContain('opacity-0');
+    });
+  });
+
+  // === TaskPanel integration ===
+  describe('task panel', () => {
+    const tabId = 'tab-tasks';
+    const makeTaskTab = (tasks: Array<{ id: string; subject: string; description: string; activeForm: string; status: string; blockedBy: string[] }>) => ({
+      id: tabId,
+      conversationId: 'conv-1',
+      title: 'Task Tab',
+      mode: 'copilot' as const,
+      messages: [
+        { id: 'msg-1', conversationId: 'conv-1', role: 'user' as const, content: 'Hello', metadata: null, createdAt: '' },
+      ],
+      streamingText: '',
+      isStreaming: false,
+      toolRecords: [] as any[],
+      reasoningText: '',
+      turnContentSegments: [] as string[],
+      turnSegments: [] as any[],
+      copilotError: null,
+      messagesLoaded: true,
+      createdAt: Date.now(),
+      tasks,
+    });
+
+    it('renders TaskPanel when tasks exist', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: {
+          [tabId]: makeTaskTab([
+            { id: 't1', subject: 'Fix bug', description: '', activeForm: '', status: 'completed', blockedBy: [] },
+            { id: 't2', subject: 'Add tests', description: '', activeForm: 'Adding tests', status: 'in_progress', blockedBy: [] },
+          ]),
+        },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} />);
+      expect(screen.getByTestId('task-panel')).toBeTruthy();
+      expect(screen.getByTestId('task-item-t1')).toBeTruthy();
+      expect(screen.getByTestId('task-item-t2')).toBeTruthy();
+    });
+
+    it('does not render TaskPanel when tasks are empty', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makeTaskTab([]) },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} />);
+      expect(screen.queryByTestId('task-panel')).toBeNull();
+    });
+  });
+
+  // --- Recent conversations on welcome page ---
+  describe('welcome page recent conversations', () => {
+    it('shows recent conversations when available', () => {
+      useAppStore.setState({
+        activeConversationId: null,
+        conversations: [
+          { id: 'c1', title: 'First chat', model: 'gpt-4o', cwd: '~', pinned: false, sdkSessionId: null, createdAt: '', updatedAt: '' },
+          { id: 'c2', title: 'Second chat', model: 'claude-sonnet-4-5-20250929', cwd: '~', pinned: false, sdkSessionId: null, createdAt: '', updatedAt: '' },
+        ],
+      });
+      render(<ChatView {...defaultProps} />);
+      expect(screen.getByTestId('recent-conversations')).toBeTruthy();
+      expect(screen.getByText('First chat')).toBeTruthy();
+      expect(screen.getByText('Second chat')).toBeTruthy();
+    });
+
+    it('does not show recent conversations section when empty', () => {
+      useAppStore.setState({
+        activeConversationId: null,
+        conversations: [],
+      });
+      render(<ChatView {...defaultProps} />);
+      expect(screen.queryByTestId('recent-conversations')).toBeNull();
+    });
+
+    it('calls onOpenConversation when clicking a recent conversation', () => {
+      const onOpenConversation = vi.fn();
+      useAppStore.setState({
+        activeConversationId: null,
+        conversations: [
+          { id: 'c1', title: 'First chat', model: 'gpt-4o', cwd: '~', pinned: false, sdkSessionId: null, createdAt: '', updatedAt: '' },
+        ],
+      });
+      render(<ChatView {...defaultProps} onOpenConversation={onOpenConversation} />);
+      fireEvent.click(screen.getByTestId('recent-conv-c1'));
+      expect(onOpenConversation).toHaveBeenCalledWith('c1');
+    });
+
+    it('limits recent conversations to 10', () => {
+      const convs = Array.from({ length: 15 }, (_, i) => ({
+        id: `c${i}`, title: `Chat ${i}`, model: 'gpt-4o', cwd: '~',
+        pinned: false, sdkSessionId: null, createdAt: '', updatedAt: '',
+      }));
+      useAppStore.setState({
+        activeConversationId: null,
+        conversations: convs,
+      });
+      render(<ChatView {...defaultProps} />);
+      const items = screen.getAllByTestId(/^recent-conv-/);
+      expect(items).toHaveLength(10);
     });
   });
 });

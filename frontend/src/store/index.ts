@@ -32,6 +32,17 @@ export interface UserInputRequest {
   question: string;
   choices?: string[];
   allowFreeform?: boolean;
+  timedOut?: boolean;
+}
+
+export interface TaskItem {
+  id: string;
+  subject: string;
+  description: string;
+  activeForm: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  owner?: string;
+  blockedBy: string[];
 }
 
 export interface TabState {
@@ -56,6 +67,7 @@ export interface TabState {
   artifacts: ParsedArtifact[];
   activeArtifactId: string | null;
   artifactsPanelOpen: boolean;
+  tasks: TaskItem[];
 }
 
 export interface AppState {
@@ -214,7 +226,12 @@ export interface AppState {
   updateTabQuota: (tabId: string, premiumRequestsUsed: number, premiumRequestsTotal: number, premiumResetDate: string | null, premiumUnlimited?: boolean) => void;
   incrementTabPremiumLocal: (tabId: string) => void;
   setTabPlanMode: (tabId: string, planMode: boolean) => void;
+  setTabShowPlanCompletePrompt: (tabId: string, show: boolean) => void;
   setTabUserInputRequest: (tabId: string, request: UserInputRequest | null) => void;
+
+  // Actions — Per-tab tasks
+  setTabTasks: (tabId: string, tasks: TaskItem[]) => void;
+  upsertTabTask: (tabId: string, task: TaskItem) => void;
 
   // Actions — Per-tab artifacts
   addTabArtifacts: (tabId: string, artifacts: ParsedArtifact[]) => void;
@@ -275,7 +292,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   activePresets: [],
   disabledSkills: [],
   settingsOpen: false,
-  lastSelectedModel: null,
+  lastSelectedModel: (() => {
+    try { return localStorage.getItem('ai-terminal:lastSelectedModel'); }
+    catch { return null; }
+  })(),
   copilotError: null,
 
   // Conversation actions
@@ -466,6 +486,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       artifacts: [],
       activeArtifactId: null,
       artifactsPanelOpen: false,
+      tasks: [],
     };
     const newTabs = { ...state.tabs, [tabId]: tab };
     const newOrder = [...state.tabOrder, tabId];
@@ -534,6 +555,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       artifacts: [],
       activeArtifactId: null,
       artifactsPanelOpen: false,
+      tasks: [],
     };
     const newTabs = { ...state.tabs, [tabId]: updatedTab };
     set({ tabs: newTabs });
@@ -580,6 +602,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           artifacts: [],
           activeArtifactId: null,
           artifactsPanelOpen: false,
+          tasks: [],
         };
         tabOrder.push(tabId);
       }
@@ -882,6 +905,28 @@ export const useAppStore = create<AppState>((set, get) => ({
           [tabId]: { ...tab, artifactsPanelOpen: open },
         },
       };
+    }),
+
+  // Tasks actions
+  setTabTasks: (tabId, tasks) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return { tabs: { ...state.tabs, [tabId]: { ...tab, tasks } } };
+    }),
+
+  upsertTabTask: (tabId, task) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      const existingIndex = tab.tasks.findIndex((t) => t.id === task.id);
+      const updatedTasks = [...tab.tasks];
+      if (existingIndex >= 0) {
+        updatedTasks[existingIndex] = task;
+      } else {
+        updatedTasks.push(task);
+      }
+      return { tabs: { ...state.tabs, [tabId]: { ...tab, tasks: updatedTasks } } };
     }),
 }));
 
