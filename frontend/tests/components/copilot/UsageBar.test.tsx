@@ -198,16 +198,33 @@ describe('UsageBar', () => {
     expect(screen.queryByTestId('premium-bar')).toBeNull();
   });
 
-  it('should show premium requests when only premiumRequestsUsed > 0', () => {
+  it('should NOT show premium section when no subscription quota data exists', () => {
     render(
       <UsageBar
         {...defaults}
-        premiumRequestsUsed={3}
+        inputTokens={100}
+        outputTokens={50}
+        premiumRequestsUsed={0}
+        premiumRequestsLocal={3}
         premiumRequestsTotal={0}
       />,
     );
-    // hasPremium should be true because premiumRequestsUsed > 0
-    expect(screen.getByText(/3.*PR/)).toBeTruthy();
+    // No subscription means premiumRequestsTotal=0 and premiumUnlimited=false
+    // Should NOT show premium even if local count > 0
+    expect(screen.queryByText(/PR/)).toBeNull();
+  });
+
+  it('should show premium section when subscription quota data exists', () => {
+    render(
+      <UsageBar
+        {...defaults}
+        inputTokens={100}
+        outputTokens={50}
+        premiumRequestsUsed={5}
+        premiumRequestsTotal={300}
+      />,
+    );
+    expect(screen.getByText(/5\/300 PR/)).toBeTruthy();
   });
 
   it('should use premiumRequestsLocal when higher than premiumRequestsUsed', () => {

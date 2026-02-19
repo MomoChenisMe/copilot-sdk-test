@@ -13,6 +13,10 @@ import { createConversationRoutes } from './conversation/routes.js';
 import { ClientManager } from './copilot/client-manager.js';
 import { SessionManager } from './copilot/session-manager.js';
 import { createModelsRoute } from './copilot/models-route.js';
+import { createSdkUpdateRoute } from './copilot/sdk-update-route.js';
+import { McpManager } from './mcp/mcp-manager.js';
+import { adaptMcpTools } from './mcp/mcp-tool-adapter.js';
+import { createMcpRoutes } from './mcp/routes.js';
 import { createCommandsRoute } from './copilot/commands-route.js';
 import { createCopilotAuthRoutes } from './copilot/auth-routes.js';
 import { createWsServer } from './ws/server.js';
@@ -44,6 +48,10 @@ import { createAutoMemoryRoutes } from './memory/memory-routes.js';
 import { MemoryExtractor } from './memory/memory-extractor.js';
 import { CompactionMonitor } from './memory/compaction-monitor.js';
 import { readMemoryConfig } from './memory/memory-config.js';
+import { CronStore } from './cron/cron-store.js';
+import { CronScheduler } from './cron/cron-scheduler.js';
+import { createCronRoutes } from './cron/cron-routes.js';
+import { createAiTaskExecutor, createShellTaskExecutor } from './cron/cron-executors.js';
 
 const log = createLogger('main');
 
@@ -96,6 +104,13 @@ export function createApp() {
   });
   const sessionManager = new SessionManager(clientManager);
 
+  // MCP Manager
+  const mcpManager = new McpManager();
+  const mcpConfigPath = path.resolve(process.cwd(), '.mcp.json');
+  mcpManager.loadFromConfig(mcpConfigPath).catch((err) => {
+    log.warn('Failed to load MCP config:', err);
+  });
+
   // Express app
   const app = express();
   app.use(express.json());
@@ -106,6 +121,8 @@ export function createApp() {
   // Protected routes
   app.use('/api/conversations', authMiddleware, createConversationRoutes(repo));
   app.use('/api/copilot', authMiddleware, createModelsRoute(clientManager));
+  app.use('/api/copilot', authMiddleware, createSdkUpdateRoute());
+  app.use('/api/mcp', authMiddleware, createMcpRoutes(mcpManager));
   app.use('/api/copilot', authMiddleware, createCommandsRoute());
   app.use('/api/copilot/auth', authMiddleware, createCopilotAuthRoutes(clientManager));
   app.use('/api/prompts', authMiddleware, createPromptsRoutes(promptStore));
@@ -176,7 +193,17 @@ export function createApp() {
     promptComposer,
     skillStore: mergedSkillStore,
     selfControlTools,
+    getMcpTools: () => adaptMcpTools(mcpManager),
   });
+
+  // Cron scheduler
+  const cronStore = new CronStore(db);
+  const cronScheduler = new CronScheduler(cronStore, {
+    executeAiTask: createAiTaskExecutor(repo, streamManager),
+    executeShellTask: createShellTaskExecutor(),
+  });
+  cronScheduler.loadAll();
+  app.use('/api/cron', authMiddleware, createCronRoutes(cronStore, cronScheduler));
 
   // Config routes (Brave API key etc.) — mounted after streamManager so callback can update tools
   app.use('/api/config', authMiddleware, createConfigRoutes(promptStore, {
@@ -237,6 +264,9 @@ export function createApp() {
 
   // Graceful shutdown
   setupGracefulShutdown([
+    async () => {
+      await cronScheduler.shutdown();
+    },
     async () => {
       await streamManager.shutdownAll();
     },

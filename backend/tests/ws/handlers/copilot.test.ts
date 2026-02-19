@@ -10,6 +10,7 @@ const { mockStreamManager, mockRepo } = vi.hoisted(() => {
     getActiveStreamIds: vi.fn().mockReturnValue([]),
     setMode: vi.fn(),
     handleUserInputResponse: vi.fn(),
+    getFullState: vi.fn().mockReturnValue({ activeStreams: [], pendingUserInputs: [] }),
     _unsubFn,
   };
 
@@ -49,6 +50,7 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
     mockStreamManager.getActiveStreamIds.mockClear().mockReturnValue([]);
     mockStreamManager.setMode.mockClear();
     mockStreamManager.handleUserInputResponse.mockClear();
+    mockStreamManager.getFullState.mockClear().mockReturnValue({ activeStreams: [], pendingUserInputs: [] });
     mockStreamManager._unsubFn.mockClear();
     mockRepo.getById.mockClear().mockReturnValue({
       id: 'conv-1',
@@ -545,6 +547,74 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
         data: { message: 'answer is required' },
       });
       expect(mockStreamManager.handleUserInputResponse).not.toHaveBeenCalled();
+    });
+  });
+
+  // === Query state ===
+  describe('copilot:query_state', () => {
+    it('should send copilot:state_response with empty state when no active streams', () => {
+      handle({ type: 'copilot:query_state' });
+
+      expect(mockStreamManager.getFullState).toHaveBeenCalled();
+      expect(send).toHaveBeenCalledWith({
+        type: 'copilot:state_response',
+        data: { activeStreams: [], pendingUserInputs: [] },
+      });
+    });
+
+    it('should send copilot:state_response with active streams and pending inputs', () => {
+      mockStreamManager.getFullState.mockReturnValue({
+        activeStreams: [
+          { conversationId: 'conv-1', status: 'running', startedAt: '2024-01-01T00:00:00Z' },
+          { conversationId: 'conv-2', status: 'running', startedAt: '2024-01-01T01:00:00Z' },
+        ],
+        pendingUserInputs: [
+          {
+            requestId: 'req-1',
+            question: 'Pick a color',
+            choices: ['Red', 'Blue'],
+            allowFreeform: true,
+            multiSelect: false,
+            conversationId: 'conv-1',
+          },
+        ],
+      });
+
+      handle({ type: 'copilot:query_state' });
+
+      expect(send).toHaveBeenCalledWith({
+        type: 'copilot:state_response',
+        data: {
+          activeStreams: [
+            { conversationId: 'conv-1', status: 'running', startedAt: '2024-01-01T00:00:00Z' },
+            { conversationId: 'conv-2', status: 'running', startedAt: '2024-01-01T01:00:00Z' },
+          ],
+          pendingUserInputs: [
+            {
+              requestId: 'req-1',
+              question: 'Pick a color',
+              choices: ['Red', 'Blue'],
+              allowFreeform: true,
+              multiSelect: false,
+              conversationId: 'conv-1',
+            },
+          ],
+        },
+      });
+    });
+
+    it('should auto-resubscribe to active streams when query_state returns them', () => {
+      mockStreamManager.getFullState.mockReturnValue({
+        activeStreams: [
+          { conversationId: 'conv-1', status: 'running', startedAt: '2024-01-01T00:00:00Z' },
+        ],
+        pendingUserInputs: [],
+      });
+
+      handle({ type: 'copilot:query_state' });
+
+      // Handler should auto-subscribe the client to each active stream
+      expect(mockStreamManager.subscribe).toHaveBeenCalledWith('conv-1', send);
     });
   });
 

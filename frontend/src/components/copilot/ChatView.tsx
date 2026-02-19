@@ -15,8 +15,9 @@ import { Input } from '../shared/Input';
 import { UsageBar } from './UsageBar';
 import { ScrollToBottom } from './ScrollToBottom';
 import PlanActToggle from './PlanActToggle';
-import { UserInputDialog } from './UserInputDialog';
+import { InlineUserInput } from './InlineUserInput';
 import { TaskPanel } from './TaskPanel';
+import { ThinkingIndicator } from './ThinkingIndicator';
 import type { SlashCommand } from '../shared/SlashCommandMenu';
 
 const INLINE_RESULT_TOOLS = ['bash', 'shell', 'execute', 'run'];
@@ -125,16 +126,6 @@ export function ChatView({
     [userInputRequest, tabId, onUserInputResponse, setTabUserInputRequest],
   );
 
-  const handleUserInputSkip = useCallback(() => {
-    if (!userInputRequest || !tabId) return;
-    onUserInputResponse?.(userInputRequest.requestId, 'User chose to skip. Please decide on your own and continue.', true);
-    setTabUserInputRequest(tabId, null);
-  }, [userInputRequest, tabId, onUserInputResponse, setTabUserInputRequest]);
-
-  const handleTimeoutDismiss = useCallback(() => {
-    if (!tabId) return;
-    setTabUserInputRequest(tabId, null);
-  }, [tabId, setTabUserInputRequest]);
 
   const handleTerminalSend = useCallback(
     (text: string) => {
@@ -301,9 +292,9 @@ export function ChatView({
           <p className="text-text-muted text-sm">{t('chat.emptyPrompt')}</p>
         </div>
         {/* Input area */}
-        <div className="shrink-0 pb-4 pt-2 px-4">
+        <div className="shrink-0 pb-4 pt-2 px-2 md:px-4">
           <div className="max-w-3xl mx-auto">
-            <div className="mb-2 flex items-center gap-2">
+            <div data-testid="bottom-toolbar-row" className="mb-2 flex flex-wrap items-center gap-2">
               <ModelSelector currentModel={currentModel} onSelect={onModelChange} />
               {currentCwd && onCwdChange && (
                 <CwdSelector currentCwd={currentCwd} onCwdChange={onCwdChange} mode={tabMode} onModeChange={handleModeChange} />
@@ -384,6 +375,11 @@ export function ChatView({
                     {t('chat.assistant')}
                   </span>
 
+                  {/* Thinking indicator: shown when streaming but no text/tools yet */}
+                  {isStreaming && !streamingText && turnSegments.length === 0 && toolRecords.length === 0 && !reasoningText && (
+                    <ThinkingIndicator />
+                  )}
+
                   {/* Render turnSegments if available, otherwise fallback */}
                   {turnSegments.length > 0 ? (
                     <>
@@ -450,12 +446,15 @@ export function ChatView({
             </div>
           )}
 
-          {/* Waiting for user input indicator */}
+          {/* Inline user input */}
           {userInputRequest && (
-            <div data-testid="waiting-for-input" className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 text-sm">
-              <div className="w-4 h-4 border-2 border-amber-400/30 border-t-amber-400 rounded-full animate-spin shrink-0" />
-              {t('chat.waitingForResponse', 'Waiting for your response...')}
-            </div>
+            <InlineUserInput
+              question={userInputRequest.question}
+              choices={userInputRequest.choices}
+              allowFreeform={userInputRequest.allowFreeform}
+              multiSelect={userInputRequest.multiSelect}
+              onSubmit={handleUserInputSubmit}
+            />
           )}
 
           {/* Plan mode complete prompt */}
@@ -515,9 +514,9 @@ export function ChatView({
       )}
 
       {/* Input area (shrink-0) */}
-      <div className="shrink-0 pb-4 pt-2 px-4">
+      <div className="shrink-0 pb-4 pt-2 px-2 md:px-4">
         <div className="max-w-3xl mx-auto">
-          <div className="mb-2 flex items-center gap-2">
+          <div data-testid="bottom-toolbar-row" className="mb-2 flex flex-wrap items-center gap-2">
             <ModelSelector currentModel={currentModel} onSelect={onModelChange} />
             {currentCwd && onCwdChange && (
               <CwdSelector currentCwd={currentCwd} onCwdChange={onCwdChange} mode={tabMode} onModeChange={handleModeChange} />
@@ -558,18 +557,6 @@ export function ChatView({
         </div>
       </div>
 
-      {/* User input request dialog */}
-      {userInputRequest && (
-        <UserInputDialog
-          question={userInputRequest.question}
-          choices={userInputRequest.choices}
-          allowFreeform={userInputRequest.allowFreeform}
-          timedOut={userInputRequest.timedOut}
-          onSubmit={handleUserInputSubmit}
-          onSkip={handleUserInputSkip}
-          onDismissTimeout={handleTimeoutDismiss}
-        />
-      )}
     </div>
   );
 }

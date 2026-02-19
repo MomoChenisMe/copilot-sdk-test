@@ -127,6 +127,15 @@ html[data-theme="dark"] {
   animation: cursor-blink 1s step-end infinite;
 }
 
+@keyframes thinking-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.thinking-pulse {
+  animation: thinking-pulse 2s ease-in-out infinite;
+}
+
 /* ============================================
    Base styles
    Wrapped in @layer base so Tailwind v4 utilities

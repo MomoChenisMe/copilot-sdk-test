@@ -60,12 +60,51 @@ describe('useModels', () => {
     expect(useAppStore.getState().models).toEqual([]);
   });
 
-  it('should not refetch if models are already loaded', async () => {
+  it('should not refetch if models were fetched recently', async () => {
     useAppStore.setState({
       models: [{ id: 'gpt-4o', name: 'GPT-4o' }],
+      modelsLastFetched: Date.now(),
     });
     renderHook(() => useModels());
 
     expect(apiGet).not.toHaveBeenCalled();
+  });
+
+  it('should refetch if models were fetched more than 30 minutes ago', async () => {
+    const thirtyOneMinAgo = Date.now() - 31 * 60 * 1000;
+    useAppStore.setState({
+      models: [{ id: 'gpt-4o', name: 'GPT-4o' }],
+      modelsLastFetched: thirtyOneMinAgo,
+    });
+    (apiGet as Mock).mockResolvedValue([
+      { id: 'gpt-4o', name: 'GPT-4o' },
+      { id: 'new-model', name: 'New Model' },
+    ]);
+    renderHook(() => useModels());
+
+    expect(apiGet).toHaveBeenCalledWith('/api/copilot/models');
+    await waitFor(() => {
+      expect(useAppStore.getState().models).toHaveLength(2);
+    });
+  });
+
+  it('should provide refreshModels function that forces re-fetch', async () => {
+    useAppStore.setState({
+      models: [{ id: 'gpt-4o', name: 'GPT-4o' }],
+      modelsLastFetched: Date.now(),
+    });
+    (apiGet as Mock).mockResolvedValue([
+      { id: 'gpt-4o', name: 'GPT-4o' },
+      { id: 'claude-sonnet', name: 'Claude Sonnet' },
+    ]);
+
+    const { result } = renderHook(() => useModels());
+
+    // Should not auto-fetch since recently fetched
+    expect(apiGet).not.toHaveBeenCalled();
+
+    // Manual refresh should force fetch
+    await result.current.refreshModels();
+    expect(apiGet).toHaveBeenCalledWith('/api/copilot/models');
   });
 });

@@ -19,6 +19,7 @@ import { ChatView } from '../copilot/ChatView';
 import { ArtifactsPanel } from '../copilot/ArtifactsPanel';
 import { SettingsPanel } from '../settings/SettingsPanel';
 import { ShortcutsPanel } from '../shared/ShortcutsPanel';
+import { SdkUpdateBanner } from '../copilot/SdkUpdateBanner';
 
 export function AppShell({ onLogout }: { onLogout: () => void }) {
   const { t } = useTranslation();
@@ -461,6 +462,8 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         onSettingsClick={() => setSettingsOpen(!settingsOpen)}
         onShortcutsClick={() => setShortcutsOpen(true)}
       />
+
+      <SdkUpdateBanner />
 
       <TabBar
         onNewTab={handleNewTab}

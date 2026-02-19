@@ -222,6 +222,78 @@ export const directoryApi = {
   },
 };
 
+// --- MCP API ---
+
+export interface McpServer {
+  name: string;
+  transport: 'stdio' | 'http';
+  connected: boolean;
+}
+
+export interface McpServerConfig {
+  name: string;
+  transport: 'stdio' | 'http';
+  command?: string;
+  args?: string[];
+  url?: string;
+}
+
+export interface McpToolInfo {
+  name: string;
+  description: string;
+  serverName: string;
+}
+
+// --- Cron API ---
+
+export interface CronJob {
+  id: string;
+  name: string;
+  type: 'ai' | 'shell';
+  scheduleType: 'cron' | 'interval' | 'once';
+  scheduleValue: string;
+  config: Record<string, unknown>;
+  enabled: boolean;
+  lastRun: string | null;
+  nextRun: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CronHistory {
+  id: string;
+  jobId: string;
+  startedAt: string;
+  finishedAt: string | null;
+  status: 'success' | 'error' | 'timeout';
+  output: string | null;
+  createdAt: string;
+}
+
+export type CronJobInput = Pick<CronJob, 'name' | 'type' | 'scheduleType' | 'scheduleValue' | 'config' | 'enabled'>;
+
+export const cronApi = {
+  listJobs: () => apiGet<{ jobs: CronJob[] }>('/api/cron/jobs'),
+  createJob: (input: CronJobInput) => apiPost<{ job: CronJob }>('/api/cron/jobs', input),
+  updateJob: (id: string, updates: Partial<CronJobInput>) => apiPut<{ job: CronJob }>(`/api/cron/jobs/${id}`, updates),
+  deleteJob: (id: string) => apiDelete<void>(`/api/cron/jobs/${id}`),
+  triggerJob: (id: string) => apiPost<void>(`/api/cron/jobs/${id}/trigger`),
+  getHistory: (id: string, limit?: number) => {
+    const params = limit ? `?limit=${limit}` : '';
+    return apiGet<{ history: CronHistory[] }>(`/api/cron/jobs/${id}/history${params}`);
+  },
+};
+
+// --- MCP API ---
+
+export const mcpApi = {
+  listServers: () => apiGet<{ servers: McpServer[] }>('/api/mcp/servers'),
+  addServer: (config: McpServerConfig) => apiPost<{ ok: true }>('/api/mcp/servers', config),
+  removeServer: (name: string) => apiDelete<{ ok: true }>(`/api/mcp/servers/${name}`),
+  restartServer: (name: string) => apiPost<{ ok: true }>(`/api/mcp/servers/${name}/restart`),
+  listTools: () => apiGet<{ tools: McpToolInfo[] }>('/api/mcp/tools'),
+};
+
 export class ApiError extends Error {
   constructor(
     public status: number,

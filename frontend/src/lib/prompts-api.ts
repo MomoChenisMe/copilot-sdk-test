@@ -37,6 +37,9 @@ export const promptsApi = {
   getPreset: (name: string) => apiGet<PromptContent>(`/api/prompts/presets/${name}`),
   putPreset: (name: string, content: string) => apiPut<{ ok: true }>(`/api/prompts/presets/${name}`, { content }),
   deletePreset: (name: string) => apiDelete<{ ok: true }>(`/api/prompts/presets/${name}`),
+
+  exportPresets: () => apiGet<PresetList>('/api/prompts/presets/export'),
+  importPresets: (presets: PresetItem[]) => apiPost<{ ok: true; imported: number }>('/api/prompts/presets/import', { presets }),
 };
 
 export interface SkillItem {

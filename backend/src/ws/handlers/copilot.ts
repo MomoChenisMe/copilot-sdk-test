@@ -194,6 +194,24 @@ export function createCopilotHandler(
           break;
         }
 
+        case 'copilot:query_state': {
+          const fullState = streamManager.getFullState();
+          send({
+            type: 'copilot:state_response',
+            data: fullState,
+          });
+
+          // Auto-resubscribe to all active streams so client receives future events
+          for (const stream of fullState.activeStreams) {
+            const unsub = streamManager.subscribe(stream.conversationId, send);
+            if (unsub) {
+              activeSubscriptions.get(stream.conversationId)?.();
+              activeSubscriptions.set(stream.conversationId, unsub);
+            }
+          }
+          break;
+        }
+
         case 'copilot:set_mode': {
           const conversationId = payload.conversationId as string | undefined;
           const mode = payload.mode as string | undefined;

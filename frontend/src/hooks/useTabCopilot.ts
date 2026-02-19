@@ -42,6 +42,9 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
   }
 
   useEffect(() => {
+    // On mount (or reconnect), query backend for any active streams / pending inputs
+    send({ type: 'copilot:query_state' });
+
     const unsub = subscribe((msg) => {
       const data = (msg.data ?? {}) as Record<string, unknown>;
       const conversationId = data.conversationId as string | undefined;
@@ -60,6 +63,38 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
             useAppStore.getState().updateStreamStatus(cid, 'running');
           } else {
             useAppStore.getState().removeStream(cid);
+          }
+          return;
+        }
+        case 'copilot:state_response': {
+          const activeStreams = data.activeStreams as Array<{ conversationId: string; status: string; startedAt: string }> | undefined;
+          const pendingUserInputs = data.pendingUserInputs as Array<{ requestId: string; question: string; choices?: string[]; allowFreeform: boolean; multiSelect?: boolean; conversationId: string }> | undefined;
+          const state = useAppStore.getState();
+
+          // Restore streaming state for active streams
+          if (activeStreams) {
+            for (const stream of activeStreams) {
+              const tid = findTabIdByConversationId(stream.conversationId);
+              if (tid) {
+                state.setTabIsStreaming(tid, true);
+                state.updateStreamStatus(stream.conversationId, 'running');
+              }
+            }
+          }
+
+          // Restore pending user input requests
+          if (pendingUserInputs) {
+            for (const input of pendingUserInputs) {
+              const tid = findTabIdByConversationId(input.conversationId);
+              if (tid) {
+                state.setTabUserInputRequest(tid, {
+                  requestId: input.requestId,
+                  question: input.question,
+                  choices: input.choices,
+                  allowFreeform: input.allowFreeform,
+                });
+              }
+            }
           }
           return;
         }
@@ -340,6 +375,7 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
             question: data.question as string,
             choices: data.choices as string[] | undefined,
             allowFreeform: (data.allowFreeform as boolean) ?? true,
+            multiSelect: data.multiSelect as boolean | undefined,
           });
           break;
 

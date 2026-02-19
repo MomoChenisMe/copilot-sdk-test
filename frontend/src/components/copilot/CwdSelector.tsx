@@ -15,11 +15,10 @@ export function CwdSelector({ currentCwd, onCwdChange, mode, onModeChange }: Cwd
   const [pickerOpen, setPickerOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const maxDisplayLength = 25;
-  const displayPath =
-    currentCwd.length > maxDisplayLength
-      ? '...' + currentCwd.slice(-maxDisplayLength)
-      : currentCwd;
+  // Split path into parent prefix and last segment for mobile truncation
+  const lastSlash = currentCwd.lastIndexOf('/');
+  const pathParent = lastSlash > 0 ? currentCwd.slice(0, lastSlash + 1) : '';
+  const pathLast = lastSlash > 0 ? currentCwd.slice(lastSlash + 1) : currentCwd;
 
   const handleClick = () => {
     setPickerOpen(true);
@@ -55,7 +54,10 @@ export function CwdSelector({ currentCwd, onCwdChange, mode, onModeChange }: Cwd
         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary bg-bg-tertiary rounded-lg hover:bg-bg-secondary transition-colors truncate max-w-56"
       >
         <FolderOpen size={12} className="shrink-0" />
-        <span className="truncate">{displayPath}</span>
+        <span className="truncate">
+          {pathParent && <span data-testid="cwd-path-parent" className="hidden md:inline">{pathParent}</span>}
+          <span data-testid="cwd-path-last">{pathLast || '/'}</span>
+        </span>
       </button>
 
       {pickerOpen && (
@@ -75,7 +77,7 @@ export function CwdSelector({ currentCwd, onCwdChange, mode, onModeChange }: Cwd
             onClick={() => onModeChange('copilot')}
             className={`flex items-center gap-1 px-2 py-1.5 text-xs font-medium transition-colors ${
               mode === 'copilot'
-                ? 'bg-accent text-white'
+                ? 'border-accent text-accent bg-accent/10'
                 : 'bg-bg-tertiary text-text-secondary hover:bg-bg-secondary'
             }`}
           >
@@ -87,7 +89,7 @@ export function CwdSelector({ currentCwd, onCwdChange, mode, onModeChange }: Cwd
             onClick={() => onModeChange('terminal')}
             className={`flex items-center gap-1 px-2 py-1.5 text-xs font-medium transition-colors ${
               mode === 'terminal'
-                ? 'bg-accent text-white'
+                ? 'border-accent text-accent bg-accent/10'
                 : 'bg-bg-tertiary text-text-secondary hover:bg-bg-secondary'
             }`}
           >

@@ -65,6 +65,28 @@ vi.mock('../../../src/components/copilot/PlanActToggle', () => ({
   ),
 }));
 
+vi.mock('../../../src/components/copilot/ThinkingIndicator', () => ({
+  ThinkingIndicator: () => <div data-testid="thinking-indicator">Thinking...</div>,
+}));
+
+vi.mock('../../../src/components/copilot/InlineUserInput', () => ({
+  InlineUserInput: ({ question, choices, multiSelect, onSubmit }: {
+    question: string;
+    choices?: string[];
+    multiSelect?: boolean;
+    onSubmit: (answer: string, wasFreeform: boolean) => void;
+  }) => (
+    <div data-testid="inline-user-input" data-question={question} data-multi-select={multiSelect}>
+      {choices?.map((c) => <span key={c}>{c}</span>)}
+      <button data-testid="inline-submit" onClick={() => onSubmit('test-answer', false)}>Submit</button>
+    </div>
+  ),
+}));
+
+vi.mock('../../../src/components/copilot/UserInputDialog', () => ({
+  UserInputDialog: () => <div data-testid="user-input-overlay" />,
+}));
+
 import { ChatView } from '../../../src/components/copilot/ChatView';
 
 describe('ChatView', () => {
@@ -474,8 +496,8 @@ describe('ChatView', () => {
     });
   });
 
-  // === Waiting for user input indicator ===
-  describe('waiting for user input', () => {
+  // === Inline user input (InlineUserInput integration) ===
+  describe('inline user input', () => {
     const tabId = 'tab-input';
     const makeInputTab = (userInputRequest: unknown) => ({
       id: tabId,
@@ -497,19 +519,57 @@ describe('ChatView', () => {
       userInputRequest,
     });
 
-    it('shows waiting indicator when userInputRequest is present', () => {
+    it('renders InlineUserInput inline when userInputRequest is present', () => {
       useAppStore.setState({
         activeConversationId: 'conv-1',
-        tabs: { [tabId]: makeInputTab({ requestId: 'req-1', question: 'Pick one', choices: ['A', 'B'] }) },
+        tabs: { [tabId]: makeInputTab({ requestId: 'req-1', question: 'Pick one', choices: ['A', 'B'], allowFreeform: true }) },
         tabOrder: [tabId],
         activeTabId: tabId,
       });
       render(<ChatView {...defaultProps} tabId={tabId} />);
-      expect(screen.getByTestId('waiting-for-input')).toBeTruthy();
-      expect(screen.getByText(/Waiting for your response/)).toBeTruthy();
+      // InlineUserInput should be rendered inline (not a modal overlay)
+      expect(screen.getByTestId('inline-user-input')).toBeTruthy();
     });
 
-    it('does not show waiting indicator when userInputRequest is null', () => {
+    it('does not render modal overlay (UserInputDialog) when userInputRequest is present', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makeInputTab({ requestId: 'req-1', question: 'Pick one', choices: ['A', 'B'], allowFreeform: true }) },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} />);
+      // UserInputDialog overlay should NOT be rendered
+      expect(screen.queryByTestId('user-input-overlay')).toBeNull();
+    });
+
+    it('passes question and choices to InlineUserInput', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makeInputTab({ requestId: 'req-1', question: 'Which option?', choices: ['X', 'Y'], allowFreeform: true }) },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} />);
+      const inlineInput = screen.getByTestId('inline-user-input');
+      expect(inlineInput.getAttribute('data-question')).toBe('Which option?');
+      expect(screen.getByText('X')).toBeTruthy();
+      expect(screen.getByText('Y')).toBeTruthy();
+    });
+
+    it('passes multiSelect prop to InlineUserInput', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makeInputTab({ requestId: 'req-1', question: 'Select many', choices: ['A', 'B'], allowFreeform: true, multiSelect: true }) },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} />);
+      const inlineInput = screen.getByTestId('inline-user-input');
+      expect(inlineInput.getAttribute('data-multi-select')).toBe('true');
+    });
+
+    it('does not render InlineUserInput when userInputRequest is null', () => {
       useAppStore.setState({
         activeConversationId: 'conv-1',
         tabs: { [tabId]: makeInputTab(null) },
@@ -517,7 +577,23 @@ describe('ChatView', () => {
         activeTabId: tabId,
       });
       render(<ChatView {...defaultProps} tabId={tabId} />);
-      expect(screen.queryByTestId('waiting-for-input')).toBeNull();
+      expect(screen.queryByTestId('inline-user-input')).toBeNull();
+    });
+
+    it('calls onUserInputResponse and clears request when InlineUserInput submits', () => {
+      const onUserInputResponse = vi.fn();
+      const setTabUserInputRequest = vi.fn();
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makeInputTab({ requestId: 'req-99', question: 'Pick', choices: ['A'], allowFreeform: true }) },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+        setTabUserInputRequest,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} onUserInputResponse={onUserInputResponse} />);
+      fireEvent.click(screen.getByTestId('inline-submit'));
+      expect(onUserInputResponse).toHaveBeenCalledWith('req-99', 'test-answer', false);
+      expect(setTabUserInputRequest).toHaveBeenCalledWith(tabId, null);
     });
   });
 
@@ -619,6 +695,117 @@ describe('ChatView', () => {
       });
       render(<ChatView {...defaultProps} tabId={tabId} />);
       expect(screen.queryByTestId('task-panel')).toBeNull();
+    });
+  });
+
+  // === RWD bottom toolbar ===
+  describe('responsive bottom toolbar', () => {
+    const tabId = 'tab-rwd';
+    const makeRwdTab = () => ({
+      id: tabId,
+      conversationId: 'conv-1',
+      title: 'RWD Tab',
+      mode: 'copilot' as const,
+      messages: [
+        { id: 'msg-1', conversationId: 'conv-1', role: 'user' as const, content: 'Hello', metadata: null, createdAt: '' },
+      ],
+      streamingText: '',
+      isStreaming: false,
+      toolRecords: [] as any[],
+      reasoningText: '',
+      turnContentSegments: [] as string[],
+      turnSegments: [] as any[],
+      copilotError: null,
+      messagesLoaded: true,
+      createdAt: Date.now(),
+    });
+
+    it('should use flex-wrap on the bottom toolbar for mobile stacking', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makeRwdTab() },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      const { container } = render(<ChatView {...defaultProps} tabId={tabId} />);
+      // The toolbar row containing ModelSelector, CwdSelector, etc. should have flex-wrap
+      const toolbarRow = container.querySelector('[data-testid="bottom-toolbar-row"]');
+      expect(toolbarRow).toBeTruthy();
+      expect(toolbarRow!.className).toContain('flex-wrap');
+    });
+  });
+
+  // === ThinkingIndicator integration ===
+  describe('thinking indicator', () => {
+    const tabId = 'tab-thinking';
+    const makeThinkingTab = (overrides: Record<string, unknown>) => ({
+      id: tabId,
+      conversationId: 'conv-1',
+      title: 'Thinking Tab',
+      mode: 'copilot' as const,
+      messages: [
+        { id: 'msg-1', conversationId: 'conv-1', role: 'user' as const, content: 'Hello', metadata: null, createdAt: '' },
+      ],
+      streamingText: '',
+      isStreaming: false,
+      toolRecords: [] as any[],
+      reasoningText: '',
+      turnContentSegments: [] as string[],
+      turnSegments: [] as any[],
+      copilotError: null,
+      messagesLoaded: true,
+      createdAt: Date.now(),
+      ...overrides,
+    });
+
+    it('shows ThinkingIndicator when streaming with no text and no active tools', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makeThinkingTab({ isStreaming: true, streamingText: '', toolRecords: [], turnSegments: [] }) },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} isStreaming={true} />);
+      expect(screen.getByTestId('thinking-indicator')).toBeTruthy();
+    });
+
+    it('does not show ThinkingIndicator when streaming text exists', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makeThinkingTab({ isStreaming: true, streamingText: 'Hello world' }) },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} isStreaming={true} />);
+      expect(screen.queryByTestId('thinking-indicator')).toBeNull();
+    });
+
+    it('does not show ThinkingIndicator when not streaming', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makeThinkingTab({ isStreaming: false, streamingText: '' }) },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} isStreaming={false} />);
+      expect(screen.queryByTestId('thinking-indicator')).toBeNull();
+    });
+
+    it('does not show ThinkingIndicator when turnSegments has active tool records', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: {
+          [tabId]: makeThinkingTab({
+            isStreaming: true,
+            streamingText: '',
+            turnSegments: [{ type: 'tool', toolCallId: 'tc1', toolName: 'bash', status: 'running' }],
+          }),
+        },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} isStreaming={true} />);
+      expect(screen.queryByTestId('thinking-indicator')).toBeNull();
     });
   });
 

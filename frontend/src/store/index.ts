@@ -32,6 +32,7 @@ export interface UserInputRequest {
   question: string;
   choices?: string[];
   allowFreeform?: boolean;
+  multiSelect?: boolean;
   timedOut?: boolean;
 }
 
@@ -84,9 +85,11 @@ export interface AppState {
   models: ModelInfo[];
   modelsLoading: boolean;
   modelsError: string | null;
+  modelsLastFetched: number;
   setModels: (models: ModelInfo[]) => void;
   setModelsLoading: (loading: boolean) => void;
   setModelsError: (error: string | null) => void;
+  setModelsLastFetched: (ts: number) => void;
 
   // Conversations
   conversations: Conversation[];
@@ -270,9 +273,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   models: [],
   modelsLoading: false,
   modelsError: null,
+  modelsLastFetched: 0,
   setModels: (models) => set({ models }),
   setModelsLoading: (loading) => set({ modelsLoading: loading }),
   setModelsError: (error) => set({ modelsError: error }),
+  setModelsLastFetched: (ts) => set({ modelsLastFetched: ts }),
 
   // State
   conversations: [],

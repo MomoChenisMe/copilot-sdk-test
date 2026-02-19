@@ -216,12 +216,15 @@ describe('useTabCopilot', () => {
 
     it('should not throw when called with non-existent tabId', () => {
       const { result } = renderHook(() => useTabCopilot({ subscribe, send }));
+      send.mockClear(); // Clear the copilot:query_state call from mount
       expect(() => {
         act(() => {
           result.current.sendMessage('non-existent-tab', 'hello');
         });
       }).not.toThrow();
-      expect(send).not.toHaveBeenCalled();
+      // Should not have sent copilot:send
+      const sendCalls = send.mock.calls.filter((c: any[]) => (c[0] as WsMessage).type === 'copilot:send');
+      expect(sendCalls).toHaveLength(0);
     });
   });
 
@@ -358,7 +361,10 @@ describe('useTabCopilot', () => {
       act(() => {
         result.current.sendMessage(tabIdA, 'act on this');
       });
-      const sentData = (send.mock.calls[0][0] as WsMessage).data as Record<string, unknown>;
+      // Find the copilot:send call (skip the initial copilot:query_state)
+      const sendCall = send.mock.calls.find((c: any[]) => (c[0] as WsMessage).type === 'copilot:send');
+      expect(sendCall).toBeDefined();
+      const sentData = (sendCall![0] as WsMessage).data as Record<string, unknown>;
       expect(sentData.mode).toBeUndefined();
     });
 
@@ -571,6 +577,80 @@ describe('useTabCopilot', () => {
         });
       });
       expect(useAppStore.getState().tabs[tabIdA].tasks).toHaveLength(0);
+    });
+  });
+
+  // --- Reconnection state recovery ---
+  describe('reconnection state recovery', () => {
+    it('should send copilot:query_state on mount to recover state', () => {
+      renderHook(() => useTabCopilot({ subscribe, send }));
+      expect(send).toHaveBeenCalledWith({ type: 'copilot:query_state' });
+    });
+
+    it('should handle copilot:state_response with active streams', () => {
+      renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        emit({
+          type: 'copilot:state_response',
+          data: {
+            activeStreams: [
+              { conversationId: 'conv-A', status: 'running', startedAt: '2024-01-01T00:00:00Z' },
+            ],
+            pendingUserInputs: [],
+          },
+        });
+      });
+      const tabA = useAppStore.getState().tabs[tabIdA];
+      expect(tabA.isStreaming).toBe(true);
+    });
+
+    it('should handle copilot:state_response with pending user inputs', () => {
+      renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        emit({
+          type: 'copilot:state_response',
+          data: {
+            activeStreams: [
+              { conversationId: 'conv-A', status: 'running', startedAt: '2024-01-01T00:00:00Z' },
+            ],
+            pendingUserInputs: [
+              {
+                requestId: 'req-1',
+                question: 'Pick one',
+                choices: ['X', 'Y'],
+                allowFreeform: true,
+                multiSelect: false,
+                conversationId: 'conv-A',
+              },
+            ],
+          },
+        });
+      });
+      const tabA = useAppStore.getState().tabs[tabIdA];
+      expect(tabA.userInputRequest).toEqual({
+        requestId: 'req-1',
+        question: 'Pick one',
+        choices: ['X', 'Y'],
+        allowFreeform: true,
+      });
+    });
+
+    it('should not set streaming for conversations without matching tabs', () => {
+      renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        emit({
+          type: 'copilot:state_response',
+          data: {
+            activeStreams: [
+              { conversationId: 'conv-UNKNOWN', status: 'running', startedAt: '2024-01-01T00:00:00Z' },
+            ],
+            pendingUserInputs: [],
+          },
+        });
+      });
+      // Should not affect existing tabs
+      expect(useAppStore.getState().tabs[tabIdA].isStreaming).toBe(false);
+      expect(useAppStore.getState().tabs[tabIdB].isStreaming).toBe(false);
     });
   });
 

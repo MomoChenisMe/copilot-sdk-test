@@ -11,10 +11,12 @@
     "lint": "eslint src/"
   },
   "dependencies": {
-    "@github/copilot-sdk": "^0.1.23",
+    "@github/copilot-sdk": "^0.1.25",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.6.0",
     "cookie": "^1.0.0",
+    "croner": "^10.0.1",
     "express": "^5.1.0",
     "multer": "^2.0.2",
     "node-pty": "^1.1.0",

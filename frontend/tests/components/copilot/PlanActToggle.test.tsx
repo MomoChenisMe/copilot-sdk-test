@@ -35,6 +35,26 @@ describe('PlanActToggle', () => {
     expect(onToggle).toHaveBeenCalledWith(false);
   });
 
+  it('should use outline style (border-accent bg-accent/10) for active button, not solid bg-accent', () => {
+    render(<PlanActToggle planMode={true} onToggle={() => {}} />);
+    const planBtn = screen.getByText('Plan').closest('button')!;
+    // Active should use outline style, not solid background
+    expect(planBtn.className).toContain('border-accent');
+    expect(planBtn.className).toContain('text-accent');
+    expect(planBtn.className).toContain('bg-accent/10');
+    // Should NOT have solid white text (old style was bg-accent text-white)
+    expect(planBtn.className).not.toContain('text-white');
+  });
+
+  it('should use outline style for active Act button', () => {
+    render(<PlanActToggle planMode={false} onToggle={() => {}} />);
+    const actBtn = screen.getByText('Act').closest('button')!;
+    expect(actBtn.className).toContain('border-accent');
+    expect(actBtn.className).toContain('text-accent');
+    expect(actBtn.className).toContain('bg-accent/10');
+    expect(actBtn.className).not.toContain('text-white');
+  });
+
   it('should be disabled when disabled prop is true', () => {
     render(<PlanActToggle planMode={false} onToggle={() => {}} disabled />);
     const planBtn = screen.getByText('Plan').closest('button')!;

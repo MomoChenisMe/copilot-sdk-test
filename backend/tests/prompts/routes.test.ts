@@ -218,4 +218,61 @@ describe('prompts routes', () => {
       expect(res.status).toBe(400);
     });
   });
+
+  // --- Export / Import ---
+
+  describe('GET /api/prompts/presets/export', () => {
+    it('should export all presets as JSON', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'presets', 'alpha.md'), 'Alpha content');
+      fs.writeFileSync(path.join(tmpDir, 'presets', 'beta.md'), 'Beta content');
+
+      const res = await fetch(`${baseUrl}/api/prompts/presets/export`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.presets).toHaveLength(2);
+      expect(body.presets.find((p: any) => p.name === 'alpha').content).toBe('Alpha content');
+      expect(body.presets.find((p: any) => p.name === 'beta').content).toBe('Beta content');
+    });
+  });
+
+  describe('POST /api/prompts/presets/import', () => {
+    it('should import presets from JSON', async () => {
+      const res = await fetch(`${baseUrl}/api/prompts/presets/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          presets: [
+            { name: 'imported-a', content: 'Imported A' },
+            { name: 'imported-b', content: 'Imported B' },
+          ],
+        }),
+      });
+      expect(res.status).toBe(200);
+      expect(fs.readFileSync(path.join(tmpDir, 'presets', 'imported-a.md'), 'utf-8')).toBe('Imported A');
+      expect(fs.readFileSync(path.join(tmpDir, 'presets', 'imported-b.md'), 'utf-8')).toBe('Imported B');
+    });
+
+    it('should overwrite existing presets with same name', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'presets', 'existing.md'), 'Old content');
+
+      const res = await fetch(`${baseUrl}/api/prompts/presets/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          presets: [{ name: 'existing', content: 'New content' }],
+        }),
+      });
+      expect(res.status).toBe(200);
+      expect(fs.readFileSync(path.join(tmpDir, 'presets', 'existing.md'), 'utf-8')).toBe('New content');
+    });
+
+    it('should reject invalid JSON body', async () => {
+      const res = await fetch(`${baseUrl}/api/prompts/presets/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ presets: 'not-an-array' }),
+      });
+      expect(res.status).toBe(400);
+    });
+  });
 });

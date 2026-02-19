@@ -50,6 +50,35 @@ export function createPromptsRoutes(store: PromptFileStore): Router {
     res.json({ ok: true });
   });
 
+  // --- Presets Export/Import (before :name routes) ---
+
+  router.get('/presets/export', (_req, res) => {
+    const names = store.listFiles('presets');
+    const presets = names.map((name) => ({
+      name,
+      content: store.readFile(`presets/${name}.md`),
+    }));
+    res.json({ presets });
+  });
+
+  router.post('/presets/import', (req, res) => {
+    const { presets } = req.body;
+    if (!Array.isArray(presets)) {
+      res.status(400).json({ error: 'Invalid format: presets must be an array' });
+      return;
+    }
+    for (const preset of presets) {
+      if (!preset.name || typeof preset.content !== 'string') continue;
+      try {
+        const name = sanitizeName(preset.name);
+        store.writeFile(`presets/${name}.md`, preset.content);
+      } catch {
+        // skip invalid names
+      }
+    }
+    res.json({ ok: true, imported: presets.length });
+  });
+
   // --- Presets ---
 
   router.get('/presets', (_req, res) => {

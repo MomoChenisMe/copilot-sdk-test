@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Globe, LogOut, X } from 'lucide-react';
+import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { promptsApi, memoryApi, skillsApi } from '../../lib/prompts-api';
 import type { PresetItem, MemoryItem, SkillItem } from '../../lib/prompts-api';
 import { memoryApi as autoMemoryApi } from '../../lib/api';
@@ -8,10 +9,12 @@ import type { MemoryConfig, MemoryStats } from '../../lib/api';
 import { useAppStore } from '../../store';
 import { Markdown } from '../shared/Markdown';
 import { ApiKeysTab } from './ApiKeysTab';
+import { McpTab } from './McpTab';
+import { CronTab } from './CronTab';
 
 const INVALID_NAME_RE = /[.]{2}|[/\\]|\0/;
 
-type TabId = 'general' | 'system-prompt' | 'profile' | 'agent' | 'presets' | 'memory' | 'skills' | 'api-keys';
+type TabId = 'general' | 'system-prompt' | 'profile' | 'agent' | 'presets' | 'memory' | 'skills' | 'api-keys' | 'mcp' | 'cron';
 
 interface SettingsPanelProps {
   open: boolean;
@@ -32,6 +35,8 @@ const TABS: { id: TabId; labelKey: string }[] = [
   { id: 'memory', labelKey: 'settings.tabs.memory' },
   { id: 'skills', labelKey: 'settings.tabs.skills' },
   { id: 'api-keys', labelKey: 'settings.tabs.apiKeys' },
+  { id: 'mcp', labelKey: 'settings.tabs.mcp' },
+  { id: 'cron', labelKey: 'settings.tabs.cron' },
 ];
 
 export function SettingsPanel({ open, onClose, activePresets, onTogglePreset, onLanguageToggle, language, onLogout }: SettingsPanelProps) {
@@ -126,6 +131,8 @@ export function SettingsPanel({ open, onClose, activePresets, onTogglePreset, on
             {activeTab === 'memory' && <MemoryTab />}
             {activeTab === 'skills' && <SkillsTab />}
             {activeTab === 'api-keys' && <ApiKeysTab />}
+            {activeTab === 'mcp' && <McpTab />}
+            {activeTab === 'cron' && <CronTab />}
           </div>
         </div>
       </div>
@@ -145,9 +152,26 @@ function GeneralTab({
 }) {
   const { t } = useTranslation();
   const displayLang = language === 'zh-TW' ? '繁體中文' : 'English';
+  const [sdkVersion, setSdkVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    import('../../lib/api').then(({ apiGet }) => {
+      apiGet<{ currentVersion: string | null }>('/api/copilot/sdk-version')
+        .then((r) => setSdkVersion(r.currentVersion))
+        .catch(() => {});
+    });
+  }, []);
 
   return (
     <div className="flex flex-col gap-4">
+      {/* SDK Version */}
+      {sdkVersion && (
+        <section>
+          <h3 className="text-xs font-semibold text-text-secondary uppercase mb-2">Copilot SDK</h3>
+          <span data-testid="sdk-version" className="text-sm text-text-primary font-mono">v{sdkVersion}</span>
+        </section>
+      )}
+
       {/* Language */}
       <section>
         <h3 className="text-xs font-semibold text-text-secondary uppercase mb-2">{t('settings.general.language')}</h3>
@@ -397,29 +421,76 @@ function PresetsTab({
     }
   }, [t]);
 
+  const handleExport = useCallback(async () => {
+    try {
+      const data = await promptsApi.exportPresets();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'presets.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setToast(t('settings.toast.saveFailed'));
+      setTimeout(() => setToast(null), 2000);
+    }
+  }, [t]);
+
+  const handleImport = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if (!Array.isArray(data.presets)) throw new Error('Invalid format');
+        await promptsApi.importPresets(data.presets);
+        // Refresh list
+        const r = await promptsApi.listPresets();
+        setPresets(r.presets);
+        setToast(t('settings.toast.saved'));
+        setTimeout(() => setToast(null), 2000);
+      } catch {
+        setToast(t('settings.toast.saveFailed'));
+        setTimeout(() => setToast(null), 2000);
+      }
+    };
+    input.click();
+  }, [t]);
+
   if (loading) return <div className="text-text-secondary text-sm">{t('settings.loading')}</div>;
 
   return (
     <div className="flex flex-col gap-2">
+      <div className="flex gap-2 mb-2">
+        <button
+          data-testid="presets-export"
+          onClick={handleExport}
+          className="px-3 py-1.5 text-xs font-medium bg-bg-tertiary text-text-secondary rounded-lg hover:bg-bg-secondary"
+        >
+          Export
+        </button>
+        <button
+          data-testid="presets-import"
+          onClick={handleImport}
+          className="px-3 py-1.5 text-xs font-medium bg-bg-tertiary text-text-secondary rounded-lg hover:bg-bg-secondary"
+        >
+          Import
+        </button>
+      </div>
       {presets.map((preset) => (
         <div key={preset.name} className="border border-border rounded-lg overflow-hidden">
           <div className="flex items-center gap-2 px-3 py-2">
             {/* Toggle switch */}
-            <button
+            <ToggleSwitch
               data-testid={`preset-toggle-${preset.name}`}
-              role="switch"
-              aria-checked={activePresets.includes(preset.name)}
-              onClick={() => onTogglePreset(preset.name)}
-              className={`w-8 h-4 rounded-full relative transition-colors ${
-                activePresets.includes(preset.name) ? 'bg-accent' : 'bg-bg-tertiary'
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
-                  activePresets.includes(preset.name) ? 'translate-x-4' : 'translate-x-0.5'
-                }`}
-              />
-            </button>
+              checked={activePresets.includes(preset.name)}
+              onChange={() => onTogglePreset(preset.name)}
+            />
 
             {/* Name + expand */}
             <button
@@ -858,21 +929,11 @@ function SkillsTab() {
             <div key={skill.name} className="border border-border rounded-lg overflow-hidden">
               <div className="flex items-center gap-2 px-3 py-2">
                 {/* Toggle switch */}
-                <button
+                <ToggleSwitch
                   data-testid={`skill-toggle-${skill.name}`}
-                  role="switch"
-                  aria-checked={!disabledSkills.includes(skill.name)}
-                  onClick={() => toggleSkill(skill.name)}
-                  className={`shrink-0 w-8 h-4 rounded-full relative transition-colors ${
-                    !disabledSkills.includes(skill.name) ? 'bg-accent' : 'bg-bg-tertiary'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
-                      !disabledSkills.includes(skill.name) ? 'translate-x-4' : 'translate-x-0.5'
-                    }`}
-                  />
-                </button>
+                  checked={!disabledSkills.includes(skill.name)}
+                  onChange={() => toggleSkill(skill.name)}
+                />
 
                 {/* Name + description + expand */}
                 <button
@@ -917,21 +978,11 @@ function SkillsTab() {
           <div key={skill.name} className="border border-border rounded-lg overflow-hidden">
             <div className="flex items-center gap-2 px-3 py-2">
               {/* Toggle switch */}
-              <button
+              <ToggleSwitch
                 data-testid={`skill-toggle-${skill.name}`}
-                role="switch"
-                aria-checked={!disabledSkills.includes(skill.name)}
-                onClick={() => toggleSkill(skill.name)}
-                className={`shrink-0 w-8 h-4 rounded-full relative transition-colors ${
-                  !disabledSkills.includes(skill.name) ? 'bg-accent' : 'bg-bg-tertiary'
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
-                    !disabledSkills.includes(skill.name) ? 'translate-x-4' : 'translate-x-0.5'
-                  }`}
-                />
-              </button>
+                checked={!disabledSkills.includes(skill.name)}
+                onChange={() => toggleSkill(skill.name)}
+              />
 
               {/* Name + description + expand */}
               <button

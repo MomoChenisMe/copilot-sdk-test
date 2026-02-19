@@ -101,6 +101,7 @@ describe('StreamManager', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     StreamManager.resetInstance();
   });
 
@@ -1232,8 +1233,8 @@ describe('StreamManager', () => {
         let rejectedError: Error | undefined;
         const safePromise = handlerPromise.catch((err: Error) => { rejectedError = err; });
 
-        // Advance past the 5 minute timeout
-        await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 100);
+        // Advance past the 30 minute timeout
+        await vi.advanceTimersByTimeAsync(30 * 60 * 1000 + 100);
         await safePromise;
 
         // Should have broadcast timeout event
@@ -1390,6 +1391,351 @@ describe('StreamManager', () => {
       });
 
       expect(mockComposer.compose).toHaveBeenCalledWith([], '/tmp');
+    });
+  });
+
+  // === getFullState ===
+  describe('getFullState', () => {
+    it('should return empty arrays when no streams exist', () => {
+      const state = sm.getFullState();
+      expect(state.activeStreams).toEqual([]);
+      expect(state.pendingUserInputs).toEqual([]);
+    });
+
+    it('should return active streams with correct metadata', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+      });
+      await tick();
+
+      const state = sm.getFullState();
+      expect(state.activeStreams).toHaveLength(1);
+      expect(state.activeStreams[0]).toEqual(
+        expect.objectContaining({
+          conversationId: 'conv-1',
+          status: 'running',
+        }),
+      );
+      expect(typeof state.activeStreams[0].startedAt).toBe('string');
+    });
+
+    it('should return pending user inputs with request metadata', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+      });
+      await tick();
+
+      // Trigger a user input request
+      const sessionOpts = mockSessionManager.getOrCreateSession.mock.calls[0][0];
+      const handlerPromise = sessionOpts.onUserInputRequest(
+        { question: 'Which approach?', choices: ['A', 'B'], allowFreeform: true },
+        { sessionId: 'sdk-session-1' },
+      );
+
+      const state = sm.getFullState();
+      expect(state.pendingUserInputs).toHaveLength(1);
+      expect(state.pendingUserInputs[0]).toEqual(
+        expect.objectContaining({
+          conversationId: 'conv-1',
+          question: 'Which approach?',
+          choices: ['A', 'B'],
+          allowFreeform: true,
+        }),
+      );
+      expect(typeof state.pendingUserInputs[0].requestId).toBe('string');
+
+      // Clean up
+      sm.handleUserInputResponse('conv-1', state.pendingUserInputs[0].requestId, 'A', false);
+      await handlerPromise;
+    });
+
+    it('should include multiple active streams', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello', sdkSessionId: null, model: 'gpt-5', cwd: '/tmp',
+      });
+      await sm.startStream('conv-2', {
+        prompt: 'world', sdkSessionId: null, model: 'gpt-5', cwd: '/tmp',
+      });
+      await tick();
+
+      const state = sm.getFullState();
+      expect(state.activeStreams).toHaveLength(2);
+      const ids = state.activeStreams.map((s: any) => s.conversationId);
+      expect(ids).toContain('conv-1');
+      expect(ids).toContain('conv-2');
+    });
+
+    it('should not include idle streams', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello', sdkSessionId: null, model: 'gpt-5', cwd: '/tmp',
+      });
+      await tick();
+
+      fireEvent('session.idle', {});
+      await tick();
+
+      const state = sm.getFullState();
+      expect(state.activeStreams).toHaveLength(0);
+    });
+  });
+
+  // === multiSelect field forwarding ===
+  describe('multiSelect field forwarding', () => {
+    it('should include multiSelect=true in copilot:user_input_request broadcast', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello', sdkSessionId: null, model: 'gpt-5', cwd: '/tmp',
+      });
+      await tick();
+
+      const received: WsMessage[] = [];
+      sm.subscribe('conv-1', (msg) => received.push(msg));
+
+      const sessionOpts = mockSessionManager.getOrCreateSession.mock.calls[0][0];
+      const handlerPromise = sessionOpts.onUserInputRequest(
+        { question: 'Pick many', choices: ['A', 'B', 'C'], allowFreeform: true, multiSelect: true },
+        { sessionId: 'sdk-session-1' },
+      );
+
+      const requestMsg = received.find((m) => m.type === 'copilot:user_input_request');
+      expect(requestMsg).toBeDefined();
+      const requestData = requestMsg!.data as Record<string, unknown>;
+      expect(requestData.multiSelect).toBe(true);
+
+      // Clean up
+      sm.handleUserInputResponse('conv-1', requestData.requestId as string, '["A","B"]', false);
+      await handlerPromise;
+    });
+
+    it('should include multiSelect=undefined when not provided (default single-select)', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello', sdkSessionId: null, model: 'gpt-5', cwd: '/tmp',
+      });
+      await tick();
+
+      const received: WsMessage[] = [];
+      sm.subscribe('conv-1', (msg) => received.push(msg));
+
+      const sessionOpts = mockSessionManager.getOrCreateSession.mock.calls[0][0];
+      const handlerPromise = sessionOpts.onUserInputRequest(
+        { question: 'Pick one', choices: ['X', 'Y'], allowFreeform: false },
+        { sessionId: 'sdk-session-1' },
+      );
+
+      const requestMsg = received.find((m) => m.type === 'copilot:user_input_request');
+      const requestData = requestMsg!.data as Record<string, unknown>;
+      expect(requestData.multiSelect).toBeUndefined();
+
+      // Clean up
+      sm.handleUserInputResponse('conv-1', requestData.requestId as string, 'X', false);
+      await handlerPromise;
+    });
+  });
+
+  // === AskUser timeout pause/resume ===
+  describe('user input timeout pause/resume', () => {
+    it('should use 30-minute timeout instead of 5 minutes', async () => {
+      vi.useFakeTimers();
+
+      await sm.startStream('conv-1', {
+        prompt: 'hello', sdkSessionId: null, model: 'gpt-5', cwd: '/tmp',
+      });
+      await vi.advanceTimersByTimeAsync(10);
+
+      const received: WsMessage[] = [];
+      sm.subscribe('conv-1', (msg) => received.push(msg));
+
+      const sessionOpts = mockSessionManager.getOrCreateSession.mock.calls[0][0];
+      const handlerPromise = sessionOpts.onUserInputRequest(
+        { question: 'Q?', choices: ['A'] },
+        { sessionId: 'sdk-session-1' },
+      );
+
+      let rejectedError: Error | undefined;
+      const safePromise = handlerPromise.catch((err: Error) => { rejectedError = err; });
+
+      // After 5 minutes, should NOT have timed out yet (old behavior was 5 min)
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 100);
+      expect(rejectedError).toBeUndefined();
+
+      // After 30 minutes total, should have timed out
+      await vi.advanceTimersByTimeAsync(25 * 60 * 1000);
+      await safePromise;
+      expect(rejectedError).toBeDefined();
+      expect(rejectedError!.message).toMatch(/timed out/i);
+
+      vi.useRealTimers();
+    });
+
+    it('should pause timeout when all subscribers disconnect', async () => {
+      vi.useFakeTimers();
+
+      try {
+        await sm.startStream('conv-1', {
+          prompt: 'hello', sdkSessionId: null, model: 'gpt-5', cwd: '/tmp',
+        });
+        await vi.advanceTimersByTimeAsync(10);
+
+        const sub1: SendFn = vi.fn();
+        const unsub1 = sm.subscribe('conv-1', sub1)!;
+
+        const sessionOpts = mockSessionManager.getOrCreateSession.mock.calls[0][0];
+        const handlerPromise = sessionOpts.onUserInputRequest(
+          { question: 'Q?', choices: ['A'] },
+          { sessionId: 'sdk-session-1' },
+        );
+
+        let rejectedError: Error | undefined;
+        handlerPromise.catch((err: Error) => { rejectedError = err; });
+
+        // Advance 10 minutes, then remove all subscribers
+        await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+        unsub1();
+
+        // Advance another 25 minutes with no subscribers — timer should be paused
+        await vi.advanceTimersByTimeAsync(25 * 60 * 1000);
+        expect(rejectedError).toBeUndefined(); // Still not timed out because timer paused
+
+        // Clean up
+        vi.useRealTimers();
+        sm.handleUserInputResponse('conv-1', sm.getPendingUserInputs('conv-1')[0].requestId, 'A', false);
+        await handlerPromise;
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should resume timeout when a new subscriber joins after pause', async () => {
+      vi.useFakeTimers();
+
+      try {
+        await sm.startStream('conv-1', {
+          prompt: 'hello', sdkSessionId: null, model: 'gpt-5', cwd: '/tmp',
+        });
+        await vi.advanceTimersByTimeAsync(10);
+
+        const sub1: SendFn = vi.fn();
+        const unsub1 = sm.subscribe('conv-1', sub1)!;
+
+        const sessionOpts = mockSessionManager.getOrCreateSession.mock.calls[0][0];
+        const handlerPromise = sessionOpts.onUserInputRequest(
+          { question: 'Q?', choices: ['A'] },
+          { sessionId: 'sdk-session-1' },
+        );
+
+        let rejectedError: Error | undefined;
+        const safePromise = handlerPromise.catch((err: Error) => { rejectedError = err; });
+
+        // Advance 10 minutes with subscriber, then disconnect
+        await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+        unsub1(); // Timer pauses, ~20 min remaining
+
+        // Wait a long time with no subscribers (should not count)
+        await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+        expect(rejectedError).toBeUndefined();
+
+        // Reconnect — timer should resume with ~20 min remaining
+        const sub2: SendFn = vi.fn();
+        sm.subscribe('conv-1', sub2);
+
+        // Advance another 19 minutes — should NOT timeout yet
+        await vi.advanceTimersByTimeAsync(19 * 60 * 1000);
+        expect(rejectedError).toBeUndefined();
+
+        // Advance 2 more minutes — should timeout now (total ~31 min active)
+        await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
+        await safePromise;
+        expect(rejectedError).toBeDefined();
+        expect(rejectedError!.message).toMatch(/timed out/i);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  // === PendingUserInput metadata persistence ===
+  describe('pending user input metadata persistence', () => {
+    it('should store request metadata alongside resolve/reject', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+      });
+      await tick();
+
+      const sessionOpts = mockSessionManager.getOrCreateSession.mock.calls[0][0];
+      const handlerPromise = sessionOpts.onUserInputRequest(
+        { question: 'Select option', choices: ['X', 'Y'], allowFreeform: false },
+        { sessionId: 'sdk-session-1' },
+      );
+
+      // getPendingUserInputs should return the metadata
+      const pending = sm.getPendingUserInputs('conv-1');
+      expect(pending).toHaveLength(1);
+      expect(pending[0].question).toBe('Select option');
+      expect(pending[0].choices).toEqual(['X', 'Y']);
+      expect(pending[0].allowFreeform).toBe(false);
+
+      // Clean up
+      sm.handleUserInputResponse('conv-1', pending[0].requestId, 'X', false);
+      await handlerPromise;
+    });
+
+    it('should store multiSelect metadata when provided', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+      });
+      await tick();
+
+      const sessionOpts = mockSessionManager.getOrCreateSession.mock.calls[0][0];
+      const handlerPromise = sessionOpts.onUserInputRequest(
+        { question: 'Pick many', choices: ['A', 'B', 'C'], allowFreeform: true, multiSelect: true },
+        { sessionId: 'sdk-session-1' },
+      );
+
+      const pending = sm.getPendingUserInputs('conv-1');
+      expect(pending).toHaveLength(1);
+      expect(pending[0].multiSelect).toBe(true);
+
+      // Clean up
+      sm.handleUserInputResponse('conv-1', pending[0].requestId, '["A","B"]', false);
+      await handlerPromise;
+    });
+
+    it('should return empty array for non-existent conversation', () => {
+      const pending = sm.getPendingUserInputs('nonexistent');
+      expect(pending).toEqual([]);
+    });
+
+    it('should remove metadata after response', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+      });
+      await tick();
+
+      const sessionOpts = mockSessionManager.getOrCreateSession.mock.calls[0][0];
+      const handlerPromise = sessionOpts.onUserInputRequest(
+        { question: 'Q?', choices: ['A'] },
+        { sessionId: 'sdk-session-1' },
+      );
+
+      const pending = sm.getPendingUserInputs('conv-1');
+      sm.handleUserInputResponse('conv-1', pending[0].requestId, 'A', false);
+      await handlerPromise;
+
+      expect(sm.getPendingUserInputs('conv-1')).toEqual([]);
     });
   });
 });

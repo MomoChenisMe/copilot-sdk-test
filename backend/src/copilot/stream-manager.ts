@@ -14,12 +14,25 @@ import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('stream-manager');
 
-const USER_INPUT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const USER_INPUT_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+
+interface PendingUserInputRequestData {
+  requestId: string;
+  question: string;
+  choices?: string[];
+  allowFreeform: boolean;
+  multiSelect?: boolean;
+}
 
 interface PendingUserInput {
   resolve: (value: { answer: string; wasFreeform: boolean }) => void;
   reject: (reason: Error) => void;
-  timeoutId: ReturnType<typeof setTimeout>;
+  timeoutId: ReturnType<typeof setTimeout> | null;
+  requestData: PendingUserInputRequestData;
+  /** Remaining timeout ms when paused (null = not paused) */
+  remainingMs: number | null;
+  /** Timestamp when timeout was last started/resumed */
+  timeoutStartedAt: number;
 }
 
 interface TurnSegment {
@@ -96,6 +109,7 @@ interface ConversationStream {
   session: CopilotSession;
   status: 'running' | 'idle' | 'error';
   mode: 'plan' | 'act';
+  startedAt: string;
   accumulation: AccumulationState;
   eventBuffer: WsMessage[];
   subscribers: Set<SendFn>;
@@ -113,6 +127,7 @@ export interface StreamManagerDeps {
   promptComposer?: PromptComposer;
   skillStore?: { getSkillDirectories(): string[] };
   selfControlTools?: any[];
+  getMcpTools?: () => Promise<any[]>;
 }
 
 export interface FileReference {
@@ -145,6 +160,7 @@ export class StreamManager extends EventEmitter {
   private promptComposer?: PromptComposer;
   private skillStore?: { getSkillDirectories(): string[] };
   private selfControlTools?: any[];
+  private getMcpTools?: () => Promise<any[]>;
 
   private constructor(deps: StreamManagerDeps) {
     super();
@@ -154,6 +170,7 @@ export class StreamManager extends EventEmitter {
     this.promptComposer = deps.promptComposer;
     this.skillStore = deps.skillStore;
     this.selfControlTools = deps.selfControlTools;
+    this.getMcpTools = deps.getMcpTools;
   }
 
   static getInstance(deps?: StreamManagerDeps): StreamManager {
@@ -193,6 +210,7 @@ export class StreamManager extends EventEmitter {
       session: null as any, // Set after session creation
       status: 'running',
       mode: options.mode ?? 'act',
+      startedAt: new Date().toISOString(),
       accumulation: createEmptyAccumulation(),
       eventBuffer: [],
       subscribers: new Set(),
@@ -216,12 +234,20 @@ export class StreamManager extends EventEmitter {
       const permissionHandler = createPermissionHandler(() => stream.mode);
 
       const userInputHandler = (
-        request: { question: string; choices?: string[]; allowFreeform?: boolean },
+        request: { question: string; choices?: string[]; allowFreeform?: boolean; multiSelect?: boolean },
         _invocation: { sessionId: string },
       ): Promise<{ answer: string; wasFreeform: boolean }> => {
         return new Promise((resolve, reject) => {
           const requestId = randomUUID();
-          const timeoutId = setTimeout(() => {
+          const requestData: PendingUserInputRequestData = {
+            requestId,
+            question: request.question,
+            choices: request.choices,
+            allowFreeform: request.allowFreeform ?? true,
+            multiSelect: request.multiSelect,
+          };
+
+          const timeoutCallback = () => {
             stream.pendingUserInputRequests.delete(requestId);
             // Broadcast timeout event before rejecting
             this.broadcast(stream, {
@@ -235,9 +261,24 @@ export class StreamManager extends EventEmitter {
               },
             });
             reject(new Error('User input request timed out'));
-          }, USER_INPUT_TIMEOUT_MS);
+          };
 
-          stream.pendingUserInputRequests.set(requestId, { resolve, reject, timeoutId });
+          const hasSubscribers = stream.subscribers.size > 0;
+          const timeoutId = hasSubscribers ? setTimeout(timeoutCallback, USER_INPUT_TIMEOUT_MS) : null;
+
+          const pendingEntry: PendingUserInput = {
+            resolve,
+            reject,
+            timeoutId,
+            requestData,
+            remainingMs: hasSubscribers ? null : USER_INPUT_TIMEOUT_MS,
+            timeoutStartedAt: hasSubscribers ? Date.now() : 0,
+          };
+
+          // Store the timeout callback for pause/resume
+          (pendingEntry as any)._timeoutCallback = timeoutCallback;
+
+          stream.pendingUserInputRequests.set(requestId, pendingEntry);
 
           const msg: WsMessage = {
             type: 'copilot:user_input_request',
@@ -246,6 +287,7 @@ export class StreamManager extends EventEmitter {
               question: request.question,
               choices: request.choices,
               allowFreeform: request.allowFreeform ?? true,
+              multiSelect: request.multiSelect,
               conversationId: stream.conversationId,
             },
           };
@@ -288,8 +330,18 @@ export class StreamManager extends EventEmitter {
         sessionOpts.disabledSkills = options.disabledSkills;
       }
 
-      if (this.selfControlTools?.length) {
-        sessionOpts.tools = this.selfControlTools;
+      // Merge self-control tools and MCP tools
+      const allTools: any[] = [...(this.selfControlTools ?? [])];
+      if (this.getMcpTools) {
+        try {
+          const mcpTools = await this.getMcpTools();
+          allTools.push(...mcpTools);
+        } catch (err) {
+          // MCP tools failure shouldn't block the stream
+        }
+      }
+      if (allTools.length > 0) {
+        sessionOpts.tools = allTools;
       }
 
       const session = await this.sessionManager.getOrCreateSession(sessionOpts);
@@ -325,11 +377,22 @@ export class StreamManager extends EventEmitter {
       send(msg);
     }
 
+    const wasEmpty = stream.subscribers.size === 0;
     stream.subscribers.add(send);
+
+    // Resume paused user input timeouts when first subscriber arrives
+    if (wasEmpty) {
+      this.resumePendingTimeouts(stream);
+    }
 
     // Return unsubscribe function
     return () => {
       stream.subscribers.delete(send);
+
+      // Pause user input timeouts when last subscriber leaves
+      if (stream.subscribers.size === 0) {
+        this.pausePendingTimeouts(stream);
+      }
     };
   }
 
@@ -400,6 +463,39 @@ export class StreamManager extends EventEmitter {
       .map(([id]) => id);
   }
 
+  getPendingUserInputs(conversationId: string): PendingUserInputRequestData[] {
+    const stream = this.streams.get(conversationId);
+    if (!stream) return [];
+    return [...stream.pendingUserInputRequests.values()].map((p) => p.requestData);
+  }
+
+  getFullState(): {
+    activeStreams: { conversationId: string; status: string; startedAt: string }[];
+    pendingUserInputs: (PendingUserInputRequestData & { conversationId: string })[];
+  } {
+    const activeStreams: { conversationId: string; status: string; startedAt: string }[] = [];
+    const pendingUserInputs: (PendingUserInputRequestData & { conversationId: string })[] = [];
+
+    for (const [, stream] of this.streams) {
+      if (stream.status === 'running') {
+        activeStreams.push({
+          conversationId: stream.conversationId,
+          status: stream.status,
+          startedAt: stream.startedAt,
+        });
+      }
+
+      for (const [, pending] of stream.pendingUserInputRequests) {
+        pendingUserInputs.push({
+          ...pending.requestData,
+          conversationId: stream.conversationId,
+        });
+      }
+    }
+
+    return { activeStreams, pendingUserInputs };
+  }
+
   async shutdownAll(timeout = 10_000): Promise<void> {
     this.isShuttingDown = true;
     log.info({ activeStreams: this.streams.size }, 'Shutting down all streams');
@@ -429,6 +525,28 @@ export class StreamManager extends EventEmitter {
 
     this.streams.clear();
     log.info('All streams shut down');
+  }
+
+  private pausePendingTimeouts(stream: ConversationStream): void {
+    for (const [, pending] of stream.pendingUserInputRequests) {
+      if (pending.timeoutId != null) {
+        clearTimeout(pending.timeoutId);
+        const elapsed = Date.now() - pending.timeoutStartedAt;
+        pending.remainingMs = Math.max(0, (pending.remainingMs ?? USER_INPUT_TIMEOUT_MS) - elapsed);
+        pending.timeoutId = null;
+      }
+    }
+  }
+
+  private resumePendingTimeouts(stream: ConversationStream): void {
+    for (const [, pending] of stream.pendingUserInputRequests) {
+      if (pending.timeoutId == null && pending.remainingMs != null && pending.remainingMs > 0) {
+        const cb = (pending as any)._timeoutCallback as () => void;
+        pending.timeoutStartedAt = Date.now();
+        pending.timeoutId = setTimeout(cb, pending.remainingMs);
+        pending.remainingMs = null;
+      }
+    }
   }
 
   private processEvent(stream: ConversationStream, msg: WsMessage): void {

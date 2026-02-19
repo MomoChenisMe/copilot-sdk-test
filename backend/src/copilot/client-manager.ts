@@ -8,10 +8,13 @@ export interface ClientManagerConfig {
   githubClientId?: string;
 }
 
+const MODEL_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 export class ClientManager {
   private client: CopilotClient | null = null;
   private githubToken: string | undefined;
   private githubClientId: string | undefined;
+  private modelCache: { models: any[]; timestamp: number } | null = null;
 
   constructor(config: ClientManagerConfig = {}) {
     this.githubToken = config.githubToken;
@@ -63,8 +66,24 @@ export class ClientManager {
   }
 
   async listModels() {
+    // Return cached models if within TTL
+    if (this.modelCache && Date.now() - this.modelCache.timestamp < MODEL_CACHE_TTL_MS) {
+      return this.modelCache.models;
+    }
+
     const client = await this.getClient();
-    return client.listModels();
+    try {
+      const models = await client.listModels();
+      this.modelCache = { models, timestamp: Date.now() };
+      return models;
+    } catch (err) {
+      // On failure, return stale cache if available
+      if (this.modelCache) {
+        log.warn('Failed to refresh model list, returning stale cache');
+        return this.modelCache.models;
+      }
+      throw err;
+    }
   }
 
   getGithubClientId(): string | undefined {

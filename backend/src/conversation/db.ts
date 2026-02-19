@@ -89,4 +89,32 @@ function migrate(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_tasks_conversation_id ON tasks(conversation_id, status);
   `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS cron_jobs (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('ai', 'shell')),
+      schedule_type TEXT NOT NULL CHECK(schedule_type IN ('cron', 'interval', 'once')),
+      schedule_value TEXT NOT NULL,
+      config TEXT NOT NULL DEFAULT '{}',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      last_run TEXT,
+      next_run TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS cron_history (
+      id TEXT PRIMARY KEY,
+      job_id TEXT NOT NULL REFERENCES cron_jobs(id) ON DELETE CASCADE,
+      started_at TEXT NOT NULL,
+      finished_at TEXT,
+      status TEXT NOT NULL CHECK(status IN ('success', 'error', 'timeout')),
+      output TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_cron_history_job_id ON cron_history(job_id, created_at DESC);
+  `);
 }

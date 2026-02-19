@@ -54,7 +54,7 @@ export function UsageBar({
 
   const hasTokens = inputTokens > 0 || outputTokens > 0;
   const hasContext = contextWindowMax > 0;
-  const hasPremium = premiumRequestsTotal > 0 || premiumUnlimited || effectivePremiumUsed > 0;
+  const hasPremium = premiumRequestsTotal > 0 || premiumUnlimited;
 
   if (!hasTokens && !hasContext && !hasPremium) return null;
 

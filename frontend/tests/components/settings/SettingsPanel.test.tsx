@@ -52,6 +52,7 @@ vi.mock('../../../src/lib/prompts-api', () => ({
 
 // Mock configApi and memoryApi
 vi.mock('../../../src/lib/api', () => ({
+  apiGet: vi.fn().mockResolvedValue({ currentVersion: '0.1.0', latestVersion: '0.1.0', updateAvailable: false }),
   configApi: {
     get: vi.fn().mockResolvedValue({ defaultCwd: '/home' }),
     getBraveApiKey: vi.fn().mockResolvedValue({ hasKey: false, maskedKey: '' }),
@@ -98,7 +99,7 @@ describe('SettingsPanel', () => {
       expect(screen.queryByTestId('settings-panel')).toBeNull();
     });
 
-    it('should render all 8 category tabs using i18n keys', () => {
+    it('should render all category tabs using i18n keys', () => {
       render(<SettingsPanel {...defaultProps} />);
       // Tab names should come from t('settings.tabs.*') — en.json values
       expect(screen.getByRole('tab', { name: /general/i })).toBeTruthy();
@@ -109,6 +110,7 @@ describe('SettingsPanel', () => {
       expect(screen.getByRole('tab', { name: /memory/i })).toBeTruthy();
       expect(screen.getByRole('tab', { name: /skills/i })).toBeTruthy();
       expect(screen.getByRole('tab', { name: /api keys/i })).toBeTruthy();
+      expect(screen.getByRole('tab', { name: /cron jobs/i })).toBeTruthy();
     });
 
     it('should default to System Prompt tab', () => {
@@ -631,6 +633,48 @@ describe('SettingsPanel', () => {
       fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
       await waitFor(() => {
         expect(screen.getByTestId('skill-toggle-tdd-workflow')).toBeTruthy();
+      });
+    });
+  });
+
+  // === ToggleSwitch integration (Presets + Skills) ===
+  describe('ToggleSwitch integration', () => {
+    it('should render accent toggle for active preset', async () => {
+      render(<SettingsPanel {...defaultProps} activePresets={['code-review']} />);
+      fireEvent.click(screen.getByRole('tab', { name: /presets/i }));
+      await waitFor(() => {
+        const toggle = screen.getByTestId('preset-toggle-code-review');
+        expect(toggle.className).toContain('bg-accent');
+      });
+    });
+
+    it('should render neutral toggle for inactive preset', async () => {
+      render(<SettingsPanel {...defaultProps} activePresets={[]} />);
+      fireEvent.click(screen.getByRole('tab', { name: /presets/i }));
+      await waitFor(() => {
+        const toggle = screen.getByTestId('preset-toggle-code-review');
+        expect(toggle.className).toContain('bg-bg-tertiary');
+        expect(toggle.className).not.toContain('bg-accent');
+      });
+    });
+
+    it('should render green toggle for enabled skill', async () => {
+      useAppStore.setState({ disabledSkills: [] });
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
+      await waitFor(() => {
+        const toggle = screen.getByTestId('skill-toggle-code-review');
+        expect(toggle.className).toContain('bg-accent');
+      });
+    });
+
+    it('should render neutral toggle for disabled skill', async () => {
+      useAppStore.setState({ disabledSkills: ['code-review'] });
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
+      await waitFor(() => {
+        const toggle = screen.getByTestId('skill-toggle-code-review');
+        expect(toggle.className).toContain('bg-bg-tertiary');
       });
     });
   });

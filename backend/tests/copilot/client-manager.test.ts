@@ -215,4 +215,60 @@ describe('ClientManager', () => {
       expect(mockClient.listModels).toHaveBeenCalledOnce();
     });
   });
+
+  describe('listModels TTL cache', () => {
+    it('should return cached models within 5 minutes without re-querying', async () => {
+      await manager.listModels();
+      expect(mockClient.listModels).toHaveBeenCalledTimes(1);
+
+      // Second call should use cache
+      const models = await manager.listModels();
+      expect(mockClient.listModels).toHaveBeenCalledTimes(1); // not called again
+      expect(models).toHaveLength(2);
+    });
+
+    it('should re-query after TTL expires (5 minutes)', async () => {
+      vi.useFakeTimers();
+      try {
+        await manager.listModels();
+        expect(mockClient.listModels).toHaveBeenCalledTimes(1);
+
+        // Advance time past 5 minutes
+        vi.advanceTimersByTime(5 * 60 * 1000 + 1);
+
+        await manager.listModels();
+        expect(mockClient.listModels).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should return stale cache on API failure', async () => {
+      // First call succeeds and populates cache
+      const models1 = await manager.listModels();
+      expect(models1).toHaveLength(2);
+
+      // Expire the cache
+      vi.useFakeTimers();
+      try {
+        vi.advanceTimersByTime(5 * 60 * 1000 + 1);
+
+        // Make next API call fail
+        mockClient.listModels.mockRejectedValueOnce(new Error('API down'));
+
+        // Should return stale cached data
+        const models2 = await manager.listModels();
+        expect(models2).toHaveLength(2);
+        expect(models2[0].id).toBe('gpt-5');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should throw on API failure when no cache exists', async () => {
+      mockClient.listModels.mockRejectedValueOnce(new Error('API down'));
+
+      await expect(manager.listModels()).rejects.toThrow('API down');
+    });
+  });
 });

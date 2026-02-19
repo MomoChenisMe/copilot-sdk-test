@@ -17,7 +17,7 @@ export default function PlanActToggle({ planMode, onToggle, disabled }: PlanActT
         onClick={() => onToggle(true)}
         className={`flex items-center gap-1 px-2 py-1.5 text-xs font-medium transition-colors ${
           planMode
-            ? 'bg-accent text-white'
+            ? 'border-accent text-accent bg-accent/10'
             : 'bg-bg-tertiary text-text-secondary hover:bg-bg-secondary'
         } disabled:opacity-50 disabled:cursor-not-allowed`}
       >
@@ -30,7 +30,7 @@ export default function PlanActToggle({ planMode, onToggle, disabled }: PlanActT
         onClick={() => onToggle(false)}
         className={`flex items-center gap-1 px-2 py-1.5 text-xs font-medium transition-colors ${
           !planMode
-            ? 'bg-accent text-white'
+            ? 'border-accent text-accent bg-accent/10'
             : 'bg-bg-tertiary text-text-secondary hover:bg-bg-secondary'
         } disabled:opacity-50 disabled:cursor-not-allowed`}
       >
