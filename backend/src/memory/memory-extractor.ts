@@ -1,5 +1,7 @@
 import type { MemoryStore } from './memory-store.js';
 import type { MemoryIndex } from './memory-index.js';
+import type { MemoryQualityGate } from './memory-gating.js';
+import type { LlmMemoryExtractor } from './llm-extractor.js';
 
 export interface ExtractorOptions {
   extractIntervalSeconds: number;
@@ -32,6 +34,8 @@ export class MemoryExtractor {
     private store: MemoryStore,
     private index: MemoryIndex,
     options: Partial<ExtractorOptions> = {},
+    private qualityGate?: MemoryQualityGate,
+    private llmExtractor?: LlmMemoryExtractor,
   ) {
     this.options = {
       extractIntervalSeconds: options.extractIntervalSeconds ?? 60,
@@ -77,7 +81,7 @@ export class MemoryExtractor {
    * Reconcile candidate facts against existing memory.
    * Determines add/update/skip for each candidate.
    */
-  reconcile(candidates: string[]): ReconcileAction[] {
+  reconcile(candidates: string[], categories?: Map<string, string>): ReconcileAction[] {
     const actions: ReconcileAction[] = [];
 
     for (const candidate of candidates) {
@@ -86,7 +90,8 @@ export class MemoryExtractor {
 
       if (existing.length === 0) {
         // No similar facts — add new
-        actions.push({ action: 'add', content: candidate, category: 'general' });
+        const category = categories?.get(candidate) ?? 'general';
+        actions.push({ action: 'add', content: candidate, category });
         continue;
       }
 
@@ -140,6 +145,31 @@ export class MemoryExtractor {
           break;
         }
       }
+    }
+  }
+
+  /**
+   * Smart extraction: use LLM when available, fallback to regex.
+   */
+  async extractCandidatesSmartly(messages: ConversationMessage[]): Promise<string[]> {
+    if (this.llmExtractor) {
+      const facts = await this.llmExtractor.extractFacts(messages);
+      if (facts && facts.length > 0) {
+        return facts.map((f) => f.content);
+      }
+    }
+    return this.extractCandidates(messages);
+  }
+
+  /**
+   * Apply actions with optional quality gate filtering.
+   */
+  async applyWithGating(actions: ReconcileAction[]): Promise<void> {
+    if (this.qualityGate) {
+      const result = await this.qualityGate.filter(actions);
+      this.apply(result.approved);
+    } else {
+      this.apply(actions);
     }
   }
 

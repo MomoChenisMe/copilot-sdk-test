@@ -26,6 +26,15 @@ describe('MemoryConfig', () => {
     expect(DEFAULT_MEMORY_CONFIG.flushThreshold).toBe(0.75);
     expect(DEFAULT_MEMORY_CONFIG.extractIntervalSeconds).toBe(60);
     expect(DEFAULT_MEMORY_CONFIG.minNewMessages).toBe(4);
+    // LLM intelligence defaults
+    expect(DEFAULT_MEMORY_CONFIG.llmGatingEnabled).toBe(false);
+    expect(DEFAULT_MEMORY_CONFIG.llmGatingModel).toBe('gpt-4o-mini');
+    expect(DEFAULT_MEMORY_CONFIG.llmExtractionEnabled).toBe(false);
+    expect(DEFAULT_MEMORY_CONFIG.llmExtractionModel).toBe('gpt-4o-mini');
+    expect(DEFAULT_MEMORY_CONFIG.llmExtractionMaxMessages).toBe(20);
+    expect(DEFAULT_MEMORY_CONFIG.llmCompactionEnabled).toBe(false);
+    expect(DEFAULT_MEMORY_CONFIG.llmCompactionModel).toBe('gpt-4o-mini');
+    expect(DEFAULT_MEMORY_CONFIG.llmCompactionFactThreshold).toBe(30);
   });
 
   it('readMemoryConfig returns defaults when no config file exists', () => {
@@ -40,6 +49,14 @@ describe('MemoryConfig', () => {
       flushThreshold: 0.5,
       extractIntervalSeconds: 120,
       minNewMessages: 8,
+      llmGatingEnabled: true,
+      llmGatingModel: 'gpt-4o',
+      llmExtractionEnabled: true,
+      llmExtractionModel: 'gpt-4o',
+      llmExtractionMaxMessages: 30,
+      llmCompactionEnabled: true,
+      llmCompactionModel: 'gpt-4o',
+      llmCompactionFactThreshold: 50,
     };
     writeMemoryConfig(tmpDir, custom);
     const read = readMemoryConfig(tmpDir);
@@ -57,6 +74,12 @@ describe('MemoryConfig', () => {
     expect(config.enabled).toBe(false);
     expect(config.autoExtract).toBe(DEFAULT_MEMORY_CONFIG.autoExtract);
     expect(config.flushThreshold).toBe(DEFAULT_MEMORY_CONFIG.flushThreshold);
+    // New LLM fields should use defaults when missing from file
+    expect(config.llmGatingEnabled).toBe(false);
+    expect(config.llmGatingModel).toBe('gpt-4o-mini');
+    expect(config.llmExtractionEnabled).toBe(false);
+    expect(config.llmCompactionEnabled).toBe(false);
+    expect(config.llmCompactionFactThreshold).toBe(30);
   });
 
   it('readMemoryConfig handles corrupted file gracefully', () => {

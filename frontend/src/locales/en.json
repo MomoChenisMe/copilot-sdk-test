@@ -158,7 +158,16 @@
       "solutions": "Solutions",
       "autoMemory": "Auto Memory",
       "autoExtract": "Auto Extract",
-      "totalFacts": "Total facts"
+      "totalFacts": "Total facts",
+      "llmIntelligence": "LLM Intelligence",
+      "llmGating": "LLM Quality Gate",
+      "llmGatingDesc": "Use LLM to filter low-quality facts before saving. Only concrete, persistent preferences and project info will be kept.",
+      "llmExtraction": "LLM Smart Extraction",
+      "llmExtractionDesc": "Use LLM to extract implicit preferences and context from conversations, replacing regex-based extraction.",
+      "llmCompaction": "LLM Memory Compaction",
+      "llmCompactionDesc": "Periodically use LLM to merge duplicates, remove outdated facts, and organize memory.",
+      "compactNow": "Compact Now",
+      "selectModel": "Model"
     },
     "deleteDialog": {
       "message": "Are you sure you want to delete this item?",

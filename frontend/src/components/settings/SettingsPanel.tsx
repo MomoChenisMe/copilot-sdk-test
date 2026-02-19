@@ -7,6 +7,7 @@ import type { PresetItem, MemoryItem, SkillItem } from '../../lib/prompts-api';
 import { memoryApi as autoMemoryApi } from '../../lib/api';
 import type { MemoryConfig, MemoryStats } from '../../lib/api';
 import { useAppStore } from '../../store';
+import type { ModelInfo } from '../../store';
 import { Markdown } from '../shared/Markdown';
 import { ApiKeysTab } from './ApiKeysTab';
 import { McpTab } from './McpTab';
@@ -594,6 +595,50 @@ function MemoryTab() {
     }
   }, [autoMemConfig, t]);
 
+  const handleToggleLlmConfig = useCallback(async (key: 'llmGatingEnabled' | 'llmExtractionEnabled' | 'llmCompactionEnabled') => {
+    if (!autoMemConfig) return;
+    const updated = { ...autoMemConfig, [key]: !autoMemConfig[key] };
+    try {
+      await autoMemoryApi.putConfig(updated);
+      setAutoMemConfig(updated);
+    } catch {
+      setToast(t('settings.toast.saveFailed', 'Save failed'));
+      setTimeout(() => setToast(null), 2000);
+    }
+  }, [autoMemConfig, t]);
+
+  const models = useAppStore((s) => s.models);
+
+  const handleLlmModelChange = useCallback(async (key: 'llmGatingModel' | 'llmExtractionModel' | 'llmCompactionModel', value: string) => {
+    if (!autoMemConfig) return;
+    const updated = { ...autoMemConfig, [key]: value };
+    try {
+      await autoMemoryApi.putConfig(updated);
+      setAutoMemConfig(updated);
+    } catch {
+      setToast(t('settings.toast.saveFailed', 'Save failed'));
+      setTimeout(() => setToast(null), 2000);
+    }
+  }, [autoMemConfig, t]);
+
+  const handleCompactMemory = useCallback(async () => {
+    try {
+      const result = await autoMemoryApi.compactMemory();
+      if (result.beforeCount !== undefined) {
+        setToast(`Compacted: ${result.beforeCount} → ${result.afterCount}`);
+      } else {
+        setToast(result.message ?? 'Compaction skipped');
+      }
+      // Refresh stats
+      const stats = await autoMemoryApi.getStats();
+      setAutoMemStats(stats);
+      setTimeout(() => setToast(null), 3000);
+    } catch {
+      setToast(t('settings.toast.saveFailed', 'Save failed'));
+      setTimeout(() => setToast(null), 2000);
+    }
+  }, [t]);
+
   const handleSavePrefs = useCallback(async () => {
     try {
       await memoryApi.putPreferences(prefsContent);
@@ -785,6 +830,118 @@ function MemoryTab() {
             {t('settings.memory.totalFacts', 'Total facts')}: {autoMemStats.totalFacts}
           </div>
         )}
+      </section>
+
+      {/* LLM Intelligence */}
+      <section data-testid="llm-intelligence-section">
+        <h3 className="text-xs font-semibold text-text-secondary uppercase mb-2">{t('settings.memory.llmIntelligence', 'LLM Intelligence')}</h3>
+
+        <div className="flex flex-col gap-3">
+          {/* Quality Gate */}
+          <div>
+            <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer">
+              <input
+                data-testid="llm-gating-toggle"
+                type="checkbox"
+                checked={autoMemConfig?.llmGatingEnabled ?? false}
+                onChange={() => handleToggleLlmConfig('llmGatingEnabled')}
+                className="rounded"
+              />
+              {t('settings.memory.llmGating', 'LLM Quality Gate')}
+            </label>
+            <p data-testid="llm-gating-desc" className="text-[11px] text-text-secondary/70 mt-0.5 ml-5">
+              {t('settings.memory.llmGatingDesc')}
+            </p>
+            {autoMemConfig?.llmGatingEnabled && (
+              <div className="mt-1 ml-5 flex items-center gap-2">
+                <span className="text-[11px] text-text-secondary">{t('settings.memory.selectModel', 'Model')}:</span>
+                <select
+                  data-testid="llm-gating-model"
+                  value={autoMemConfig?.llmGatingModel ?? 'gpt-4o-mini'}
+                  onChange={(e) => handleLlmModelChange('llmGatingModel', e.target.value)}
+                  className="text-xs bg-bg-secondary border border-border rounded px-1.5 py-0.5 text-text-primary"
+                >
+                  {models.map((m: ModelInfo) => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Smart Extraction */}
+          <div>
+            <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer">
+              <input
+                data-testid="llm-extraction-toggle"
+                type="checkbox"
+                checked={autoMemConfig?.llmExtractionEnabled ?? false}
+                onChange={() => handleToggleLlmConfig('llmExtractionEnabled')}
+                className="rounded"
+              />
+              {t('settings.memory.llmExtraction', 'LLM Smart Extraction')}
+            </label>
+            <p data-testid="llm-extraction-desc" className="text-[11px] text-text-secondary/70 mt-0.5 ml-5">
+              {t('settings.memory.llmExtractionDesc')}
+            </p>
+            {autoMemConfig?.llmExtractionEnabled && (
+              <div className="mt-1 ml-5 flex items-center gap-2">
+                <span className="text-[11px] text-text-secondary">{t('settings.memory.selectModel', 'Model')}:</span>
+                <select
+                  data-testid="llm-extraction-model"
+                  value={autoMemConfig?.llmExtractionModel ?? 'gpt-4o-mini'}
+                  onChange={(e) => handleLlmModelChange('llmExtractionModel', e.target.value)}
+                  className="text-xs bg-bg-secondary border border-border rounded px-1.5 py-0.5 text-text-primary"
+                >
+                  {models.map((m: ModelInfo) => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Compaction */}
+          <div>
+            <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer">
+              <input
+                data-testid="llm-compaction-toggle"
+                type="checkbox"
+                checked={autoMemConfig?.llmCompactionEnabled ?? false}
+                onChange={() => handleToggleLlmConfig('llmCompactionEnabled')}
+                className="rounded"
+              />
+              {t('settings.memory.llmCompaction', 'LLM Memory Compaction')}
+            </label>
+            <p data-testid="llm-compaction-desc" className="text-[11px] text-text-secondary/70 mt-0.5 ml-5">
+              {t('settings.memory.llmCompactionDesc')}
+            </p>
+            {autoMemConfig?.llmCompactionEnabled && (
+              <div className="mt-1 ml-5 flex items-center gap-2">
+                <span className="text-[11px] text-text-secondary">{t('settings.memory.selectModel', 'Model')}:</span>
+                <select
+                  data-testid="llm-compaction-model"
+                  value={autoMemConfig?.llmCompactionModel ?? 'gpt-4o-mini'}
+                  onChange={(e) => handleLlmModelChange('llmCompactionModel', e.target.value)}
+                  className="text-xs bg-bg-secondary border border-border rounded px-1.5 py-0.5 text-text-primary"
+                >
+                  {models.map((m: ModelInfo) => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Manual Compact Button */}
+          <button
+            data-testid="compact-memory-button"
+            onClick={handleCompactMemory}
+            className="self-start mt-1 px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-bg-tertiary text-text-secondary"
+          >
+            {t('settings.memory.compactNow', 'Compact Now')}
+          </button>
+        </div>
       </section>
 
       {/* Delete Confirmation Dialog */}

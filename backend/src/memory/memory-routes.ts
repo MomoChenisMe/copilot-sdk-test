@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { MemoryStore } from './memory-store.js';
 import type { MemoryIndex } from './memory-index.js';
+import type { MemoryCompactor } from './memory-compaction.js';
 import { readMemoryConfig, writeMemoryConfig } from './memory-config.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -9,6 +10,7 @@ export function createAutoMemoryRoutes(
   store: MemoryStore,
   index: MemoryIndex,
   configPath: string,
+  compactor?: MemoryCompactor,
 ): Router {
   const router = Router();
 
@@ -75,6 +77,20 @@ export function createAutoMemoryRoutes(
     const stats = index.getStats();
     const dailyCount = store.listDailyLogs().length;
     res.json({ ...stats, dailyLogCount: dailyCount });
+  });
+
+  // POST /compact — trigger memory compaction
+  router.post('/compact', async (req, res) => {
+    if (!compactor) {
+      res.status(400).json({ error: 'Memory compaction is not enabled' });
+      return;
+    }
+    const result = await compactor.compact();
+    if (result) {
+      res.json(result);
+    } else {
+      res.json({ message: 'Compaction skipped or failed. No changes made.' });
+    }
   });
 
   return router;

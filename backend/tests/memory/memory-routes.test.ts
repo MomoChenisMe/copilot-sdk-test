@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -8,6 +8,7 @@ import Database from 'better-sqlite3';
 import { createAutoMemoryRoutes } from '../../src/memory/memory-routes.js';
 import { MemoryStore } from '../../src/memory/memory-store.js';
 import { MemoryIndex } from '../../src/memory/memory-index.js';
+import type { MemoryCompactor } from '../../src/memory/memory-compaction.js';
 
 describe('Auto Memory Routes', () => {
   let tmpDir: string;
@@ -122,6 +123,49 @@ describe('Auto Memory Routes', () => {
       const res = await request(app).get('/api/auto-memory/stats');
       expect(res.status).toBe(200);
       expect(res.body.totalFacts).toBe(2);
+    });
+  });
+
+  describe('POST /compact', () => {
+    it('returns 400 when no compactor is configured', async () => {
+      const res = await request(app).post('/api/auto-memory/compact');
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBeDefined();
+    });
+
+    it('returns compaction result on success', async () => {
+      const mockCompactor = {
+        compact: vi.fn().mockResolvedValue({ beforeCount: 10, afterCount: 5 }),
+      } as unknown as MemoryCompactor;
+
+      const appWithCompactor = express();
+      appWithCompactor.use(express.json());
+      appWithCompactor.use(
+        '/api/auto-memory',
+        createAutoMemoryRoutes(store, index, tmpDir, mockCompactor),
+      );
+
+      const res = await request(appWithCompactor).post('/api/auto-memory/compact');
+      expect(res.status).toBe(200);
+      expect(res.body.beforeCount).toBe(10);
+      expect(res.body.afterCount).toBe(5);
+    });
+
+    it('returns message when compact returns null', async () => {
+      const mockCompactor = {
+        compact: vi.fn().mockResolvedValue(null),
+      } as unknown as MemoryCompactor;
+
+      const appWithCompactor = express();
+      appWithCompactor.use(express.json());
+      appWithCompactor.use(
+        '/api/auto-memory',
+        createAutoMemoryRoutes(store, index, tmpDir, mockCompactor),
+      );
+
+      const res = await request(appWithCompactor).post('/api/auto-memory/compact');
+      expect(res.status).toBe(200);
+      expect(res.body.message).toBeDefined();
     });
   });
 });

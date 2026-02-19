@@ -48,6 +48,10 @@ import { createAutoMemoryRoutes } from './memory/memory-routes.js';
 import { MemoryExtractor } from './memory/memory-extractor.js';
 import { CompactionMonitor } from './memory/compaction-monitor.js';
 import { readMemoryConfig } from './memory/memory-config.js';
+import { MemoryLlmCaller } from './memory/llm-caller.js';
+import { MemoryQualityGate } from './memory/memory-gating.js';
+import { LlmMemoryExtractor } from './memory/llm-extractor.js';
+import { MemoryCompactor } from './memory/memory-compaction.js';
 import { CronStore } from './cron/cron-store.js';
 import { CronScheduler } from './cron/cron-scheduler.js';
 import { createCronRoutes } from './cron/cron-routes.js';
@@ -79,16 +83,6 @@ export function createApp() {
   const memoryIndex = new MemoryIndex(memoryDb);
   memoryIndex.reindexFromFiles(memoryStore);
   const memoryConfig = readMemoryConfig(memoryBasePath);
-  const memoryExtractor = new MemoryExtractor(memoryStore, memoryIndex, {
-    extractIntervalSeconds: memoryConfig.extractIntervalSeconds,
-    minNewMessages: memoryConfig.minNewMessages,
-  });
-  const compactionMonitor = new CompactionMonitor({
-    flushThreshold: memoryConfig.flushThreshold,
-    onFlush: (conversationId) => {
-      log.info({ conversationId }, 'Compaction flush triggered — extracting memory');
-    },
-  });
 
   // Skills file stores
   const skillStore = new SkillFileStore(config.skillsPath);
@@ -103,6 +97,43 @@ export function createApp() {
     githubClientId: config.githubClientId,
   });
   const sessionManager = new SessionManager(clientManager);
+
+  // LLM components for memory intelligence
+  let memoryQualityGate: MemoryQualityGate | undefined;
+  let llmMemoryExtractor: LlmMemoryExtractor | undefined;
+  let memoryCompactor: MemoryCompactor | undefined;
+
+  const anyLlmEnabled = memoryConfig.llmGatingEnabled || memoryConfig.llmExtractionEnabled || memoryConfig.llmCompactionEnabled;
+  if (anyLlmEnabled) {
+    if (memoryConfig.llmGatingEnabled) {
+      const gatingCaller = new MemoryLlmCaller({ clientManager, model: memoryConfig.llmGatingModel });
+      memoryQualityGate = new MemoryQualityGate(gatingCaller);
+      log.info('Memory LLM quality gate enabled');
+    }
+    if (memoryConfig.llmExtractionEnabled) {
+      const extractionCaller = new MemoryLlmCaller({ clientManager, model: memoryConfig.llmExtractionModel });
+      llmMemoryExtractor = new LlmMemoryExtractor(extractionCaller, memoryConfig.llmExtractionMaxMessages);
+      log.info('Memory LLM extraction enabled');
+    }
+    if (memoryConfig.llmCompactionEnabled) {
+      const compactionCaller = new MemoryLlmCaller({ clientManager, model: memoryConfig.llmCompactionModel });
+      memoryCompactor = new MemoryCompactor(compactionCaller, memoryStore, memoryIndex, {
+        factCountThreshold: memoryConfig.llmCompactionFactThreshold,
+      });
+      log.info('Memory LLM compaction enabled');
+    }
+  }
+
+  const memoryExtractor = new MemoryExtractor(memoryStore, memoryIndex, {
+    extractIntervalSeconds: memoryConfig.extractIntervalSeconds,
+    minNewMessages: memoryConfig.minNewMessages,
+  }, memoryQualityGate, llmMemoryExtractor);
+  const compactionMonitor = new CompactionMonitor({
+    flushThreshold: memoryConfig.flushThreshold,
+    onFlush: (conversationId) => {
+      log.info({ conversationId }, 'Compaction flush triggered — extracting memory');
+    },
+  });
 
   // MCP Manager
   const mcpManager = new McpManager();
@@ -129,7 +160,7 @@ export function createApp() {
   app.use('/api/memory', authMiddleware, createMemoryRoutes(promptStore));
   app.use('/api/skills', authMiddleware, createSkillsRoutes(skillStore, builtinSkillStore));
   app.use('/api/upload', authMiddleware, createUploadRoutes(path.resolve(config.dbPath, '../uploads')));
-  app.use('/api/auto-memory', authMiddleware, createAutoMemoryRoutes(memoryStore, memoryIndex, memoryBasePath));
+  app.use('/api/auto-memory', authMiddleware, createAutoMemoryRoutes(memoryStore, memoryIndex, memoryBasePath, memoryCompactor));
   app.use('/api/directories', authMiddleware, createDirectoryRoutes());
 
   // Config routes (Brave API key etc.) — mounted after streamManager below
@@ -249,13 +280,24 @@ export function createApp() {
         const mapped = messages
           .filter((m: any) => m.role === 'user' || m.role === 'assistant')
           .map((m: any) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
-        const candidates = memoryExtractor.extractCandidates(mapped);
+        const candidates = await memoryExtractor.extractCandidatesSmartly(mapped);
         if (candidates.length > 0) {
           const actions = memoryExtractor.reconcile(candidates);
-          memoryExtractor.apply(actions);
+          await memoryExtractor.applyWithGating(actions);
           log.info({ conversationId, candidates: candidates.length, actions: actions.length }, 'Memory extraction completed');
         }
         memoryExtractor.markExtracted(conversationId);
+
+        // Trigger compaction if needed (non-blocking)
+        if (memoryCompactor?.shouldCompact()) {
+          memoryCompactor.compact().then((result) => {
+            if (result) {
+              log.info({ before: result.beforeCount, after: result.afterCount }, 'Memory compaction completed');
+            }
+          }).catch((err) => {
+            log.error({ err }, 'Memory compaction failed');
+          });
+        }
       } catch (err) {
         log.error({ err, conversationId }, 'Memory extraction failed');
       }

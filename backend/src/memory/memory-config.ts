@@ -7,6 +7,15 @@ export interface MemoryConfig {
   flushThreshold: number;
   extractIntervalSeconds: number;
   minNewMessages: number;
+  // LLM Intelligence
+  llmGatingEnabled: boolean;
+  llmGatingModel: string;
+  llmExtractionEnabled: boolean;
+  llmExtractionModel: string;
+  llmExtractionMaxMessages: number;
+  llmCompactionEnabled: boolean;
+  llmCompactionModel: string;
+  llmCompactionFactThreshold: number;
 }
 
 export const DEFAULT_MEMORY_CONFIG: MemoryConfig = {
@@ -15,6 +24,15 @@ export const DEFAULT_MEMORY_CONFIG: MemoryConfig = {
   flushThreshold: 0.75,
   extractIntervalSeconds: 60,
   minNewMessages: 4,
+  // LLM Intelligence — all disabled by default
+  llmGatingEnabled: false,
+  llmGatingModel: 'gpt-4o-mini',
+  llmExtractionEnabled: false,
+  llmExtractionModel: 'gpt-4o-mini',
+  llmExtractionMaxMessages: 20,
+  llmCompactionEnabled: false,
+  llmCompactionModel: 'gpt-4o-mini',
+  llmCompactionFactThreshold: 30,
 };
 
 const CONFIG_FILE = 'memory-config.json';

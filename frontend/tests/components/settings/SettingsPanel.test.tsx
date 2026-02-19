@@ -63,9 +63,15 @@ vi.mock('../../../src/lib/api', () => ({
     putMain: vi.fn().mockResolvedValue({ ok: true }),
     listDailyLogs: vi.fn().mockResolvedValue({ dates: ['2026-02-17'] }),
     searchMemory: vi.fn().mockResolvedValue({ results: [{ content: 'TypeScript fact', category: 'general', source: 'MEMORY.md' }] }),
-    getConfig: vi.fn().mockResolvedValue({ enabled: true, autoExtract: true, flushThreshold: 0.75, extractIntervalSeconds: 60, minNewMessages: 4 }),
+    getConfig: vi.fn().mockResolvedValue({
+      enabled: true, autoExtract: true, flushThreshold: 0.75, extractIntervalSeconds: 60, minNewMessages: 4,
+      llmGatingEnabled: false, llmGatingModel: 'gpt-4o-mini',
+      llmExtractionEnabled: false, llmExtractionModel: 'gpt-4o-mini', llmExtractionMaxMessages: 20,
+      llmCompactionEnabled: false, llmCompactionModel: 'gpt-4o-mini', llmCompactionFactThreshold: 30,
+    }),
     putConfig: vi.fn().mockResolvedValue({ ok: true }),
     getStats: vi.fn().mockResolvedValue({ totalFacts: 5, dailyLogCount: 2 }),
+    compactMemory: vi.fn().mockResolvedValue({ beforeCount: 10, afterCount: 5 }),
   },
 }));
 
@@ -686,6 +692,133 @@ describe('SettingsPanel', () => {
       fireEvent.click(screen.getByRole('tab', { name: /api keys/i }));
       await waitFor(() => {
         expect(screen.getByTestId('brave-api-key-input')).toBeTruthy();
+      });
+    });
+  });
+
+  describe('LLM Memory Intelligence (Memory tab)', () => {
+    it('should show LLM quality gate toggle in Memory tab', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('llm-gating-toggle')).toBeTruthy();
+      });
+    });
+
+    it('should show LLM extraction toggle in Memory tab', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('llm-extraction-toggle')).toBeTruthy();
+      });
+    });
+
+    it('should show LLM compaction toggle in Memory tab', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('llm-compaction-toggle')).toBeTruthy();
+      });
+    });
+
+    it('should show compact button in Memory tab', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('compact-memory-button')).toBeTruthy();
+      });
+    });
+
+    it('should toggle LLM gating and update config', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('llm-gating-toggle')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('llm-gating-toggle'));
+
+      await waitFor(() => {
+        expect(autoMemoryApi.putConfig).toHaveBeenCalledWith(
+          expect.objectContaining({ llmGatingEnabled: true }),
+        );
+      });
+    });
+  });
+
+  describe('LLM Memory UI Enhancement (Memory tab)', () => {
+    it('should show description text under each LLM toggle', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('llm-gating-desc')).toBeTruthy();
+        expect(screen.getByTestId('llm-extraction-desc')).toBeTruthy();
+        expect(screen.getByTestId('llm-compaction-desc')).toBeTruthy();
+      });
+    });
+
+    it('should show model selector when LLM gating is enabled', async () => {
+      (autoMemoryApi.getConfig as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        enabled: true, autoExtract: true, flushThreshold: 0.75, extractIntervalSeconds: 60, minNewMessages: 4,
+        llmGatingEnabled: true, llmGatingModel: 'gpt-4o-mini',
+        llmExtractionEnabled: false, llmExtractionModel: 'gpt-4o-mini', llmExtractionMaxMessages: 20,
+        llmCompactionEnabled: false, llmCompactionModel: 'gpt-4o-mini', llmCompactionFactThreshold: 30,
+      });
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('llm-gating-model')).toBeTruthy();
+      });
+    });
+
+    it('should NOT show model selector when LLM gating is disabled', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('llm-gating-toggle')).toBeTruthy();
+      });
+      expect(screen.queryByTestId('llm-gating-model')).toBeNull();
+    });
+
+    it('should update config when model is changed', async () => {
+      // Set up store with models
+      const { useAppStore } = await import('../../../src/store/index');
+      useAppStore.setState({ models: [{ id: 'gpt-4o-mini', name: 'GPT-4o Mini' }, { id: 'gpt-4o', name: 'GPT-4o' }] });
+
+      (autoMemoryApi.getConfig as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        enabled: true, autoExtract: true, flushThreshold: 0.75, extractIntervalSeconds: 60, minNewMessages: 4,
+        llmGatingEnabled: true, llmGatingModel: 'gpt-4o-mini',
+        llmExtractionEnabled: false, llmExtractionModel: 'gpt-4o-mini', llmExtractionMaxMessages: 20,
+        llmCompactionEnabled: false, llmCompactionModel: 'gpt-4o-mini', llmCompactionFactThreshold: 30,
+      });
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('llm-gating-model')).toBeTruthy();
+      });
+
+      fireEvent.change(screen.getByTestId('llm-gating-model'), { target: { value: 'gpt-4o' } });
+
+      await waitFor(() => {
+        expect(autoMemoryApi.putConfig).toHaveBeenCalledWith(
+          expect.objectContaining({ llmGatingModel: 'gpt-4o' }),
+        );
+      });
+    });
+
+    it('should show model selectors for all enabled LLM features', async () => {
+      (autoMemoryApi.getConfig as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        enabled: true, autoExtract: true, flushThreshold: 0.75, extractIntervalSeconds: 60, minNewMessages: 4,
+        llmGatingEnabled: true, llmGatingModel: 'gpt-4o-mini',
+        llmExtractionEnabled: true, llmExtractionModel: 'gpt-4o-mini', llmExtractionMaxMessages: 20,
+        llmCompactionEnabled: true, llmCompactionModel: 'gpt-4o-mini', llmCompactionFactThreshold: 30,
+      });
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('llm-gating-model')).toBeTruthy();
+        expect(screen.getByTestId('llm-extraction-model')).toBeTruthy();
+        expect(screen.getByTestId('llm-compaction-model')).toBeTruthy();
       });
     });
   });

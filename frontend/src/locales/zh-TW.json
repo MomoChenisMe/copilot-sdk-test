@@ -158,7 +158,16 @@
       "solutions": "解決方案",
       "autoMemory": "自動記憶",
       "autoExtract": "自動提取",
-      "totalFacts": "記憶事實總數"
+      "totalFacts": "記憶事實總數",
+      "llmIntelligence": "LLM 智慧判斷",
+      "llmGating": "LLM 品質閘門",
+      "llmGatingDesc": "使用 LLM 過濾低品質的記憶事實，僅保留具體且持久的使用者偏好與專案資訊。",
+      "llmExtraction": "LLM 智慧提取",
+      "llmExtractionDesc": "使用 LLM 從對話中提取隱含的偏好與上下文，取代正則表達式提取。",
+      "llmCompaction": "LLM 記憶壓縮",
+      "llmCompactionDesc": "定期使用 LLM 合併重複事實、移除過時資訊、整理記憶內容。",
+      "compactNow": "立即壓縮",
+      "selectModel": "模型"
     },
     "deleteDialog": {
       "message": "確定要刪除此項目嗎？",

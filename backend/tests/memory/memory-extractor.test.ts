@@ -117,6 +117,110 @@ describe('MemoryExtractor', () => {
     });
   });
 
+  describe('extractCandidatesSmartly', () => {
+    it('uses LLM result when llmExtractor succeeds', async () => {
+      const mockLlmExtractor = {
+        extractFacts: vi.fn().mockResolvedValue([
+          { content: 'Prefers TypeScript', category: 'preference', confidence: 0.9 },
+          { content: 'Uses React 19', category: 'project', confidence: 0.85 },
+        ]),
+      };
+      const smartExtractor = new MemoryExtractor(store, index, {}, undefined, mockLlmExtractor as any);
+
+      const messages = [
+        { role: 'user' as const, content: 'Some message' },
+      ];
+      const candidates = await smartExtractor.extractCandidatesSmartly(messages);
+
+      expect(candidates).toEqual(['Prefers TypeScript', 'Uses React 19']);
+    });
+
+    it('falls back to regex when LLM returns null', async () => {
+      const mockLlmExtractor = {
+        extractFacts: vi.fn().mockResolvedValue(null),
+      };
+      const smartExtractor = new MemoryExtractor(store, index, {}, undefined, mockLlmExtractor as any);
+
+      const messages = [
+        { role: 'user' as const, content: 'I always use pnpm for package management' },
+      ];
+      const candidates = await smartExtractor.extractCandidatesSmartly(messages);
+
+      expect(candidates.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('falls back to regex when LLM returns empty array', async () => {
+      const mockLlmExtractor = {
+        extractFacts: vi.fn().mockResolvedValue([]),
+      };
+      const smartExtractor = new MemoryExtractor(store, index, {}, undefined, mockLlmExtractor as any);
+
+      const messages = [
+        { role: 'user' as const, content: 'I always use pnpm for package management' },
+      ];
+      const candidates = await smartExtractor.extractCandidatesSmartly(messages);
+
+      // Should fallback to regex since LLM returned empty
+      expect(candidates.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('uses regex directly when no llmExtractor is set', async () => {
+      const messages = [
+        { role: 'user' as const, content: 'I always use pnpm for package management' },
+      ];
+      const candidates = await extractor.extractCandidatesSmartly(messages);
+
+      expect(candidates.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('passes LLM categories to reconcile', () => {
+      const categories = new Map<string, string>();
+      categories.set('Prefers TypeScript', 'preference');
+      categories.set('Uses React', 'project');
+
+      const actions = extractor.reconcile(['Prefers TypeScript', 'Uses React'], categories);
+
+      expect(actions[0].category).toBe('preference');
+      expect(actions[1].category).toBe('project');
+    });
+  });
+
+  describe('applyWithGating', () => {
+    it('only applies approved actions when qualityGate is set', async () => {
+      const mockGate = {
+        filter: vi.fn().mockResolvedValue({
+          approved: [{ action: 'add' as const, content: 'Approved fact', category: 'general' }],
+          rejected: [{ action: { action: 'add' as const, content: 'Rejected fact', category: 'general' }, reason: 'vague' }],
+        }),
+      };
+      const gatedExtractor = new MemoryExtractor(store, index, {}, mockGate as any);
+
+      const actions = [
+        { action: 'add' as const, content: 'Approved fact', category: 'general' },
+        { action: 'add' as const, content: 'Rejected fact', category: 'general' },
+      ];
+
+      await gatedExtractor.applyWithGating(actions);
+
+      const memory = store.readMemory();
+      expect(memory).toContain('Approved fact');
+      expect(memory).not.toContain('Rejected fact');
+    });
+
+    it('applies all actions when no qualityGate is set', async () => {
+      const actions = [
+        { action: 'add' as const, content: 'Fact A', category: 'general' },
+        { action: 'add' as const, content: 'Fact B', category: 'general' },
+      ];
+
+      await extractor.applyWithGating(actions);
+
+      const memory = store.readMemory();
+      expect(memory).toContain('Fact A');
+      expect(memory).toContain('Fact B');
+    });
+  });
+
   describe('throttling', () => {
     it('shouldExtract returns false if not enough messages', () => {
       expect(extractor.shouldExtract('conv-1', 2)).toBe(false);

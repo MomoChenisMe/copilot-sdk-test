@@ -174,6 +174,14 @@ export interface MemoryConfig {
   flushThreshold: number;
   extractIntervalSeconds: number;
   minNewMessages: number;
+  llmGatingEnabled: boolean;
+  llmGatingModel: string;
+  llmExtractionEnabled: boolean;
+  llmExtractionModel: string;
+  llmExtractionMaxMessages: number;
+  llmCompactionEnabled: boolean;
+  llmCompactionModel: string;
+  llmCompactionFactThreshold: number;
 }
 
 export interface MemorySearchResult {
@@ -197,6 +205,7 @@ export const memoryApi = {
   getConfig: () => apiGet<MemoryConfig>('/api/auto-memory/config'),
   putConfig: (config: Partial<MemoryConfig>) => apiPut<{ ok: true }>('/api/auto-memory/config', config),
   getStats: () => apiGet<MemoryStats>('/api/auto-memory/stats'),
+  compactMemory: () => apiPost<{ beforeCount?: number; afterCount?: number; message?: string }>('/api/auto-memory/compact'),
 };
 
 // --- Directory API ---
