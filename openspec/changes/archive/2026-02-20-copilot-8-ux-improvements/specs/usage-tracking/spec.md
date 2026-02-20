@@ -23,12 +23,12 @@ UsageBar 折疊視圖 SHALL 僅顯示 token 統計和 context window 進度條�
 
 ### Requirement: Premium Badge 獨立顯示
 
-系統 SHALL 在 UsageBar 的 token 計數旁顯示獨立的 premium request badge，資料來源為全局 store 的 `premiumQuota`。
+系統 SHALL 在輸入框內部（附件按鈕左側）顯示獨立的 premium request badge，資料來源為全局 store 的 `premiumQuota`，透過 Input 組件的 `statusText` prop 傳入。
 
 #### Scenario: Badge 基本顯示
 
 - **WHEN** 全局 store 的 `premiumQuota` 不為 null 且 `unlimited === false`
-- **THEN** MUST 在 UsageBar 同一行右側顯示 `{used}/{total} PR` 格式的 badge
+- **THEN** MUST 在輸入框內附件按鈕左側顯示 `{used}/{total} PR` 格式的 badge
 - **AND** 樣式 MUST 為 `text-[10px] text-text-muted tabular-nums`
 
 #### Scenario: Unlimited 顯示

@@ -41,11 +41,11 @@ Copilot 聊天介面目前有數個 UX 短板：SkillsTab 使用 `useState` 本�
 
 在 StreamManager 新增 `quotaCache` 物件，每次 `copilot:quota` 事件更新它。新增 `GET /api/copilot/quota` endpoint 回傳 cache。前端 `useQuota` hook 在 AppShell 初始化時 fetch，每 30 秒自動刷新。
 
-**替代方案 A**: 直接呼叫 GitHub Copilot API 查詢 quota → SDK 沒有提供獨立的 quota 查詢方法，需要自行實作 API 呼叫，且認證複雜。
+當 cache 為空時（如 App 剛啟動），endpoint 透過 `clientManager.getQuota()` 使用 SDK 的 `client.rpc.account.getQuota()` 主動查詢 GitHub Copilot API 作為 fallback，並回填 cache。
 
-**替代方案 B**: 持久化 cache 到 SQLite → 過度設計，in-memory 已足夠（server 重啟後第一次 streaming 即可重建 cache）。
+**替代方案 A**: 持久化 cache 到 SQLite → 過度設計，in-memory + SDK fallback 已足夠。
 
-**選擇理由**: 務實且簡單，利用既有的 streaming 事件資料。
+**選擇理由**: 利用 SDK 內建的 server-scoped RPC 查詢，App 啟動時即可取得 quota 資料。
 
 ### D4: ContextCard 組件 — metadata 驅動渲染
 

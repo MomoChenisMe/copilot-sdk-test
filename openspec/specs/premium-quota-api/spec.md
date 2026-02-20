@@ -9,10 +9,12 @@
 - **WHEN** 後端已收到至少一次 `copilot:quota` streaming 事件
 - **THEN** API SHALL 回傳 HTTP 200 和 `{ quota: { used: number, total: number, resetDate: string | null, unlimited: boolean, updatedAt: string } }`
 
-#### Scenario: 無 quota 快取（冷啟動）
+#### Scenario: 無 quota 快取（冷啟動）— SDK 即時查詢
 
-- **WHEN** 後端從未收到 `copilot:quota` 事件（如 server 剛啟動）
-- **THEN** API SHALL 回傳 HTTP 200 和 `{ quota: null }`
+- **WHEN** 後端從未收到 `copilot:quota` 事件且 cache 為空
+- **THEN** API SHALL 透過 `clientManager.getQuota()`（使用 SDK 的 `client.rpc.account.getQuota()`）主動查詢 GitHub Copilot API
+- **AND** 若查詢成功，MUST 更新 `quotaCache` 並回傳 quota 資料
+- **AND** 若查詢失敗，SHALL 回傳 HTTP 200 和 `{ quota: null }`
 
 #### Scenario: Quota 快取更新
 

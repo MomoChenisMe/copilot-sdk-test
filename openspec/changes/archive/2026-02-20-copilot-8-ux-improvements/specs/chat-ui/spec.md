@@ -19,4 +19,10 @@
 
 - **WHEN** Input 組件被 ChatView 引用
 - **THEN** Input MUST 透過 `forwardRef` + `useImperativeHandle` 暴露 `focus()` 方法
-- **AND** ChatView MUST 在偵測到新 Tab（tabId 變更 + messages 為空）時呼叫此方法
+- **AND** ChatView MUST 在偵測到新 Tab（tabId 變更 + messages 為空）時透過 `requestAnimationFrame` 呼叫此方法，確保 DOM 已就緒
+
+#### Scenario: Input 組件支援 statusText
+
+- **WHEN** ChatView 傳入 `statusText` prop 至 Input 組件
+- **THEN** Input MUST 在附件按鈕左側渲染該文字
+- **AND** 樣式 MUST 為 `text-[10px] text-text-muted tabular-nums`
