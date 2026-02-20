@@ -1,118 +1,131 @@
-## MODIFIED Requirements
-
-### Requirement: 所有 UI 元件字串外部化
-
-系統中所有面向使用者的文字 SHALL 使用 `t()` 函式從翻譯檔案中取得，不得硬編碼。所有 "AI Terminal" 品牌字串 MUST 替換為 "CodeForge"。
-
-#### Scenario: 品牌名稱全面更新
-
-- **WHEN** 翻譯檔案被載入
-- **THEN** 以下 key 的值 MUST 使用 "CodeForge" 取代 "AI Terminal"：
-  - `app.title` — "CodeForge"（en）/ "CodeForge"（zh-TW）
-  - `login.title` — "CodeForge"（en）/ "CodeForge"（zh-TW）
-  - `chat.welcomeTitle` — "Welcome to CodeForge"（en）/ "歡迎使用 CodeForge"（zh-TW）
-  - `chat.welcomeDescription` — 包含 "CodeForge" 的歡迎描述
-  - `input.placeholder` — "Message CodeForge..."（en）/ "傳送訊息給 CodeForge..."（zh-TW）
-
-#### Scenario: 聊天介面文字
-
-- **WHEN** 聊天介面顯示
-- **THEN** 歡迎標題、歡迎描述、開始對話按鈕、空狀態提示、助手標籤 MUST 使用翻譯 key
-
-#### Scenario: 版面元件文字
-
-- **WHEN** TopBar、TabBar、Sidebar 顯示
-- **THEN** 對話標題預設值、tab 文字（Copilot/Terminal）、側邊欄標題、搜尋 placeholder、操作按鈕、首頁按鈕、新對話按鈕 MUST 使用翻譯 key
-
-#### Scenario: 功能元件文字
-
-- **WHEN** 模型選擇器、推理區塊、工具記錄、輸入框、登入頁面顯示
-- **THEN** 所有靜態文字（Loading、Error、placeholder、按鈕文字等）MUST 使用翻譯 key
-
-#### Scenario: 連線狀態文字
-
-- **WHEN** 連線狀態指示燈顯示
-- **THEN** 狀態文字（已連線、連線中、已斷線）MUST 使用翻譯 key
-
-#### Scenario: 時間格式文字
-
-- **WHEN** Sidebar 顯示對話的更新時間
-- **THEN** 時間描述（剛剛、X 分鐘前、X 小時前、X 天前）MUST 使用翻譯 key 搭配插值
-
-#### Scenario: Settings 面板文字
-
-- **WHEN** SettingsPanel 的任何分頁顯示
-- **THEN** 所有面板標題、tab 名稱、按鈕文字、toast 訊息、section 標題、對話框文字、placeholder MUST 使用 `t()` 函式取得翻譯，MUST NOT 包含硬編碼的中文或英文字串
-
 ## ADDED Requirements
 
-### Requirement: 新功能翻譯 Key
+### Requirement: 快捷鍵面板翻譯 key
 
-系統 SHALL 為新增的功能元件提供完整的 en 和 zh-TW 翻譯。
+翻譯檔案 SHALL 包含 `shortcuts.*` 命名空間，為 ShortcutsPanel 中所有快捷鍵動作提供翻譯。
 
-#### Scenario: Context command 翻譯 key
+#### Scenario: shortcuts 命名空間完整性
 
-- **WHEN** context command 相關 UI 渲染
-- **THEN** 翻譯檔案 MUST 包含 `contextCommand.*` 命名空間的所有 key，涵蓋 context command 功能的標題、描述、按鈕文字
+- **WHEN** ShortcutsPanel 被渲染
+- **THEN** 翻譯檔案 MUST 包含以下 key：
+  - `shortcuts.title` — 面板標題（en: "Keyboard Shortcuts" / zh-TW: "鍵盤快捷鍵"）
+  - `shortcuts.newTab` — 新增頁籤（en: "New Tab" / zh-TW: "新增頁籤"）
+  - `shortcuts.closeTab` — 關閉頁籤（en: "Close Tab" / zh-TW: "關閉頁籤"）
+  - `shortcuts.switchTab` — 切換頁籤（en: "Switch Tab (1-9)" / zh-TW: "切換頁籤 (1-9)"）
+  - `shortcuts.prevTab` — 上一個頁籤（en: "Previous Tab" / zh-TW: "上一個頁籤"）
+  - `shortcuts.nextTab` — 下一個頁籤（en: "Next Tab" / zh-TW: "下一個頁籤"）
+  - `shortcuts.aiMode` — AI 模式（en: "AI Mode" / zh-TW: "AI 模式"）
+  - `shortcuts.bashMode` — Bash 模式（en: "Bash Mode" / zh-TW: "Bash 模式"）
+  - `shortcuts.settings` — 設定（en: "Settings" / zh-TW: "設定"）
+  - `shortcuts.clearChat` — 清除對話（en: "Clear Chat" / zh-TW: "清除對話"）
+  - `shortcuts.toggleTheme` — 切換主題（en: "Toggle Theme" / zh-TW: "切換主題"）
+  - `shortcuts.upload` — 上傳檔案（en: "Upload File" / zh-TW: "上傳檔案"）
+  - `shortcuts.modelSelector` — 模型選擇器（en: "Model Selector" / zh-TW: "模型選擇器"）
+  - `shortcuts.showShortcuts` — 顯示快捷鍵（en: "Show Shortcuts" / zh-TW: "顯示快捷鍵"）
 
-#### Scenario: Model multiplier 翻譯 key
+#### Scenario: 中文顯示快捷鍵面板
 
-- **WHEN** model selector 顯示 premium multiplier badge
-- **THEN** 翻譯檔案 MUST 包含 `model.multiplier`（"{{value}}x"）以及相關的 tooltip 說明文字
+- **WHEN** 語言設定為 zh-TW
+- **AND** 使用者開啟快捷鍵面板
+- **THEN** 面板標題 MUST 顯示「鍵盤快捷鍵」
+- **AND** 所有快捷鍵動作名稱 MUST 顯示對應的中文翻譯
 
-#### Scenario: Skill installer 翻譯 key
+### Requirement: 通用翻譯 key
 
-- **WHEN** skill 安裝介面渲染
-- **THEN** 翻譯檔案 MUST 包含 `settings.skills.upload`（"Upload"/"上傳"）、`settings.skills.installUrl`（"Install from URL"/"從 URL 安裝"）、`settings.skills.createWithAi`（"Create with AI"/"用 AI 建立"）、`settings.skills.dragDrop`（"Drag and drop ZIP file here"/"拖放 ZIP 檔案至此"）
+翻譯檔案 SHALL 包含 `common.*` 命名空間，為跨元件共用的通用文字提供翻譯。
 
-#### Scenario: SDK upgrade advisor 翻譯 key
+#### Scenario: common 命名空間完整性
 
-- **WHEN** SDK upgrade 提示顯示
-- **THEN** 翻譯檔案 MUST 包含 `sdk.upgradeAvailable`（"New SDK version available"/"有新的 SDK 版本可用"）和 `sdk.upgradeAction`（"Upgrade"/"升級"）
+- **WHEN** 任何使用 `common.*` 翻譯 key 的元件被渲染
+- **THEN** 翻譯檔案 MUST 包含以下 key：
+  - `common.close` — 關閉（en: "Close" / zh-TW: "關閉"）
+  - `common.delete` — 刪除（en: "Delete" / zh-TW: "刪除"）
+  - `common.cancel` — 取消（en: "Cancel" / zh-TW: "取消"）
 
-#### Scenario: Plan file output 翻譯 key
+#### Scenario: ShortcutsPanel 使用 common.close
 
-- **WHEN** plan mode 完成且檔案已輸出
-- **THEN** 翻譯檔案 MUST 包含 `planMode.fileWritten`（"Plan saved to {{path}}"/"計畫已儲存至 {{path}}"）和 `planMode.executePlan`（"Execute Plan"/"執行計畫"）和 `planMode.continuePlanning`（"Continue Planning"/"繼續規劃"）
+- **WHEN** ShortcutsPanel 渲染關閉按鈕
+- **THEN** 按鈕的 aria-label MUST 使用 `t('common.close')` 取得翻譯
 
-#### Scenario: Plan execution flow 翻譯 key
+#### Scenario: ArtifactsPanel 使用 common.close
 
-- **WHEN** plan execution 流程啟動
-- **THEN** 翻譯檔案 MUST 包含 `planMode.executing`（"Executing plan..."/"正在執行計畫..."）和 `planMode.executionComplete`（"Plan execution complete"/"計畫執行完成"）
+- **WHEN** ArtifactsPanel 渲染關閉按鈕
+- **THEN** 按鈕的 aria-label MUST 使用 `t('common.close')` 取得翻譯
 
-### Requirement: localStorage Key 遷移
+### Requirement: 對話刪除確認翻譯 key
 
-系統 SHALL 將所有 `ai-terminal:*` 前綴的 localStorage key 自動遷移為 `codeforge:*` 前綴。
+翻譯檔案 SHALL 在 `sidebar.*` 命名空間中包含對話刪除確認相關的 key。
 
-#### Scenario: 首次載入時自動遷移
+#### Scenario: sidebar 刪除確認 key 完整性
 
-- **WHEN** 應用程式首次以新版載入
-- **THEN** 系統 MUST 掃描所有以 `ai-terminal:` 為前綴的 localStorage key
-- **AND** 對每個 key，MUST 將其值複製到對應的 `codeforge:` 前綴 key
-- **AND** 遷移完成後 MUST 設定 `codeforge:migrated` 為 `'true'` 以避免重複遷移
+- **WHEN** ConversationPopover 中的刪除確認 UI 被渲染
+- **THEN** 翻譯檔案 MUST 包含以下 key：
+  - `sidebar.deleteConfirm` — 刪除確認文字（en: "Delete?" / zh-TW: "刪除？"）
+  - `sidebar.deleteConversation` — 刪除對話 aria-label（en: "Delete conversation" / zh-TW: "刪除對話"）
 
-#### Scenario: 已遷移時跳過
+#### Scenario: 中文顯示刪除確認
 
-- **WHEN** 應用程式載入且 `codeforge:migrated` 已為 `'true'`
-- **THEN** 系統 MUST 跳過遷移流程，不覆蓋現有的 `codeforge:*` key
+- **WHEN** 語言設定為 zh-TW
+- **AND** 使用者在 ConversationPopover 中觸發刪除確認
+- **THEN** 確認文字 MUST 顯示「刪除？」
+- **AND** 刪除按鈕 MUST 顯示「刪除」
+- **AND** 取消按鈕 MUST 顯示「取消」
 
-#### Scenario: 遷移涵蓋的 key
+### Requirement: MCP 參數 placeholder 翻譯
 
-- **WHEN** 遷移流程執行
-- **THEN** 系統 MUST 遷移以下 key（若存在）：
-  - `ai-terminal:activePresets` → `codeforge:activePresets`
-  - `ai-terminal:theme` → `codeforge:theme`
-  - `ai-terminal:language` → `codeforge:language`
-  - `ai-terminal:lastSelectedModel` → `codeforge:lastSelectedModel`
-  - `ai-terminal:disabledSkills` → `codeforge:disabledSkills`
-  - 以及其他所有 `ai-terminal:*` 前綴的 key
+MCP 伺服器設定中的參數輸入欄位 placeholder SHALL 使用 `t()` 函式從翻譯檔案取得。
 
-#### Scenario: 舊 key 保留不刪除
+#### Scenario: MCP 參數 placeholder 翻譯 key
 
-- **WHEN** 遷移完成
-- **THEN** 系統 MUST NOT 刪除原始的 `ai-terminal:*` key，以確保降級相容性
+- **WHEN** MCP 伺服器新增表單被渲染
+- **THEN** 參數輸入欄位的 placeholder MUST 使用 `t('mcp.argsPlaceholder')` 取得翻譯
+- **AND** 翻譯檔案 MUST 包含：
+  - en: `"mcp.argsPlaceholder": "e.g. -y, @angular/cli, mcp"`
+  - zh-TW: `"mcp.argsPlaceholder": "例如 -y, @angular/cli, mcp"`
 
-#### Scenario: 新程式碼統一使用新前綴
+#### Scenario: MCP placeholder 不再硬編碼
 
-- **WHEN** 任何元件讀寫 localStorage
-- **THEN** 系統 MUST 使用 `codeforge:` 前綴，MUST NOT 使用 `ai-terminal:` 前綴
+- **WHEN** McpTab 元件渲染
+- **THEN** 參數輸入欄位 MUST NOT 包含硬編碼的 "comma-separated" 字串
+
+### Requirement: GitHub 功能翻譯 key
+
+翻譯檔案 SHALL 包含 `github.*` 命名空間，為 GitHub 倉庫選擇功能提供翻譯。
+
+#### Scenario: github 命名空間完整性
+
+- **WHEN** DirectoryPicker 的 GitHub 頁籤被渲染
+- **THEN** 翻譯檔案 MUST 包含以下 key：
+  - `github.tab` — en: "GitHub" / zh-TW: "GitHub"
+  - `github.localTab` — en: "Local" / zh-TW: "本地"
+  - `github.loading` — en: "Loading repositories..." / zh-TW: "載入倉庫中..."
+  - `github.cloning` — en: "Cloning..." / zh-TW: "Clone 中..."
+  - `github.cloned` — en: "Cloned successfully" / zh-TW: "Clone 成功"
+  - `github.alreadyCloned` — en: "Already cloned" / zh-TW: "已 clone"
+  - `github.noRepos` — en: "No repositories found" / zh-TW: "找不到倉庫"
+  - `github.ghNotAvailable` — en: "Please install and authenticate gh CLI" / zh-TW: "請先安裝並認證 gh CLI"
+  - `github.private` — en: "Private" / zh-TW: "私有"
+  - `github.searchRepos` — en: "Search repositories..." / zh-TW: "搜尋倉庫..."
+  - `github.cloneFailed` — en: "Clone failed" / zh-TW: "Clone 失敗"
+
+## MODIFIED Requirements
+
+### Requirement: Settings 面板翻譯鍵
+
+系統 SHALL 為 SettingsPanel 的所有 UI 文字提供完整的 en 和 zh-TW 翻譯鍵，使用 `settings.*` 命名空間。
+
+#### Scenario: Settings 翻譯鍵完整性
+
+- **WHEN** SettingsPanel 被渲染
+- **THEN** 翻譯檔案 MUST 包含以下命名空間的所有 key：
+  - `settings.title` — 面板標題
+  - `settings.close` — 關閉按鈕 aria-label
+  - `settings.loading` — 載入中文字
+  - `settings.tabs.*` — 所有 tab 名稱（general、systemPrompt、profile、agent、memory、skills、apiKeys、mcp、cron）
+  - `settings.save` — 儲存按鈕
+  - `settings.toast.*` — 所有 toast 訊息（saved、saveFailed、deleted、deleteFailed、reset、resetFailed）
+  - `settings.systemPrompt.*` — 系統提示詞相關（resetToDefault、resetConfirm）
+  - `settings.memory.*` — 記憶區塊標題（preferences、projects、solutions）
+  - `settings.deleteDialog.*` — 刪除確認對話框（message、cancel、confirm）
+  - `settings.skills.*` — Skills 相關所有文字
+- **AND** `settings.tabs.presets` key MUST 已被移除

@@ -1,68 +1,27 @@
 ## MODIFIED Requirements
 
-### Requirement: 預設系統提示詞模板
+### Requirement: System Prompt 檔案結構
 
-系統 SHALL 提供高品質的預設系統提示詞模板 `SYSTEM_PROMPT.md`，內容以 CodeForge 品牌識別為核心，涵蓋所有平台功能的使用指引。
+系統 SHALL 使用檔案系統管理 system prompt，以 `data/prompts/` 為根目錄，支援全域設定檔、agent 規則和專案層級提示。
 
-#### Scenario: 首次初始化建立模板
+#### Scenario: 目錄結構初始化
 
-- **WHEN** `ensureDirectories()` 被呼叫且 `data/prompts/SYSTEM_PROMPT.md` 不存在
-- **THEN** 系統 MUST 以 `DEFAULT_SYSTEM_PROMPT` 常數內容建立該檔案
+- **WHEN** 後端服務啟動
+- **THEN** 系統 MUST 呼叫 `ensureDirectories()` 確保以下目錄結構存在：
+  - `data/prompts/PROFILE.md`（全域使用者設定，若不存在則建立空檔）
+  - `data/prompts/AGENT.md`（agent 專屬規則，若不存在則建立空檔）
+  - `data/prompts/memory/`（記憶系統目錄）
+- **AND** MUST NOT 建立 `data/prompts/presets/` 目錄
 
-#### Scenario: 模板已存在時不覆蓋
+#### Scenario: PROFILE.md 內容用途
 
-- **WHEN** `ensureDirectories()` 被呼叫且 `data/prompts/SYSTEM_PROMPT.md` 已存在
-- **THEN** 系統 MUST NOT 覆蓋現有檔案內容
+- **WHEN** 使用者編輯 PROFILE.md
+- **THEN** 該檔案 MUST 儲存全域使用者偏好資訊，此內容 SHALL 被注入每次對話的 system prompt
 
-#### Scenario: 預設模板常數 — 品牌識別
+#### Scenario: AGENT.md 內容用途
 
-- **WHEN** `DEFAULT_SYSTEM_PROMPT` 常數被引用
-- **THEN** 內容 MUST 為英文
-- **AND** Identity & Role 段落 MUST 使用 "CodeForge" 作為產品名稱（取代舊版 "AI Terminal"）
-- **AND** 內容 MUST NOT 包含 "AI Terminal" 字樣
-
-#### Scenario: 預設模板常數 — 功能涵蓋範圍
-
-- **WHEN** `DEFAULT_SYSTEM_PROMPT` 常數被引用
-- **THEN** 內容 MUST 涵蓋以下功能區塊的使用指引：
-  - Multi-tab 多分頁對話
-  - Plan mode 規劃模式
-  - Skills 技能系統
-  - Cross-conversation memory 跨對話記憶
-  - MCP (Model Context Protocol) 工具擴充
-  - Artifacts 產出物預覽
-  - Tasks 任務管理
-  - Bash 終端執行模式
-  - Web search 網頁搜尋
-
-### Requirement: 專案層級 System Prompt
-
-系統 SHALL 支援專案層級的 `.codeforge.md` 檔案，從目前工作目錄自動偵測並載入，同時向後相容舊版 `.ai-terminal.md` 檔案。
-
-#### Scenario: 自動偵測 `.codeforge.md` 專案提示
-
-- **WHEN** 使用者開啟對話且目前工作目錄（cwd）包含 `.codeforge.md` 檔案
-- **THEN** PromptComposer MUST 讀取該檔案內容並納入 system prompt 組裝
-
-#### Scenario: 向後相容 `.ai-terminal.md` fallback
-
-- **WHEN** 目前工作目錄不包含 `.codeforge.md` 但包含 `.ai-terminal.md` 檔案
-- **THEN** PromptComposer MUST 讀取 `.ai-terminal.md` 作為 fallback，納入 system prompt 組裝
-
-#### Scenario: 兩個檔案皆存在時以新版為準
-
-- **WHEN** 目前工作目錄同時包含 `.codeforge.md` 和 `.ai-terminal.md`
-- **THEN** PromptComposer MUST 僅讀取 `.codeforge.md`，忽略 `.ai-terminal.md`
-
-#### Scenario: 專案提示不存在
-
-- **WHEN** 目前工作目錄不包含 `.codeforge.md` 也不包含 `.ai-terminal.md` 檔案
-- **THEN** PromptComposer MUST 跳過專案層級提示，不拋出錯誤
-
-#### Scenario: 專案提示讀取失敗
-
-- **WHEN** `.codeforge.md` 或 `.ai-terminal.md` 檔案存在但因權限問題無法讀取
-- **THEN** 系統 MUST 以 `console.warn` 記錄警告，繼續組裝其餘 prompt 部分，MUST NOT 中斷對話流程
+- **WHEN** 使用者編輯 AGENT.md
+- **THEN** 該檔案 MUST 儲存 agent 行為規則，此內容 SHALL 被注入每次對話的 system prompt
 
 ### Requirement: PromptComposer 組裝邏輯
 
@@ -75,9 +34,15 @@
   1. SYSTEM_PROMPT.md 內容（預設系統提示詞模板）
   2. PROFILE.md 內容（全域使用者設定）
   3. AGENT.md 內容（agent 規則）
-  4. 已啟用的 presets 內容（按字母序）
-  5. memory/preferences.md 內容（使用者偏好記憶）
-  6. `.codeforge.md` 或 `.ai-terminal.md` 內容（專案層級提示，新版優先）
+  4. memory/preferences.md 內容（使用者偏好記憶）
+  5. `.ai-terminal.md` 內容（專案層級提示）
+- **AND** 組裝順序 MUST NOT 包含 presets 區段
+
+#### Scenario: PromptComposer 函式簽名
+
+- **WHEN** PromptComposer.compose() 被呼叫
+- **THEN** 函式 MUST 接受 `cwd: string` 參數
+- **AND** MUST NOT 接受 `activePresets` 參數
 
 #### Scenario: 區段為空時跳過
 
@@ -87,9 +52,54 @@
 #### Scenario: SDK 整合方式
 
 - **WHEN** PromptComposer 組裝完成的 system prompt 傳遞給 Copilot SDK
-- **THEN** 系統 MUST 使用 `systemMessage` 參數搭配 `mode: 'append'`，將組裝後的 prompt 附加到 SDK 預設的 system prompt 後方，MUST NOT 使用 `mode: 'replace'` 覆蓋 SDK 預設內容
+- **THEN** 系統 MUST 使用 `systemMessage` 參數搭配 `mode: 'append'`
 
-#### Scenario: 所有區段為空
+### Requirement: System Prompt REST API
 
-- **WHEN** 所有 prompt 區段檔案皆為空或不存在
-- **THEN** PromptComposer MUST 回傳空字串，系統 MUST NOT 傳遞 `systemMessage` 參數給 SDK
+系統 SHALL 提供 REST API 端點管理 system prompt 檔案。
+
+#### Scenario: 讀取 profile prompt
+
+- **WHEN** 前端發送 `GET /api/prompts/profile`
+- **THEN** 後端 MUST 回傳 `{ content: string }` 包含 PROFILE.md 的檔案內容，HTTP status 200
+
+#### Scenario: 更新 profile prompt
+
+- **WHEN** 前端發送 `PUT /api/prompts/profile` 帶有 `{ content: string }` body
+- **THEN** 後端 MUST 將內容寫入 `data/prompts/PROFILE.md`，回傳 HTTP status 200
+
+#### Scenario: 讀取 agent prompt
+
+- **WHEN** 前端發送 `GET /api/prompts/agent`
+- **THEN** 後端 MUST 回傳 `{ content: string }` 包含 AGENT.md 的檔案內容，HTTP status 200
+
+#### Scenario: 更新 agent prompt
+
+- **WHEN** 前端發送 `PUT /api/prompts/agent` 帶有 `{ content: string }` body
+- **THEN** 後端 MUST 將內容寫入 `data/prompts/AGENT.md`，回傳 HTTP status 200
+
+## REMOVED Requirements
+
+### Requirement: 預設集（Presets）檔案管理
+
+**Reason**: 使用者決定不需要預設模板功能，移除以精簡系統。
+
+**Migration**: 無遷移需求。`data/prompts/presets/` 目錄中的現有檔案可手動刪除。
+
+### Requirement: 預設集 REST API
+
+**Reason**: 隨預設集功能一同移除。
+
+**Migration**: 以下 API 端點將被移除：
+- `GET /api/prompts/presets`
+- `GET /api/prompts/presets/:name`
+- `PUT /api/prompts/presets/:name`
+- `DELETE /api/prompts/presets/:name`
+- `GET /api/prompts/presets/export`
+- `POST /api/prompts/presets/import`
+
+### Requirement: 前端 Presets 相關狀態
+
+**Reason**: 隨預設集功能一同移除。
+
+**Migration**: 移除 Zustand store 中的 `activePresets: string[]` 狀態、`togglePreset` action、以及 localStorage key `'ai-terminal:activePresets'` 的讀寫邏輯。WebSocket 訊息中的 `activePresets` 欄位也一同移除。
