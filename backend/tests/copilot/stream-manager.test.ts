@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import type { WsMessage, SendFn } from '../../src/ws/types.js';
 
+// Mock plan-writer
+const mockWritePlanFile = vi.hoisted(() => vi.fn().mockReturnValue('/tmp/.codeforge/plans/2026-02-19-plan.md'));
+vi.mock('../../src/copilot/plan-writer.js', () => ({
+  writePlanFile: mockWritePlanFile,
+  extractTopicFromContent: vi.fn().mockReturnValue('test-topic'),
+}));
+
 // Mock SDK and dependencies
 const { mockSession, mockSessionManager, mockRepo } = vi.hoisted(() => {
   const eventHandlers = new Map<string, (event: any) => void>();
@@ -74,6 +81,7 @@ function clearMocks() {
   mockRepo.getById.mockClear();
   mockRepo.update.mockClear();
   mockRepo.addMessage.mockClear();
+  mockWritePlanFile.mockClear().mockReturnValue('/tmp/.codeforge/plans/2026-02-19-plan.md');
 }
 
 /** Simulate an SDK event by firing the captured handler */
@@ -1340,7 +1348,7 @@ describe('StreamManager', () => {
         activePresets: ['code-review'],
       });
 
-      expect(mockComposer.compose).toHaveBeenCalledWith(['code-review'], '/tmp');
+      expect(mockComposer.compose).toHaveBeenCalledWith(['code-review'], '/tmp', undefined);
       expect(mockSessionManager.getOrCreateSession).toHaveBeenCalledWith(
         expect.objectContaining({
           systemMessage: { mode: 'append', content: 'Composed system prompt' },
@@ -1390,7 +1398,7 @@ describe('StreamManager', () => {
         cwd: '/tmp',
       });
 
-      expect(mockComposer.compose).toHaveBeenCalledWith([], '/tmp');
+      expect(mockComposer.compose).toHaveBeenCalledWith([], '/tmp', undefined);
     });
   });
 
@@ -1736,6 +1744,117 @@ describe('StreamManager', () => {
       await handlerPromise;
 
       expect(sm.getPendingUserInputs('conv-1')).toEqual([]);
+    });
+  });
+
+  // === Plan mode idle → writePlanFile ===
+  describe('plan mode idle write', () => {
+    it('should call writePlanFile on idle when mode is plan and content exists', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'plan something',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+        mode: 'plan',
+      });
+      await tick();
+
+      // Simulate content being accumulated
+      fireEvent('assistant.message', {
+        messageId: 'msg-1',
+        content: '# Plan\n\nStep 1: Do the thing',
+      });
+
+      fireEvent('session.idle', {});
+
+      expect(mockWritePlanFile).toHaveBeenCalledWith(
+        '/tmp',
+        '# Plan\n\nStep 1: Do the thing',
+        'test-topic',
+      );
+    });
+
+    it('should save planFilePath to conversation via repo.update on plan idle', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'plan something',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+        mode: 'plan',
+      });
+      await tick();
+
+      fireEvent('assistant.message', {
+        messageId: 'msg-1',
+        content: '# Plan',
+      });
+
+      fireEvent('session.idle', {});
+
+      expect(mockRepo.update).toHaveBeenCalledWith('conv-1', {
+        planFilePath: '/tmp/.codeforge/plans/2026-02-19-plan.md',
+      });
+    });
+
+    it('should include planFilePath in idle event data sent to frontend', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'plan something',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+        mode: 'plan',
+      });
+      await tick();
+
+      const received: WsMessage[] = [];
+      sm.subscribe('conv-1', (msg) => received.push(msg));
+
+      fireEvent('assistant.message', {
+        messageId: 'msg-1',
+        content: '# Plan',
+      });
+
+      fireEvent('session.idle', {});
+
+      const idleMsg = received.find((m) => m.type === 'copilot:idle');
+      expect(idleMsg).toBeDefined();
+      expect((idleMsg!.data as any).planFilePath).toBe('/tmp/.codeforge/plans/2026-02-19-plan.md');
+    });
+
+    it('should NOT call writePlanFile when mode is act', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'do something',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+        mode: 'act',
+      });
+      await tick();
+
+      fireEvent('assistant.message', {
+        messageId: 'msg-1',
+        content: 'Done',
+      });
+
+      fireEvent('session.idle', {});
+
+      expect(mockWritePlanFile).not.toHaveBeenCalled();
+    });
+
+    it('should NOT call writePlanFile when mode is plan but no content accumulated', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'plan something',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+        mode: 'plan',
+      });
+      await tick();
+
+      // No message events — directly idle
+      fireEvent('session.idle', {});
+
+      expect(mockWritePlanFile).not.toHaveBeenCalled();
     });
   });
 });

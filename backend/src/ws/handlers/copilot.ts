@@ -1,3 +1,4 @@
+import { readFileSync, existsSync } from 'node:fs';
 import type { StreamManager } from '../../copilot/stream-manager.js';
 import type { ConversationRepository } from '../../conversation/repository.js';
 import type { WsMessage, WsHandlerObject, SendFn } from '../types.js';
@@ -80,6 +81,7 @@ export function createCopilotHandler(
               const activePresets = (payload.activePresets as string[]) ?? [];
               const disabledSkills = (payload.disabledSkills as string[]) ?? [];
               const mode = payload.mode as 'plan' | 'act' | undefined;
+              const locale = payload.locale as string | undefined;
               await streamManager.startStream(conversationId, {
                 prompt: finalPrompt,
                 sdkSessionId: conversation.sdkSessionId,
@@ -89,6 +91,7 @@ export function createCopilotHandler(
                 disabledSkills,
                 files,
                 ...(mode && { mode }),
+                ...(locale && { locale }),
               });
 
               // Auto-subscribe this connection to the stream
@@ -226,6 +229,65 @@ export function createCopilotHandler(
           }
 
           streamManager.setMode(conversationId, mode as 'plan' | 'act');
+          break;
+        }
+
+        case 'copilot:execute_plan': {
+          const conversationId = payload.conversationId as string | undefined;
+          const planFilePath = payload.planFilePath as string | undefined;
+
+          if (!conversationId) {
+            send({ type: 'copilot:error', data: { message: 'conversationId is required' } });
+            return;
+          }
+          if (!planFilePath) {
+            send({ type: 'copilot:error', data: { message: 'planFilePath is required' } });
+            return;
+          }
+
+          const conversation = repo.getById(conversationId);
+          if (!conversation) {
+            send({ type: 'copilot:error', data: { message: 'Conversation not found' } });
+            return;
+          }
+
+          if (!existsSync(planFilePath)) {
+            send({ type: 'copilot:error', data: { message: `Plan file not found: ${planFilePath}` } });
+            return;
+          }
+
+          // Read the plan file content
+          const planContent = readFileSync(planFilePath, 'utf-8');
+
+          // Clear SDK session to force a fresh session
+          repo.update(conversationId, { sdkSessionId: null });
+
+          // Start a new stream with plan content as prompt in act mode
+          void (async () => {
+            try {
+              await streamManager.startStream(conversationId, {
+                prompt: `以下是先前完成的實作計畫，請開始執行：\n\n${planContent}`,
+                sdkSessionId: null,
+                model: conversation.model,
+                cwd: conversation.cwd,
+                mode: 'act',
+              });
+
+              // Auto-subscribe this connection to the stream
+              const unsub = streamManager.subscribe(conversationId, send);
+              if (unsub) {
+                activeSubscriptions.get(conversationId)?.();
+                activeSubscriptions.set(conversationId, unsub);
+              }
+            } catch (err) {
+              log.error({ err, conversationId }, 'Failed to execute plan');
+              send({
+                type: 'copilot:error',
+                data: { message: err instanceof Error ? err.message : 'Unknown error' },
+              });
+            }
+          })();
+
           break;
         }
 

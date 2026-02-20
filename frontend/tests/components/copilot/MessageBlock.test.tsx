@@ -18,6 +18,9 @@ vi.mock('lucide-react', () => ({
   Code: (props: any) => <svg data-testid="icon-code" {...props} />,
   Globe: (props: any) => <svg data-testid="icon-globe" {...props} />,
   Image: (props: any) => <svg data-testid="icon-image" {...props} />,
+  GitBranch: (props: any) => <svg data-testid="icon-gitbranch" {...props} />,
+  ChevronDown: (props: any) => <svg data-testid="icon-chevron-down" {...props} />,
+  ChevronUp: (props: any) => <svg data-testid="icon-chevron-up" {...props} />,
 }));
 
 // Mock ToolRecord component
@@ -789,6 +792,62 @@ describe('MessageBlock', () => {
 
     expect(screen.getByTestId('artifact-card-0')).toBeTruthy();
     expect(screen.getByTestId('artifact-card-1')).toBeTruthy();
+  });
+
+  // --- Bash history backward compatibility (Phase 1B) ---
+
+  it('renders new-format user bash message (just command) with single $ prefix', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({ role: 'user', content: 'ls -la', metadata: { bash: true } })}
+      />
+    );
+    const bashCmd = screen.getByTestId('bash-command');
+    expect(bashCmd).toBeTruthy();
+    // Should render as "$ ls -la" with exactly one $
+    expect(bashCmd.textContent).toBe('$ ls -la');
+  });
+
+  it('renders old-format user bash message (with $ prefix) without double $$', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'user',
+          content: '$ ls -la\noutput\n[exit code: 0]',
+          metadata: { bash: true },
+        })}
+      />
+    );
+    const bashCmd = screen.getByTestId('bash-command');
+    expect(bashCmd).toBeTruthy();
+    // Should strip the leading "$ " from content, then render with single "$ " prefix
+    // Result: "$ ls -la\noutput\n[exit code: 0]" (NOT "$$ ls -la...")
+    expect(bashCmd.textContent).toContain('$ ls -la');
+    expect(bashCmd.textContent).not.toContain('$  $');
+    expect(bashCmd.textContent).not.toContain('$ $');
+  });
+
+  it('renders assistant bash message with BashPrompt + BashOutput when metadata has full env info', () => {
+    render(
+      <MessageBlock
+        message={makeMessage({
+          role: 'assistant',
+          content: 'file1.txt\nfile2.txt',
+          metadata: { exitCode: 0, user: 'momo', hostname: 'host', gitBranch: 'main', cwd: '/home', bash: true },
+        })}
+      />
+    );
+
+    // Should render BashPrompt (user@hostname segment)
+    const prompt = screen.getByTestId('bash-prompt');
+    expect(prompt).toBeTruthy();
+    expect(screen.getByTestId('bash-prompt-user').textContent).toContain('momo@host');
+    expect(screen.getByTestId('bash-prompt-cwd').textContent).toContain('/home');
+    expect(screen.getByTestId('bash-prompt-git').textContent).toContain('main');
+
+    // Should render BashOutput (exit code badge)
+    const exitBadge = screen.getByTestId('exit-code-badge');
+    expect(exitBadge).toBeTruthy();
   });
 
   // WARNING FIX: bash tool with error status should also show ToolResultBlock

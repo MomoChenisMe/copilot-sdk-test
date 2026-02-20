@@ -8,6 +8,15 @@ interface ModelSelectorProps {
   onSelect: (modelId: string) => void;
 }
 
+function getMultiplierStyle(multiplier: number | null | undefined) {
+  if (multiplier == null) return null;
+  if (multiplier === 0) return { text: '0x', color: 'text-green-500' };
+  if (multiplier < 1) return { text: `${multiplier}x`, color: 'text-green-500' };
+  if (multiplier === 1) return { text: '1x', color: 'text-text-muted' };
+  if (multiplier >= 9) return { text: `${multiplier}x`, color: 'text-red-500' };
+  return { text: `${multiplier}x`, color: 'text-amber-500' };
+}
+
 export function ModelSelector({ currentModel, onSelect }: ModelSelectorProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -17,7 +26,9 @@ export function ModelSelector({ currentModel, onSelect }: ModelSelectorProps) {
   const modelsLoading = useAppStore((s) => s.modelsLoading);
   const modelsError = useAppStore((s) => s.modelsError);
 
-  const currentModelName = models.find((m) => m.id === currentModel)?.name || currentModel;
+  const currentModelObj = models.find((m) => m.id === currentModel);
+  const currentModelName = currentModelObj?.name || currentModel;
+  const currentMultiplierStyle = getMultiplierStyle(currentModelObj?.premiumMultiplier);
 
   // Click-outside handler
   const handleClickOutside = useCallback(
@@ -52,23 +63,29 @@ export function ModelSelector({ currentModel, onSelect }: ModelSelectorProps) {
     <div className="relative" ref={containerRef}>
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary bg-bg-tertiary rounded-lg hover:bg-bg-secondary transition-colors truncate max-w-40"
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary bg-bg-tertiary rounded-lg hover:bg-bg-secondary transition-colors truncate max-w-52"
         title={currentModelName}
       >
         <span className="truncate">{currentModelName}</span>
+        {currentMultiplierStyle && (
+          <span className={`shrink-0 text-xs font-medium ${currentMultiplierStyle.color}`} data-testid="trigger-multiplier">
+            {currentMultiplierStyle.text}
+          </span>
+        )}
         <ChevronDown size={12} className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
         <div
           data-testid="model-dropdown"
-          className="absolute bottom-full left-0 mb-1 min-w-48 max-w-72 max-h-60 overflow-y-auto bg-bg-elevated border border-border rounded-xl shadow-[var(--shadow-lg)] z-50"
+          className="absolute bottom-full left-0 mb-1 min-w-64 max-w-80 max-h-60 overflow-y-auto bg-bg-elevated border border-border rounded-xl shadow-[var(--shadow-lg)] z-50"
         >
           <div className="px-3 py-2 text-xs font-semibold text-text-muted border-b border-border">
             {t('model.sourceTitle')}
           </div>
           {models.map((model) => {
             const isActive = model.id === currentModel;
+            const multiplierStyle = getMultiplierStyle(model.premiumMultiplier);
             return (
               <button
                 key={model.id}
@@ -77,13 +94,18 @@ export function ModelSelector({ currentModel, onSelect }: ModelSelectorProps) {
                   onSelect(model.id);
                   setOpen(false);
                 }}
-                className={`w-full text-left px-3 py-2 text-sm truncate transition-colors ${
+                className={`w-full flex items-center px-3 py-2 text-sm transition-colors ${
                   isActive
                     ? 'text-accent bg-accent-soft'
                     : 'text-text-primary hover:bg-bg-tertiary'
                 }`}
               >
-                {model.name}
+                <span className="truncate">{model.name}</span>
+                {multiplierStyle && (
+                  <span className={`ml-auto text-xs font-medium ${multiplierStyle.color}`}>
+                    {multiplierStyle.text}
+                  </span>
+                )}
               </button>
             );
           })}

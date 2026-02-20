@@ -10,6 +10,7 @@ export type Theme = 'light' | 'dark';
 export interface ModelInfo {
   id: string;
   name: string;
+  premiumMultiplier?: number | null;
 }
 
 export interface UsageInfo {
@@ -64,6 +65,7 @@ export interface TabState {
   usage: UsageInfo;
   planMode: boolean;
   showPlanCompletePrompt: boolean;
+  planFilePath: string | null;
   userInputRequest: UserInputRequest | null;
   artifacts: ParsedArtifact[];
   activeArtifactId: string | null;
@@ -230,6 +232,7 @@ export interface AppState {
   incrementTabPremiumLocal: (tabId: string) => void;
   setTabPlanMode: (tabId: string, planMode: boolean) => void;
   setTabShowPlanCompletePrompt: (tabId: string, show: boolean) => void;
+  setTabPlanFilePath: (tabId: string, path: string | null) => void;
   setTabUserInputRequest: (tabId: string, request: UserInputRequest | null) => void;
 
   // Actions — Per-tab tasks
@@ -241,6 +244,34 @@ export interface AppState {
   setTabActiveArtifact: (tabId: string, artifactId: string | null) => void;
   setTabArtifactsPanelOpen: (tabId: string, open: boolean) => void;
 }
+
+const MIGRATION_KEYS = [
+  'lastSelectedModel',
+  'openTabs',
+  'activePresets',
+  'disabledSkills',
+] as const;
+
+export function migrateLocalStorageKeys(): void {
+  try {
+    for (const suffix of MIGRATION_KEYS) {
+      const oldKey = `ai-terminal:${suffix}`;
+      const newKey = `codeforge:${suffix}`;
+      const oldValue = localStorage.getItem(oldKey);
+      if (oldValue !== null && localStorage.getItem(newKey) === null) {
+        localStorage.setItem(newKey, oldValue);
+      }
+      if (oldValue !== null) {
+        localStorage.removeItem(oldKey);
+      }
+    }
+  } catch {
+    // localStorage may be unavailable — skip silently
+  }
+}
+
+// Run migration before store creation
+migrateLocalStorageKeys();
 
 function readThemeFromStorage(): Theme {
   try {
@@ -298,7 +329,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   disabledSkills: [],
   settingsOpen: false,
   lastSelectedModel: (() => {
-    try { return localStorage.getItem('ai-terminal:lastSelectedModel'); }
+    try { return localStorage.getItem('codeforge:lastSelectedModel'); }
     catch { return null; }
   })(),
   copilotError: null,
@@ -419,13 +450,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     const next = current.includes(name)
       ? current.filter((p) => p !== name)
       : [...current, name];
-    try { localStorage.setItem('ai-terminal:activePresets', JSON.stringify(next)); } catch { /* noop */ }
+    try { localStorage.setItem('codeforge:activePresets', JSON.stringify(next)); } catch { /* noop */ }
     set({ activePresets: next });
   },
 
   removePreset: (name) => {
     const next = get().activePresets.filter((p) => p !== name);
-    try { localStorage.setItem('ai-terminal:activePresets', JSON.stringify(next)); } catch { /* noop */ }
+    try { localStorage.setItem('codeforge:activePresets', JSON.stringify(next)); } catch { /* noop */ }
     set({ activePresets: next });
   },
 
@@ -434,7 +465,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const next = current.includes(name)
       ? current.filter((s) => s !== name)
       : [...current, name];
-    try { localStorage.setItem('ai-terminal:disabledSkills', JSON.stringify(next)); } catch { /* noop */ }
+    try { localStorage.setItem('codeforge:disabledSkills', JSON.stringify(next)); } catch { /* noop */ }
     set({ disabledSkills: next });
   },
 
@@ -442,7 +473,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Model memory
   setLastSelectedModel: (modelId) => {
-    try { localStorage.setItem('ai-terminal:lastSelectedModel', modelId); } catch { /* noop */ }
+    try { localStorage.setItem('codeforge:lastSelectedModel', modelId); } catch { /* noop */ }
     set({ lastSelectedModel: modelId });
   },
 
@@ -487,6 +518,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, contextWindowUsed: 0, contextWindowMax: 0, premiumRequestsUsed: 0, premiumRequestsLocal: 0, premiumRequestsTotal: 0, premiumResetDate: null, premiumUnlimited: false, model: null },
       planMode: false,
       showPlanCompletePrompt: false,
+      planFilePath: null,
       userInputRequest: null,
       artifacts: [],
       activeArtifactId: null,
@@ -556,6 +588,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, contextWindowUsed: 0, contextWindowMax: 0, premiumRequestsUsed: 0, premiumRequestsLocal: 0, premiumRequestsTotal: 0, premiumResetDate: null, premiumUnlimited: false, model: null },
       planMode: false,
       showPlanCompletePrompt: false,
+      planFilePath: null,
       userInputRequest: null,
       artifacts: [],
       activeArtifactId: null,
@@ -574,7 +607,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   restoreOpenTabs: () => {
     try {
-      const raw = localStorage.getItem('ai-terminal:openTabs');
+      const raw = localStorage.getItem('codeforge:openTabs');
       if (!raw) return;
       const saved = JSON.parse(raw) as Array<{ id: string; title: string; conversationId?: string }>;
       if (!Array.isArray(saved) || saved.length === 0) return;
@@ -603,6 +636,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, contextWindowUsed: 0, contextWindowMax: 0, premiumRequestsUsed: 0, premiumRequestsLocal: 0, premiumRequestsTotal: 0, premiumResetDate: null, premiumUnlimited: false, model: null },
           planMode: false,
           showPlanCompletePrompt: false,
+          planFilePath: null,
           userInputRequest: null,
           artifacts: [],
           activeArtifactId: null,
@@ -617,7 +651,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   restoreDisabledSkills: () => {
     try {
-      const raw = localStorage.getItem('ai-terminal:disabledSkills');
+      const raw = localStorage.getItem('codeforge:disabledSkills');
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
@@ -856,6 +890,18 @@ export const useAppStore = create<AppState>((set, get) => ({
       };
     }),
 
+  setTabPlanFilePath: (tabId: string, path: string | null) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return {
+        tabs: {
+          ...state.tabs,
+          [tabId]: { ...tab, planFilePath: path },
+        },
+      };
+    }),
+
   setTabUserInputRequest: (tabId, request) =>
     set((state) => {
       const tab = state.tabs[tabId];
@@ -941,6 +987,6 @@ function persistOpenTabs(tabs: Record<string, TabState>, tabOrder: string[]) {
     const data = tabOrder
       .filter((id) => tabs[id]?.conversationId !== null)
       .map((id) => ({ id: tabs[id].id, title: tabs[id].title, conversationId: tabs[id].conversationId }));
-    localStorage.setItem('ai-terminal:openTabs', JSON.stringify(data));
+    localStorage.setItem('codeforge:openTabs', JSON.stringify(data));
   } catch { /* noop */ }
 }

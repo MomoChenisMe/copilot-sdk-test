@@ -1,10 +1,10 @@
 {
   "app": {
     "loading": "Loading...",
-    "title": "AI Terminal"
+    "title": "CodeForge"
   },
   "login": {
-    "title": "AI Terminal",
+    "title": "CodeForge",
     "subtitle": "Enter password to continue",
     "password": "Password",
     "loggingIn": "Logging in...",
@@ -16,7 +16,7 @@
     "disconnected": "Disconnected"
   },
   "chat": {
-    "welcomeTitle": "Welcome to AI Terminal",
+    "welcomeTitle": "Welcome to CodeForge",
     "welcomeDescription": "Your AI-powered development companion. Start a conversation to begin.",
     "startConversation": "Start New Conversation",
     "emptyPrompt": "Send a message to start...",
@@ -80,6 +80,7 @@
     "clearDesc": "Clear conversation",
     "settingsDesc": "Open settings",
     "newDesc": "New conversation",
+    "contextDesc": "Show system context info",
     "copilot": "Copilot"
   },
   "cwd": {
@@ -88,7 +89,7 @@
     "placeholder": "Enter path..."
   },
   "input": {
-    "placeholder": "Message AI Terminal...",
+    "placeholder": "Message CodeForge...",
     "send": "Send",
     "stop": "Stop",
     "attach": "Attach file",
@@ -192,7 +193,15 @@
       "system": "System Skills",
       "user": "User Skills",
       "systemBadge": "System",
-      "cannotModifyBuiltin": "Built-in skills cannot be modified or deleted"
+      "cannotModifyBuiltin": "Built-in skills cannot be modified or deleted",
+      "upload": "Upload Skill Package",
+      "installFromUrl": "Install from URL",
+      "createWithAI": "Create with AI",
+      "uploadDrop": "Drop ZIP file here or click to browse",
+      "urlPlaceholder": "GitHub URL or direct link...",
+      "installing": "Installing...",
+      "installSuccess": "Skill installed successfully",
+      "installError": "Installation failed"
     }
   },
   "terminal": {
@@ -216,9 +225,12 @@
     "act": "Act",
     "active": "Plan mode active — AI will plan but not execute tools",
     "tooltip": "Toggle between plan and act modes",
-    "planComplete": "Planning complete! Ready to switch to Act mode and implement?",
+    "planComplete": "Planning complete! Ready to execute the plan?",
+    "planSaved": "Plan saved to {{path}}",
     "switchToAct": "Switch to Act",
-    "stayInPlan": "Stay in Plan"
+    "stayInPlan": "Stay in Plan",
+    "executePlan": "Execute Plan",
+    "continuePlanning": "Continue Planning"
   },
   "usage": {
     "tokens": "Tokens",
@@ -303,6 +315,30 @@
       "error": "Error",
       "timeout": "Timeout"
     }
+  },
+  "context": {
+    "title": "System Context",
+    "systemPrompt": "System Prompt",
+    "layers": "Layers",
+    "totalChars": "Total Characters",
+    "maxChars": "Max Characters",
+    "skills": "Skills",
+    "builtinSkills": "Built-in Skills",
+    "userSkills": "User Skills",
+    "mcpServers": "MCP Servers",
+    "tools": "tools",
+    "model": "Model",
+    "sdkVersion": "SDK Version",
+    "active": "active",
+    "inactive": "inactive",
+    "enabled": "enabled",
+    "disabled": "disabled",
+    "none": "None",
+    "fetchError": "Failed to fetch context"
+  },
+  "sdk": {
+    "analyzeChanges": "Analyze Changes",
+    "changelogUnavailable": "Changelog unavailable"
   },
   "mcp": {
     "title": "MCP Servers",

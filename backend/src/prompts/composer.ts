@@ -16,7 +16,7 @@ export class PromptComposer {
     private memoryStore?: MemoryStore,
   ) {}
 
-  compose(activePresets: string[], cwd?: string): string {
+  compose(activePresets: string[], cwd?: string, locale?: string): string {
     const sections: string[] = [];
 
     // 1. SYSTEM_PROMPT.md
@@ -48,15 +48,34 @@ export class PromptComposer {
       if (memory.trim()) sections.push(memory);
     }
 
-    // 6. .ai-terminal.md from cwd
+    // 6. .codeforge.md from cwd (falls back to .ai-terminal.md)
     if (cwd) {
       try {
-        const projectPromptPath = path.join(cwd, '.ai-terminal.md');
-        const projectPrompt = fs.readFileSync(projectPromptPath, 'utf-8');
+        const codeforgePromptPath = path.join(cwd, '.codeforge.md');
+        const projectPrompt = fs.readFileSync(codeforgePromptPath, 'utf-8');
         if (projectPrompt.trim()) sections.push(projectPrompt);
       } catch {
-        // File doesn't exist or can't be read - skip silently
+        // .codeforge.md not found — try legacy .ai-terminal.md
+        try {
+          const legacyPromptPath = path.join(cwd, '.ai-terminal.md');
+          const legacyPrompt = fs.readFileSync(legacyPromptPath, 'utf-8');
+          if (legacyPrompt.trim()) sections.push(legacyPrompt);
+        } catch {
+          // Neither file exists — skip silently
+        }
       }
+    }
+
+    // 7. Locale / language instruction
+    if (locale && locale !== 'en') {
+      const LOCALE_NAMES: Record<string, string> = {
+        'zh-TW': '繁體中文（台灣）',
+        'zh-CN': '简体中文',
+        'ja': '日本語',
+        'ko': '한국어',
+      };
+      const langName = LOCALE_NAMES[locale] || locale;
+      sections.push(`# Language\nAlways respond in ${langName}. Use ${langName} for all explanations, comments, and communications. Technical terms and code identifiers should remain in their original form.`);
     }
 
     let result = sections.join(SEPARATOR);

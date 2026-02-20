@@ -2,6 +2,7 @@ import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Sparkles, Plus, X, MessageSquare } from 'lucide-react';
 import { useAppStore } from '../../store';
+import { apiGet } from '../../lib/api';
 import { modelSupportsAttachments } from '../../lib/model-capabilities';
 import { MessageBlock } from './MessageBlock';
 import { StreamingText } from './StreamingText';
@@ -38,6 +39,7 @@ interface ChatViewProps {
   onSettingsOpen?: () => void;
   onUserInputResponse?: (requestId: string, answer: string, wasFreeform: boolean) => void;
   onOpenConversation?: (conversationId: string) => void;
+  onExecutePlan?: (conversationId: string, planFilePath: string) => void;
 }
 
 export function ChatView({
@@ -56,6 +58,7 @@ export function ChatView({
   onSettingsOpen,
   onUserInputResponse,
   onOpenConversation,
+  onExecutePlan,
 }: ChatViewProps) {
   const { t } = useTranslation();
   const activeConversationId = useAppStore((s) => s.activeConversationId);
@@ -88,6 +91,7 @@ export function ChatView({
   const isTerminalMode = tabMode === 'terminal';
   const planMode = tab?.planMode ?? false;
   const showPlanCompletePrompt = tab?.showPlanCompletePrompt ?? false;
+  const planFilePath = tab?.planFilePath ?? null;
   const tasks = tab?.tasks ?? [];
   const setTabShowPlanCompletePrompt = useAppStore((s) => s.setTabShowPlanCompletePrompt);
 
@@ -105,13 +109,12 @@ export function ChatView({
     [tabId, setTabPlanMode],
   );
 
-  const handleSwitchToAct = useCallback(() => {
-    if (tabId) {
-      setTabPlanMode(tabId, false); // This also clears showPlanCompletePrompt
-    }
-  }, [tabId, setTabPlanMode]);
+  const handleExecutePlan = useCallback(() => {
+    if (!tabId || !tab?.conversationId || !planFilePath) return;
+    onExecutePlan?.(tab.conversationId, planFilePath);
+  }, [tabId, tab?.conversationId, planFilePath, onExecutePlan]);
 
-  const handleDismissPlanPrompt = useCallback(() => {
+  const handleContinuePlanning = useCallback(() => {
     if (tabId) {
       setTabShowPlanCompletePrompt(tabId, false);
     }
@@ -172,6 +175,7 @@ export function ChatView({
       { name: 'clear', description: t('slashCommand.clearDesc', 'Clear conversation'), type: 'builtin' },
       { name: 'settings', description: t('slashCommand.settingsDesc', 'Open settings'), type: 'builtin' },
       { name: 'new', description: t('slashCommand.newDesc', 'New conversation'), type: 'builtin' },
+      { name: 'context', description: t('slashCommand.contextDesc', 'Show system context info'), type: 'builtin' },
     ];
     const skillCmds: SlashCommand[] = skills
       .filter((s) => !disabledSkills.includes(s.name))
@@ -197,10 +201,89 @@ export function ChatView({
           case 'new':
             onNewConversation();
             break;
+          case 'context':
+            // Fetch context and insert as system message
+            apiGet<{
+              systemPrompt: { layers: Array<{ name: string; active: boolean; charCount: number }>; totalChars: number; maxChars: number };
+              skills: { builtin: Array<{ name: string; description: string; enabled: boolean }>; user: Array<{ name: string; description: string; enabled: boolean }> };
+              mcp: { servers: Array<{ name: string; transport: string; toolCount: number }> };
+              model: string | null;
+              sdkVersion: string | null;
+            }>('/api/copilot/context')
+              .then((ctx) => {
+                const lines: string[] = [];
+                lines.push(`**${t('context.title', 'System Context')}**`);
+                lines.push('');
+
+                // System Prompt
+                lines.push(`**${t('context.systemPrompt', 'System Prompt')}**`);
+                for (const layer of ctx.systemPrompt.layers) {
+                  const status = layer.active
+                    ? t('context.active', 'active')
+                    : t('context.inactive', 'inactive');
+                  lines.push(`- ${layer.name}: ${layer.charCount} chars (${status})`);
+                }
+                lines.push(`- ${t('context.totalChars', 'Total')}: ${ctx.systemPrompt.totalChars} / ${ctx.systemPrompt.maxChars}`);
+                lines.push('');
+
+                // Skills
+                lines.push(`**${t('context.skills', 'Skills')}**`);
+                if (ctx.skills.builtin.length > 0) {
+                  lines.push(`${t('context.builtinSkills', 'Built-in')}: ${ctx.skills.builtin.map((s) => s.name).join(', ')}`);
+                }
+                if (ctx.skills.user.length > 0) {
+                  lines.push(`${t('context.userSkills', 'User')}: ${ctx.skills.user.map((s) => s.name).join(', ')}`);
+                }
+                if (ctx.skills.builtin.length === 0 && ctx.skills.user.length === 0) {
+                  lines.push(t('context.none', 'None'));
+                }
+                lines.push('');
+
+                // MCP
+                lines.push(`**${t('context.mcpServers', 'MCP Servers')}**`);
+                if (ctx.mcp.servers.length > 0) {
+                  for (const s of ctx.mcp.servers) {
+                    lines.push(`- ${s.name} (${s.transport}) — ${s.toolCount} ${t('context.tools', 'tools')}`);
+                  }
+                } else {
+                  lines.push(t('context.none', 'None'));
+                }
+                lines.push('');
+
+                // Model & SDK
+                lines.push(`**${t('context.model', 'Model')}**: ${currentModel || t('context.none', 'None')}`);
+                lines.push(`**${t('context.sdkVersion', 'SDK Version')}**: ${ctx.sdkVersion || t('context.none', 'None')}`);
+
+                const content = lines.join('\n');
+
+                if (tabId) {
+                  useAppStore.getState().addTabMessage(tabId, {
+                    id: `ctx-${Date.now()}`,
+                    conversationId: '',
+                    role: 'system',
+                    content,
+                    metadata: null,
+                    createdAt: new Date().toISOString(),
+                  });
+                }
+              })
+              .catch(() => {
+                if (tabId) {
+                  useAppStore.getState().addTabMessage(tabId, {
+                    id: `ctx-err-${Date.now()}`,
+                    conversationId: '',
+                    role: 'system',
+                    content: t('context.fetchError', 'Failed to fetch context'),
+                    metadata: null,
+                    createdAt: new Date().toISOString(),
+                  });
+                }
+              });
+            break;
         }
       }
     },
-    [onClearConversation, onSettingsOpen, onNewConversation],
+    [onClearConversation, onSettingsOpen, onNewConversation, tabId, currentModel, t],
   );
 
   // Recent conversations for welcome page
@@ -375,18 +458,9 @@ export function ChatView({
                     {t('chat.assistant')}
                   </span>
 
-                  {/* Thinking indicator: shown when streaming but no text/tools yet */}
-                  {isStreaming && !streamingText && turnSegments.length === 0 && toolRecords.length === 0 && !reasoningText && (
-                    <ThinkingIndicator />
-                  )}
-
                   {/* Render turnSegments if available, otherwise fallback */}
                   {turnSegments.length > 0 ? (
                     <>
-                      {/* Mid-stream: reasoning_delta accumulated but reasoning complete not yet arrived */}
-                      {!turnSegments.some(s => s.type === 'reasoning') && reasoningText && (
-                        <ReasoningBlock text={reasoningText} isStreaming={isStreaming} />
-                      )}
                       {turnSegments.map((segment, index) => {
                         switch (segment.type) {
                           case 'reasoning':
@@ -413,9 +487,17 @@ export function ChatView({
                             return null;
                         }
                       })}
+                      {/* Live reasoning: currently accumulating, not yet committed */}
+                      {reasoningText && (
+                        <ReasoningBlock text={reasoningText} isStreaming={isStreaming} />
+                      )}
+                      {/* Thinking indicator: shown between tool calls when no text/reasoning and no running tools */}
+                      {isStreaming && !streamingText && !reasoningText && !turnSegments.some((s) => s.type === 'tool' && s.status === 'running') && (
+                        <ThinkingIndicator />
+                      )}
                       {/* Streaming text at the end */}
-                      {(streamingText || isStreaming) && (
-                        <StreamingText text={streamingText} isStreaming={isStreaming} />
+                      {streamingText && (
+                        <StreamingText text={streamingText} isStreaming={false} />
                       )}
                     </>
                   ) : (
@@ -429,8 +511,11 @@ export function ChatView({
                         </ToolRecordErrorBoundary>
                       ))}
 
-                      {(streamingText || isStreaming) && (
-                        <StreamingText text={streamingText} isStreaming={isStreaming} />
+                      {isStreaming && !streamingText && !reasoningText && toolRecords.length === 0 && (
+                        <ThinkingIndicator />
+                      )}
+                      {streamingText && (
+                        <StreamingText text={streamingText} isStreaming={false} />
                       )}
                     </>
                   )}
@@ -446,41 +531,7 @@ export function ChatView({
             </div>
           )}
 
-          {/* Inline user input */}
-          {userInputRequest && (
-            <InlineUserInput
-              question={userInputRequest.question}
-              choices={userInputRequest.choices}
-              allowFreeform={userInputRequest.allowFreeform}
-              multiSelect={userInputRequest.multiSelect}
-              onSubmit={handleUserInputSubmit}
-            />
-          )}
-
-          {/* Plan mode complete prompt */}
-          {showPlanCompletePrompt && !isStreaming && (
-            <div data-testid="plan-complete-prompt" className="max-w-3xl mx-auto px-4 mb-4">
-              <div className="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
-                <span className="text-sm text-amber-600 dark:text-amber-400 flex-1">
-                  {t('planMode.planComplete')}
-                </span>
-                <button
-                  data-testid="switch-to-act-btn"
-                  onClick={handleSwitchToAct}
-                  className="px-3 py-1.5 text-xs font-medium text-white bg-accent rounded-lg hover:bg-accent/90 transition-colors"
-                >
-                  {t('planMode.switchToAct')}
-                </button>
-                <button
-                  data-testid="dismiss-plan-prompt-btn"
-                  onClick={handleDismissPlanPrompt}
-                  className="px-3 py-1.5 text-xs font-medium text-text-secondary bg-bg-tertiary rounded-lg hover:bg-bg-secondary transition-colors"
-                >
-                  {t('planMode.stayInPlan')}
-                </button>
-              </div>
-            </div>
-          )}
+          {/* Plan complete prompt moved to bottom input area */}
         </div>
       </div>
 
@@ -513,47 +564,99 @@ export function ChatView({
         </div>
       )}
 
-      {/* Input area (shrink-0) */}
+      {/* Input area (shrink-0) — replaced by InlineUserInput when a question is pending */}
       <div className="shrink-0 pb-4 pt-2 px-2 md:px-4">
         <div className="max-w-3xl mx-auto">
-          <div data-testid="bottom-toolbar-row" className="mb-2 flex flex-wrap items-center gap-2">
-            <ModelSelector currentModel={currentModel} onSelect={onModelChange} />
-            {currentCwd && onCwdChange && (
-              <CwdSelector currentCwd={currentCwd} onCwdChange={onCwdChange} mode={tabMode} onModeChange={handleModeChange} />
-            )}
-            {tabId && <PlanActToggle planMode={planMode} onToggle={handlePlanModeToggle} disabled={isStreaming} />}
-          </div>
-          {activePresets.length > 0 && (
-            <div data-testid="preset-pills" className="mb-2 flex gap-1.5 overflow-x-auto whitespace-nowrap">
-              {activePresets.map((name) => (
-                <span
-                  key={name}
-                  data-testid={`preset-pill-${name}`}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-accent-soft text-accent border border-accent/20"
-                >
-                  {name}
-                  <button
-                    data-testid={`preset-pill-remove-${name}`}
-                    onClick={() => removePreset(name)}
-                    className="hover:text-error"
+          {showPlanCompletePrompt && !isStreaming ? (
+            <div data-testid="plan-complete-prompt" className="bg-bg-secondary border border-border rounded-xl p-4 my-3">
+              {/* Header with icon */}
+              <div className="flex items-start gap-3 mb-3">
+                <div className="mt-0.5 p-1.5 rounded-lg bg-accent/10 shrink-0">
+                  <Sparkles size={16} className="text-accent" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-text-primary leading-relaxed">
+                    {t('planMode.planComplete')}
+                  </p>
+                  {planFilePath && (
+                    <p data-testid="plan-file-path" className="text-xs text-text-muted mt-1 truncate">
+                      {t('planMode.planSaved', { path: planFilePath })}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {/* Choices — radio style like InlineUserInput */}
+              <div className="flex flex-col gap-1.5 ml-9">
+                {planFilePath && (
+                  <label
+                    data-testid="execute-plan-btn"
+                    className="flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg border border-border bg-bg-primary hover:bg-bg-tertiary text-text-primary cursor-pointer transition-colors"
+                    onClick={handleExecutePlan}
                   >
-                    <X size={12} />
-                  </button>
-                </span>
-              ))}
+                    <input type="radio" name="plan-action" className="accent-accent" readOnly />
+                    {t('planMode.executePlan', 'Execute Plan')}
+                  </label>
+                )}
+                <label
+                  data-testid="continue-planning-btn"
+                  className="flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg border border-border bg-bg-primary hover:bg-bg-tertiary text-text-primary cursor-pointer transition-colors"
+                  onClick={handleContinuePlanning}
+                >
+                  <input type="radio" name="plan-action" className="accent-accent" readOnly />
+                  {t('planMode.continuePlanning', 'Continue Planning')}
+                </label>
+              </div>
             </div>
+          ) : userInputRequest ? (
+            <InlineUserInput
+              question={userInputRequest.question}
+              choices={userInputRequest.choices}
+              allowFreeform={userInputRequest.allowFreeform}
+              multiSelect={userInputRequest.multiSelect}
+              onSubmit={handleUserInputSubmit}
+            />
+          ) : (
+            <>
+              <div data-testid="bottom-toolbar-row" className="mb-2 flex flex-wrap items-center gap-2">
+                <ModelSelector currentModel={currentModel} onSelect={onModelChange} />
+                {currentCwd && onCwdChange && (
+                  <CwdSelector currentCwd={currentCwd} onCwdChange={onCwdChange} mode={tabMode} onModeChange={handleModeChange} />
+                )}
+                {tabId && <PlanActToggle planMode={planMode} onToggle={handlePlanModeToggle} disabled={isStreaming} />}
+              </div>
+              {activePresets.length > 0 && (
+                <div data-testid="preset-pills" className="mb-2 flex gap-1.5 overflow-x-auto whitespace-nowrap">
+                  {activePresets.map((name) => (
+                    <span
+                      key={name}
+                      data-testid={`preset-pill-${name}`}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-accent-soft text-accent border border-accent/20"
+                    >
+                      {name}
+                      <button
+                        data-testid={`preset-pill-remove-${name}`}
+                        onClick={() => removePreset(name)}
+                        className="hover:text-error"
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <Input
+                onSend={isTerminalMode ? handleTerminalSend : onSend}
+                onAbort={onAbort}
+                isStreaming={isStreaming}
+                disabled={disabled}
+                slashCommands={isTerminalMode ? undefined : slashCommands}
+                onSlashCommand={isTerminalMode ? undefined : handleSlashCommand}
+                enableAttachments={canAttach}
+                attachmentsDisabledReason={attachmentsDisabledReason}
+                placeholder={isTerminalMode ? t('terminal.placeholder', '$ enter command...') : undefined}
+              />
+            </>
           )}
-          <Input
-            onSend={isTerminalMode ? handleTerminalSend : onSend}
-            onAbort={onAbort}
-            isStreaming={isStreaming}
-            disabled={disabled}
-            slashCommands={isTerminalMode ? undefined : slashCommands}
-            onSlashCommand={isTerminalMode ? undefined : handleSlashCommand}
-            enableAttachments={canAttach}
-            attachmentsDisabledReason={attachmentsDisabledReason}
-            placeholder={isTerminalMode ? t('terminal.placeholder', '$ enter command...') : undefined}
-          />
         </div>
       </div>
 

@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import type { Server } from 'node:http';
+import AdmZip from 'adm-zip';
 import { SkillFileStore } from '../../src/skills/file-store.js';
 import { BuiltinSkillStore } from '../../src/skills/builtin-store.js';
 import { createSkillsRoutes } from '../../src/skills/routes.js';
@@ -285,5 +286,194 @@ describe('skills routes with builtinStore', () => {
       });
       expect(res.status).toBe(200);
     });
+  });
+});
+
+// --- POST /api/skills/upload ---
+describe('POST /api/skills/upload', () => {
+  let tmpDir: string;
+  let store: SkillFileStore;
+  let app: express.Express;
+  let server: Server;
+  let baseUrl: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skills-upload-'));
+    store = new SkillFileStore(tmpDir);
+    store.ensureDirectory();
+
+    app = express();
+    app.use(express.json());
+    app.use('/api/skills', createSkillsRoutes(store));
+
+    server = app.listen(0);
+    const addr = server.address();
+    const port = typeof addr === 'object' && addr ? addr.port : 0;
+    baseUrl = `http://localhost:${port}`;
+  });
+
+  afterEach(() => {
+    server?.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('should install skill from uploaded ZIP', async () => {
+    const zip = new AdmZip();
+    const content = '---\nname: uploaded-skill\ndescription: "Uploaded"\n---\n\n# Uploaded Skill';
+    zip.addFile('SKILL.md', Buffer.from(content));
+    const zipBuffer = zip.toBuffer();
+
+    const formData = new FormData();
+    formData.append('file', new Blob([zipBuffer], { type: 'application/zip' }), 'skill.zip');
+
+    const res = await fetch(`${baseUrl}/api/skills/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    expect(body.name).toBe('uploaded-skill');
+    expect(body.description).toBe('Uploaded');
+
+    // Verify skill was installed on disk
+    expect(fs.existsSync(path.join(tmpDir, 'uploaded-skill', 'SKILL.md'))).toBe(true);
+  });
+
+  it('should return 400 when no file provided', async () => {
+    const res = await fetch(`${baseUrl}/api/skills/upload`, {
+      method: 'POST',
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('No file provided');
+  });
+
+  it('should return 400 when ZIP has no SKILL.md', async () => {
+    const zip = new AdmZip();
+    zip.addFile('README.md', Buffer.from('No skill'));
+    const zipBuffer = zip.toBuffer();
+
+    const formData = new FormData();
+    formData.append('file', new Blob([zipBuffer], { type: 'application/zip' }), 'bad.zip');
+
+    const res = await fetch(`${baseUrl}/api/skills/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('SKILL.md');
+  });
+});
+
+// --- POST /api/skills/install-url ---
+describe('POST /api/skills/install-url', () => {
+  let tmpDir: string;
+  let store: SkillFileStore;
+  let app: express.Express;
+  let server: Server;
+  let baseUrl: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skills-install-url-'));
+    store = new SkillFileStore(tmpDir);
+    store.ensureDirectory();
+
+    app = express();
+    app.use(express.json());
+    app.use('/api/skills', createSkillsRoutes(store));
+
+    server = app.listen(0);
+    const addr = server.address();
+    const port = typeof addr === 'object' && addr ? addr.port : 0;
+    baseUrl = `http://localhost:${port}`;
+  });
+
+  afterEach(() => {
+    server?.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    vi.restoreAllMocks();
+  });
+
+  it('should return 400 when URL is missing', async () => {
+    const res = await fetch(`${baseUrl}/api/skills/install-url`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('URL is required');
+  });
+
+  it('should install skill from a text URL (SKILL.md)', async () => {
+    // Spin up a small server to serve the SKILL.md content
+    const contentApp = express();
+    const skillContent = '---\nname: remote-skill\ndescription: "Remote"\n---\n\n# Remote Skill';
+    contentApp.get('/skill.md', (_req, res) => {
+      res.type('text/plain').send(skillContent);
+    });
+    const contentServer = contentApp.listen(0);
+    const contentAddr = contentServer.address();
+    const contentPort = typeof contentAddr === 'object' && contentAddr ? contentAddr.port : 0;
+
+    try {
+      const res = await fetch(`${baseUrl}/api/skills/install-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: `http://localhost:${contentPort}/skill.md` }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      expect(body.name).toBe('remote-skill');
+      expect(body.description).toBe('Remote');
+    } finally {
+      contentServer.close();
+    }
+  });
+
+  it('should install skill from a ZIP URL', async () => {
+    const contentApp = express();
+    const zip = new AdmZip();
+    const skillContent = '---\nname: zip-remote\ndescription: "ZIP Remote"\n---\n\n# ZIP Remote Skill';
+    zip.addFile('SKILL.md', Buffer.from(skillContent));
+    const zipBuffer = zip.toBuffer();
+
+    contentApp.get('/skill.zip', (_req, res) => {
+      res.type('application/zip').send(zipBuffer);
+    });
+    const contentServer = contentApp.listen(0);
+    const contentAddr = contentServer.address();
+    const contentPort = typeof contentAddr === 'object' && contentAddr ? contentAddr.port : 0;
+
+    try {
+      const res = await fetch(`${baseUrl}/api/skills/install-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: `http://localhost:${contentPort}/skill.zip` }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      expect(body.name).toBe('zip-remote');
+    } finally {
+      contentServer.close();
+    }
+  });
+
+  it('should handle GitHub tree URL conversion', async () => {
+    // We test the conversion logic indirectly — the fetch will fail
+    // but the URL conversion should have happened
+    const res = await fetch(`${baseUrl}/api/skills/install-url`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: 'https://github.com/user/repo/tree/main/skills/my-skill' }),
+    });
+    // Should fail with a network error (host not reachable), not a 400 URL-is-required
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('Failed to download');
   });
 });

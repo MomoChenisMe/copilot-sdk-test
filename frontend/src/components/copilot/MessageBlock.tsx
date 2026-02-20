@@ -66,10 +66,13 @@ export function MessageBlock({ message }: MessageBlockProps) {
 
     // Bash command: render as terminal prompt
     if (userMeta?.bash) {
+      // Backward compat: old format stored content as "$ command\noutput\n[exit code: N]"
+      // New format stores just the command. Strip leading "$ " if present.
+      const displayContent = message.content.startsWith('$ ') ? message.content.slice(2) : message.content;
       return (
         <div className="mb-2" data-testid="bash-command">
           <pre className="text-xs font-mono text-text-secondary">
-            <span className="text-accent font-medium">$</span> {message.content}
+            <span className="text-accent font-medium">$</span> {displayContent}
           </pre>
         </div>
       );

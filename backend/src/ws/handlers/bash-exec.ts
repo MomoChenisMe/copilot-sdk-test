@@ -11,7 +11,7 @@ const MAX_OUTPUT_BYTES = 512_000; // 500 KB
 
 export function createBashExecHandler(
   initialCwd?: string,
-  onBashComplete?: (command: string, output: string, exitCode: number, cwd: string) => void,
+  onBashComplete?: (command: string, output: string, exitCode: number, cwd: string, meta: { user: string; hostname: string; gitBranch: string; conversationId?: string }) => void,
 ): WsHandler {
   return {
     onMessage(message: WsMessage, send: SendFn) {
@@ -21,6 +21,7 @@ export function createBashExecHandler(
       switch (type) {
         case 'bash:exec': {
           const command = payload.command;
+          const bashConversationId = payload.conversationId as string | undefined;
           const rawCwd = (payload.cwd as string) || initialCwd || process.cwd();
           // Resolve ~ to home directory (Node.js spawn doesn't do tilde expansion)
           const resolvedCwd = rawCwd.startsWith('~')
@@ -144,12 +145,12 @@ export function createBashExecHandler(
 
               // Notify callback with accumulated output
               if (onBashComplete) {
-                onBashComplete(command as string, accumulatedOutput, code ?? 1, newCwd || cwd);
+                onBashComplete(command as string, accumulatedOutput, code ?? 1, newCwd || cwd, { user, hostname, gitBranch, conversationId: bashConversationId });
               }
             } else {
               // Killed (timeout/truncation) — still call callback with accumulated output so far
               if (onBashComplete) {
-                onBashComplete(command as string, accumulatedOutput, code ?? 1, cwd);
+                onBashComplete(command as string, accumulatedOutput, code ?? 1, cwd, { user: '', hostname: '', gitBranch: '', conversationId: bashConversationId });
               }
             }
           });

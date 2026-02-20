@@ -1,4 +1,4 @@
-# AI Terminal
+# CodeForge
 
 > 手機瀏覽器操控 VPS 上的 AI 開發工具。
 

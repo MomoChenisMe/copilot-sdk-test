@@ -5,6 +5,7 @@ export interface Conversation {
   model: string;
   cwd: string;
   pinned: boolean;
+  planFilePath: string | null;
   createdAt: string;
   updatedAt: string;
 }

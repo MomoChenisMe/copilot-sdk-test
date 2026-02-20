@@ -22,7 +22,7 @@ describe('PromptComposer', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('should compose in order: SYSTEM_PROMPT → PROFILE → AGENT → presets → preferences → .ai-terminal.md', () => {
+  it('should compose in order: SYSTEM_PROMPT → PROFILE → AGENT → presets → preferences → .codeforge.md', () => {
     fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), 'System prompt content');
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile content');
     fs.writeFileSync(path.join(tmpDir, 'AGENT.md'), 'Agent content');
@@ -118,6 +118,41 @@ describe('PromptComposer', () => {
     const result = composer.compose(['active']);
     expect(result).toContain('Active preset');
     expect(result).not.toContain('Inactive preset');
+  });
+
+  describe('locale injection', () => {
+    it('should append language instruction when locale is non-English', () => {
+      fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
+      fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
+
+      const result = composer.compose([], undefined, 'zh-TW');
+      expect(result).toContain('# Language');
+      expect(result).toContain('繁體中文（台灣）');
+    });
+
+    it('should not append language instruction when locale is en', () => {
+      fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
+      fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
+
+      const result = composer.compose([], undefined, 'en');
+      expect(result).not.toContain('# Language');
+    });
+
+    it('should not append language instruction when locale is undefined', () => {
+      fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
+      fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
+
+      const result = composer.compose([]);
+      expect(result).not.toContain('# Language');
+    });
+
+    it('should use locale code as fallback for unknown locales', () => {
+      fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
+      fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
+
+      const result = composer.compose([], undefined, 'fr');
+      expect(result).toContain('Always respond in fr');
+    });
   });
 
   describe('MEMORY.md injection', () => {

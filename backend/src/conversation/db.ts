@@ -117,4 +117,12 @@ function migrate(db: Database.Database) {
 
     CREATE INDEX IF NOT EXISTS idx_cron_history_job_id ON cron_history(job_id, created_at DESC);
   `);
+
+  // Migration: add plan_file_path to conversations
+  const cols = db
+    .prepare("PRAGMA table_info('conversations')")
+    .all() as { name: string }[];
+  if (!cols.some((c) => c.name === 'plan_file_path')) {
+    db.exec(`ALTER TABLE conversations ADD COLUMN plan_file_path TEXT`);
+  }
 }

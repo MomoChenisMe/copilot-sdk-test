@@ -310,10 +310,20 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       if (text.startsWith('!') && text.length > 1) {
         const command = text.slice(1).trim();
         if (command) {
+          // Lazy creation: materialize draft tab before bash command
+          let tab = useAppStore.getState().tabs[activeTabId];
+          if (tab && tab.conversationId === null) {
+            const model = lastSelectedModel || models[0]?.id || 'gpt-4o';
+            const conv = await createConversation(model, cwd);
+            useAppStore.getState().materializeTabConversation(activeTabId, conv.id);
+            setActiveConversationId(conv.id);
+            useAppStore.getState().addConversation(conv);
+            tab = useAppStore.getState().tabs[activeTabId];
+          }
           const conv = conversations.find(
-            (c) => c.id === useAppStore.getState().tabs[activeTabId]?.conversationId,
+            (c) => c.id === tab?.conversationId,
           );
-          sendBashCommand(command, conv?.cwd || cwd);
+          sendBashCommand(command, conv?.cwd || cwd, tab?.conversationId || undefined);
           return;
         }
       }
@@ -345,14 +355,26 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   );
 
   const handleBashSend = useCallback(
-    (command: string) => {
+    async (command: string) => {
       if (!activeTabId) return;
+
+      // Lazy creation: if this is a draft tab, create the conversation first
+      let tab = useAppStore.getState().tabs[activeTabId];
+      if (tab && tab.conversationId === null) {
+        const model = lastSelectedModel || models[0]?.id || 'gpt-4o';
+        const conv = await createConversation(model, cwd);
+        useAppStore.getState().materializeTabConversation(activeTabId, conv.id);
+        setActiveConversationId(conv.id);
+        useAppStore.getState().addConversation(conv);
+        tab = useAppStore.getState().tabs[activeTabId];
+      }
+
       const conv = conversations.find(
-        (c) => c.id === useAppStore.getState().tabs[activeTabId]?.conversationId,
+        (c) => c.id === tab?.conversationId,
       );
-      sendBashCommand(command, conv?.cwd || cwd);
+      sendBashCommand(command, conv?.cwd || cwd, tab?.conversationId || undefined);
     },
-    [activeTabId, sendBashCommand, conversations, cwd],
+    [activeTabId, sendBashCommand, conversations, cwd, lastSelectedModel, models, createConversation, setActiveConversationId],
   );
 
   const handleAbort = useCallback(() => {
@@ -379,6 +401,26 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     [getActiveConversationId, updateConversation, setLastSelectedModel],
   );
 
+  const handleExecutePlan = useCallback(
+    (conversationId: string, planFilePath: string) => {
+      if (!activeTabId) return;
+      const state = useAppStore.getState();
+
+      // Hide plan complete prompt and clear streaming state
+      state.setTabShowPlanCompletePrompt(activeTabId, false);
+      state.clearTabStreaming(activeTabId);
+      state.setTabIsStreaming(activeTabId, true);
+      state.setTabPlanMode(activeTabId, false);
+
+      // Send execute_plan via WebSocket
+      send({
+        type: 'copilot:execute_plan',
+        data: { conversationId, planFilePath },
+      });
+    },
+    [activeTabId, send],
+  );
+
   const handleCwdChange = useCallback(
     async (newCwd: string) => {
       const convId = getActiveConversationId();
@@ -400,6 +442,18 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   const activeTab = activeTabId ? tabs[activeTabId] : null;
   const activeConvId = activeTab?.conversationId;
   const activeConversation = conversations.find((c) => c.id === activeConvId);
+
+  // Listen for SDK analyze changes event from settings panel
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ message: string }>).detail;
+      if (detail?.message) {
+        handleSend(detail.message);
+      }
+    };
+    document.addEventListener('settings:analyzeChanges', handler);
+    return () => document.removeEventListener('settings:analyzeChanges', handler);
+  }, [handleSend]);
 
   // Shortcuts panel state
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -521,6 +575,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
                   handleSelectTab(newActiveTabId);
                 }
               }}
+              onExecutePlan={handleExecutePlan}
             />
           </div>
 

@@ -40,7 +40,7 @@ export class ConversationRepository {
 
   update(
     id: string,
-    updates: { title?: string; pinned?: boolean; sdkSessionId?: string; model?: string; cwd?: string },
+    updates: { title?: string; pinned?: boolean; sdkSessionId?: string; model?: string; cwd?: string; planFilePath?: string },
   ): Conversation | null {
     const existing = this.getById(id);
     if (!existing) return null;
@@ -67,6 +67,10 @@ export class ConversationRepository {
     if (updates.cwd !== undefined) {
       setClauses.push('cwd = ?');
       params.push(updates.cwd);
+    }
+    if (updates.planFilePath !== undefined) {
+      setClauses.push('plan_file_path = ?');
+      params.push(updates.planFilePath);
     }
 
     params.push(id);
@@ -152,6 +156,7 @@ interface RawConversation {
   model: string;
   cwd: string;
   pinned: number;
+  plan_file_path: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -173,6 +178,7 @@ function mapConversation(row: RawConversation): Conversation {
     model: row.model,
     cwd: row.cwd,
     pinned: row.pinned === 1,
+    planFilePath: row.plan_file_path ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

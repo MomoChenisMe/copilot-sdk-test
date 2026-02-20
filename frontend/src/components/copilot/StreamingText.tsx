@@ -6,14 +6,11 @@ interface StreamingTextProps {
 }
 
 export function StreamingText({ text, isStreaming }: StreamingTextProps) {
-  if (!text && !isStreaming) return null;
+  if (!text) return null;
 
   return (
     <div className="text-text-primary text-sm leading-relaxed">
       {text && <Markdown content={text} />}
-      {isStreaming && (
-        <span className="inline-block text-accent cursor-blink">|</span>
-      )}
     </div>
   );
 }

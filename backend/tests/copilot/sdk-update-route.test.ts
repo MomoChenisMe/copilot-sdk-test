@@ -5,6 +5,7 @@ import type { Server } from 'node:http';
 const mockChecker = {
   checkForUpdate: vi.fn(),
   performUpdate: vi.fn(),
+  getChangelog: vi.fn(),
 };
 
 vi.mock('../../src/copilot/sdk-update.js', () => ({
@@ -57,6 +58,41 @@ describe('SDK Update REST API', () => {
       mockChecker.checkForUpdate.mockRejectedValue(new Error('fail'));
 
       const res = await fetch(`http://localhost:${port}/api/copilot/sdk-version`);
+      expect(res.status).toBe(500);
+    });
+  });
+
+  describe('GET /api/copilot/sdk-changelog', () => {
+    it('should return changelog for valid from/to params', async () => {
+      mockChecker.getChangelog.mockResolvedValue('## v0.2.0\nNew features');
+
+      const res = await fetch(`http://localhost:${port}/api/copilot/sdk-changelog?from=0.1.23&to=0.2.0`);
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body).toEqual({ changelog: '## v0.2.0\nNew features' });
+      expect(mockChecker.getChangelog).toHaveBeenCalledWith('0.1.23', '0.2.0');
+    });
+
+    it('should return null changelog when unavailable', async () => {
+      mockChecker.getChangelog.mockResolvedValue(null);
+
+      const res = await fetch(`http://localhost:${port}/api/copilot/sdk-changelog?from=0.1.23&to=0.2.0`);
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body).toEqual({ changelog: null });
+    });
+
+    it('should return 400 when missing query params', async () => {
+      const res = await fetch(`http://localhost:${port}/api/copilot/sdk-changelog`);
+      expect(res.status).toBe(400);
+    });
+
+    it('should return 500 on error', async () => {
+      mockChecker.getChangelog.mockRejectedValue(new Error('fail'));
+
+      const res = await fetch(`http://localhost:${port}/api/copilot/sdk-changelog?from=0.1.23&to=0.2.0`);
       expect(res.status).toBe(500);
     });
   });

@@ -60,7 +60,7 @@ describe('Models Store Slice', () => {
 
   describe('Model Persistence (lastSelectedModel)', () => {
     it('should read lastSelectedModel from localStorage on init', () => {
-      localStorage.setItem('ai-terminal:lastSelectedModel', 'claude-sonnet-4-5-20250929');
+      localStorage.setItem('codeforge:lastSelectedModel', 'claude-sonnet-4-5-20250929');
       // Force store re-creation by checking the getter
       // The store reads at creation time via IIFE; test by checking setLastSelectedModel + get
       useAppStore.getState().setLastSelectedModel('claude-sonnet-4-5-20250929');
@@ -69,7 +69,7 @@ describe('Models Store Slice', () => {
 
     it('should persist lastSelectedModel to localStorage when set', () => {
       useAppStore.getState().setLastSelectedModel('gpt-4o');
-      expect(localStorage.getItem('ai-terminal:lastSelectedModel')).toBe('gpt-4o');
+      expect(localStorage.getItem('codeforge:lastSelectedModel')).toBe('gpt-4o');
       expect(useAppStore.getState().lastSelectedModel).toBe('gpt-4o');
     });
 

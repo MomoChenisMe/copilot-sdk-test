@@ -10,6 +10,7 @@ import { EventRelay } from './event-relay.js';
 import type { WsMessage, SendFn } from '../ws/types.js';
 import type { PromptComposer } from '../prompts/composer.js';
 import { createPermissionHandler } from './permission.js';
+import { writePlanFile, extractTopicFromContent } from './plan-writer.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('stream-manager');
@@ -109,6 +110,7 @@ interface ConversationStream {
   session: CopilotSession;
   status: 'running' | 'idle' | 'error';
   mode: 'plan' | 'act';
+  cwd: string;
   startedAt: string;
   accumulation: AccumulationState;
   eventBuffer: WsMessage[];
@@ -147,6 +149,7 @@ export interface StartStreamOptions {
   disabledSkills?: string[];
   files?: FileReference[];
   mode?: 'plan' | 'act';
+  locale?: string;
 }
 
 export class StreamManager extends EventEmitter {
@@ -210,6 +213,7 @@ export class StreamManager extends EventEmitter {
       session: null as any, // Set after session creation
       status: 'running',
       mode: options.mode ?? 'act',
+      cwd: options.cwd, // Updated to resolvedCwd below
       startedAt: new Date().toISOString(),
       accumulation: createEmptyAccumulation(),
       eventBuffer: [],
@@ -306,6 +310,7 @@ export class StreamManager extends EventEmitter {
         log.warn({ cwd: resolvedCwd, original: options.cwd }, 'CWD does not exist, falling back to home directory');
         resolvedCwd = homedir();
       }
+      stream.cwd = resolvedCwd;
 
       const sessionOpts: Parameters<typeof this.sessionManager.getOrCreateSession>[0] = {
         sdkSessionId: options.sdkSessionId,
@@ -316,7 +321,7 @@ export class StreamManager extends EventEmitter {
       };
 
       if (this.promptComposer) {
-        const composed = this.promptComposer.compose(options.activePresets ?? [], resolvedCwd);
+        const composed = this.promptComposer.compose(options.activePresets ?? [], resolvedCwd, options.locale);
         if (composed) {
           sessionOpts.systemMessage = { mode: 'append', content: composed };
         }
@@ -551,6 +556,7 @@ export class StreamManager extends EventEmitter {
 
   private processEvent(stream: ConversationStream, msg: WsMessage): void {
     const msgData = (msg.data ?? {}) as Record<string, unknown>;
+    let extraData: Record<string, unknown> | null = null;
 
     switch (msg.type) {
       case 'copilot:delta': {
@@ -663,6 +669,21 @@ export class StreamManager extends EventEmitter {
         break;
       }
       case 'copilot:idle': {
+        // Write plan file if in plan mode and there is accumulated content
+        if (stream.mode === 'plan') {
+          const planContent = stream.accumulation.contentSegments.join('');
+          if (planContent.length > 0) {
+            try {
+              const topic = extractTopicFromContent(planContent);
+              const planFilePath = writePlanFile(stream.cwd, planContent, topic);
+              this.repo.update(stream.conversationId, { planFilePath });
+              extraData = { planFilePath };
+            } catch (err) {
+              log.error({ err, conversationId: stream.conversationId }, 'Failed to write plan file');
+            }
+          }
+        }
+
         persistAccumulated(this.repo, stream.conversationId, stream.accumulation);
         stream.accumulation = createEmptyAccumulation();
         stream.status = 'idle';
@@ -690,7 +711,11 @@ export class StreamManager extends EventEmitter {
     // Enrich the event with conversationId so frontend can route it
     const enrichedMsg: WsMessage = {
       ...msg,
-      data: { ...((msg.data as Record<string, unknown>) ?? {}), conversationId: stream.conversationId },
+      data: {
+        ...((msg.data as Record<string, unknown>) ?? {}),
+        conversationId: stream.conversationId,
+        ...(extraData ?? {}),
+      },
     };
 
     // Buffer the enriched event

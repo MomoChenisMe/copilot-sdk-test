@@ -1,10 +1,10 @@
 {
   "app": {
     "loading": "載入中...",
-    "title": "AI Terminal"
+    "title": "CodeForge"
   },
   "login": {
-    "title": "AI Terminal",
+    "title": "CodeForge",
     "subtitle": "請輸入密碼以繼續",
     "password": "密碼",
     "loggingIn": "登入中...",
@@ -16,7 +16,7 @@
     "disconnected": "已斷線"
   },
   "chat": {
-    "welcomeTitle": "歡迎使用 AI Terminal",
+    "welcomeTitle": "歡迎使用 CodeForge",
     "welcomeDescription": "您的 AI 開發夥伴。開始對話以探索更多可能。",
     "startConversation": "開始新對話",
     "emptyPrompt": "發送訊息以開始...",
@@ -80,6 +80,7 @@
     "clearDesc": "清除對話",
     "settingsDesc": "開啟設定",
     "newDesc": "新對話",
+    "contextDesc": "顯示系統上下文資訊",
     "copilot": "Copilot"
   },
   "cwd": {
@@ -192,7 +193,15 @@
       "system": "系統技能",
       "user": "使用者技能",
       "systemBadge": "系統",
-      "cannotModifyBuiltin": "內建技能無法修改或刪除"
+      "cannotModifyBuiltin": "內建技能無法修改或刪除",
+      "upload": "上傳技能包",
+      "installFromUrl": "從 URL 安裝",
+      "createWithAI": "AI 建立技能",
+      "uploadDrop": "拖放 ZIP 檔案或點擊瀏覽",
+      "urlPlaceholder": "GitHub URL 或直接連結...",
+      "installing": "安裝中...",
+      "installSuccess": "技能安裝成功",
+      "installError": "安裝失敗"
     }
   },
   "terminal": {
@@ -216,9 +225,12 @@
     "act": "執行",
     "active": "計畫模式已啟用 — AI 只會規劃但不會執行工具",
     "tooltip": "切換計畫與執行模式",
-    "planComplete": "規劃完成！是否切換到執行模式開始實作？",
+    "planComplete": "規劃完成！是否開始執行計畫？",
+    "planSaved": "計畫已儲存至 {{path}}",
     "switchToAct": "切換到執行模式",
-    "stayInPlan": "繼續規劃"
+    "stayInPlan": "繼續規劃",
+    "executePlan": "開始執行",
+    "continuePlanning": "繼續規劃"
   },
   "usage": {
     "tokens": "Tokens",
@@ -303,6 +315,30 @@
       "error": "錯誤",
       "timeout": "逾時"
     }
+  },
+  "context": {
+    "title": "系統上下文",
+    "systemPrompt": "系統提示詞",
+    "layers": "層級",
+    "totalChars": "總字元數",
+    "maxChars": "最大字元數",
+    "skills": "技能",
+    "builtinSkills": "內建技能",
+    "userSkills": "使用者技能",
+    "mcpServers": "MCP 伺服器",
+    "tools": "工具",
+    "model": "模型",
+    "sdkVersion": "SDK 版本",
+    "active": "啟用",
+    "inactive": "未啟用",
+    "enabled": "已啟用",
+    "disabled": "已停用",
+    "none": "無",
+    "fetchError": "無法取得上下文資訊"
+  },
+  "sdk": {
+    "analyzeChanges": "分析更新內容",
+    "changelogUnavailable": "更新日誌不可用"
   },
   "mcp": {
     "title": "MCP 伺服器",

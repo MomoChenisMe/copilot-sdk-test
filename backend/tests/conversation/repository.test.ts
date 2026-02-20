@@ -44,6 +44,12 @@ describe('ConversationRepository', () => {
       expect(found!.id).toBe(created.id);
     });
 
+    it('should return planFilePath as null by default', () => {
+      const created = repo.create({ model: 'gpt-5', cwd: '/tmp' });
+      const found = repo.getById(created.id);
+      expect(found!.planFilePath).toBeNull();
+    });
+
     it('should return null for nonexistent id', () => {
       expect(repo.getById('nonexistent')).toBeNull();
     });
@@ -99,6 +105,14 @@ describe('ConversationRepository', () => {
 
       expect(updated).toBeTruthy();
       expect(updated!.model).toBe('claude-sonnet-4-5');
+    });
+
+    it('should update planFilePath', () => {
+      const conv = repo.create({ model: 'gpt-5', cwd: '/tmp' });
+      const updated = repo.update(conv.id, { planFilePath: '/tmp/.codeforge/plans/2026-02-19-plan.md' });
+
+      expect(updated).toBeTruthy();
+      expect(updated!.planFilePath).toBe('/tmp/.codeforge/plans/2026-02-19-plan.md');
     });
 
     it('should return null for nonexistent id', () => {

@@ -18,6 +18,7 @@ import { McpManager } from './mcp/mcp-manager.js';
 import { adaptMcpTools } from './mcp/mcp-tool-adapter.js';
 import { createMcpRoutes } from './mcp/routes.js';
 import { createCommandsRoute } from './copilot/commands-route.js';
+import { createContextRoute } from './copilot/context-route.js';
 import { createCopilotAuthRoutes } from './copilot/auth-routes.js';
 import { createWsServer } from './ws/server.js';
 import { registerHandler } from './ws/router.js';
@@ -155,6 +156,13 @@ export function createApp() {
   app.use('/api/copilot', authMiddleware, createSdkUpdateRoute());
   app.use('/api/mcp', authMiddleware, createMcpRoutes(mcpManager));
   app.use('/api/copilot', authMiddleware, createCommandsRoute());
+  app.use('/api/copilot', authMiddleware, createContextRoute({
+    promptStore,
+    skillStore,
+    builtinSkillStore,
+    mcpManager,
+    maxPromptLength: config.maxPromptLength,
+  }));
   app.use('/api/copilot/auth', authMiddleware, createCopilotAuthRoutes(clientManager));
   app.use('/api/prompts', authMiddleware, createPromptsRoutes(promptStore));
   app.use('/api/memory', authMiddleware, createMemoryRoutes(promptStore));
@@ -261,12 +269,16 @@ export function createApp() {
   registerHandler('cwd', createCwdHandler((newCwd) => {
     log.info({ cwd: newCwd }, 'Working directory changed');
   }));
-  registerHandler('bash', createBashExecHandler(config.defaultCwd, (command, output, exitCode, cwd) => {
-    const convId = copilotHandler.lastConversationId;
+  registerHandler('bash', createBashExecHandler(config.defaultCwd, (command, output, exitCode, cwd, meta) => {
+    const convId = meta.conversationId || copilotHandler.lastConversationId;
     if (convId) {
       const truncated = output.length > 10000 ? output.slice(0, 10000) + '\n...[truncated]' : output;
+      // Save user message (command only, no $ prefix)
+      repo.addMessage(convId, { role: 'user', content: command, metadata: { bash: true } });
+      // Save assistant message (output with full metadata)
+      repo.addMessage(convId, { role: 'assistant', content: truncated, metadata: { bash: true, exitCode, cwd, ...meta } });
+      // Keep context for copilot (unchanged format)
       const ctx = `$ ${command}\n${truncated}\n[exit code: ${exitCode}]`;
-      repo.addMessage(convId, { role: 'user', content: ctx, metadata: { bash: true, exitCode, cwd } });
       copilotHandler.addBashContext(convId, ctx);
     }
   }));
@@ -332,6 +344,6 @@ export function createApp() {
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'))) {
   const { httpServer, config } = createApp();
   httpServer.listen(config.port, () => {
-    log.info({ port: config.port, env: config.nodeEnv }, 'AI Terminal server started');
+    log.info({ port: config.port, env: config.nodeEnv }, 'CodeForge server started');
   });
 }

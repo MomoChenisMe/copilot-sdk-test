@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Globe, LogOut, X } from 'lucide-react';
+import { ArrowLeft, Globe, LogOut, X, Upload, Link, Sparkles } from 'lucide-react';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { promptsApi, memoryApi, skillsApi } from '../../lib/prompts-api';
 import type { PresetItem, MemoryItem, SkillItem } from '../../lib/prompts-api';
@@ -130,7 +130,7 @@ export function SettingsPanel({ open, onClose, activePresets, onTogglePreset, on
               <PresetsTab activePresets={activePresets} onTogglePreset={onTogglePreset} />
             )}
             {activeTab === 'memory' && <MemoryTab />}
-            {activeTab === 'skills' && <SkillsTab />}
+            {activeTab === 'skills' && <SkillsTab onClose={onClose} />}
             {activeTab === 'api-keys' && <ApiKeysTab />}
             {activeTab === 'mcp' && <McpTab />}
             {activeTab === 'cron' && <CronTab />}
@@ -154,14 +154,47 @@ function GeneralTab({
   const { t } = useTranslation();
   const displayLang = language === 'zh-TW' ? '繁體中文' : 'English';
   const [sdkVersion, setSdkVersion] = useState<string | null>(null);
+  const [sdkLatestVersion, setSdkLatestVersion] = useState<string | null>(null);
+  const [sdkUpdateAvailable, setSdkUpdateAvailable] = useState(false);
+  const [analyzingChanges, setAnalyzingChanges] = useState(false);
 
   useEffect(() => {
     import('../../lib/api').then(({ apiGet }) => {
-      apiGet<{ currentVersion: string | null }>('/api/copilot/sdk-version')
-        .then((r) => setSdkVersion(r.currentVersion))
+      apiGet<{ currentVersion: string | null; latestVersion: string | null; updateAvailable: boolean }>('/api/copilot/sdk-version')
+        .then((r) => {
+          setSdkVersion(r.currentVersion);
+          setSdkLatestVersion(r.latestVersion);
+          setSdkUpdateAvailable(r.updateAvailable);
+        })
         .catch(() => {});
     });
   }, []);
+
+  const handleAnalyzeChanges = useCallback(async () => {
+    if (!sdkVersion || !sdkLatestVersion) return;
+    setAnalyzingChanges(true);
+    try {
+      const { apiGet } = await import('../../lib/api');
+      const { changelog } = await apiGet<{ changelog: string | null }>(
+        `/api/copilot/sdk-changelog?from=${encodeURIComponent(sdkVersion)}&to=${encodeURIComponent(sdkLatestVersion)}`,
+      );
+
+      // Close settings
+      useAppStore.getState().setSettingsOpen(false);
+
+      // Build and dispatch the analyze message
+      const changelogText = changelog || t('sdk.changelogUnavailable');
+      const message = `SDK has been updated from v${sdkVersion} to v${sdkLatestVersion}. Here is the changelog:\n\n${changelogText}\n\nPlease analyze these changes and suggest how my backend and frontend code can be optimized.`;
+      document.dispatchEvent(new CustomEvent('settings:analyzeChanges', { detail: { message } }));
+    } catch {
+      // Fallback: still close settings and send without changelog
+      useAppStore.getState().setSettingsOpen(false);
+      const message = `SDK has been updated from v${sdkVersion} to v${sdkLatestVersion}. ${t('sdk.changelogUnavailable')}. Please analyze the update and suggest how my backend and frontend code can be optimized.`;
+      document.dispatchEvent(new CustomEvent('settings:analyzeChanges', { detail: { message } }));
+    } finally {
+      setAnalyzingChanges(false);
+    }
+  }, [sdkVersion, sdkLatestVersion, t]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -169,7 +202,19 @@ function GeneralTab({
       {sdkVersion && (
         <section>
           <h3 className="text-xs font-semibold text-text-secondary uppercase mb-2">Copilot SDK</h3>
-          <span data-testid="sdk-version" className="text-sm text-text-primary font-mono">v{sdkVersion}</span>
+          <div className="flex items-center gap-3">
+            <span data-testid="sdk-version" className="text-sm text-text-primary font-mono">v{sdkVersion}</span>
+            {sdkUpdateAvailable && sdkLatestVersion && (
+              <button
+                data-testid="analyze-changes-button"
+                onClick={handleAnalyzeChanges}
+                disabled={analyzingChanges}
+                className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {analyzingChanges ? '...' : t('sdk.analyzeChanges')}
+              </button>
+            )}
+          </div>
         </section>
       )}
 
@@ -975,7 +1020,7 @@ function MemoryTab() {
 }
 
 // === Skills Tab ===
-function SkillsTab() {
+function SkillsTab({ onClose }: { onClose?: () => void }) {
   const { t } = useTranslation();
   const disabledSkills = useAppStore((s) => s.disabledSkills);
   const toggleSkill = useAppStore((s) => s.toggleSkill);
@@ -992,6 +1037,12 @@ function SkillsTab() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
 
+  // Install state
+  const [installUrl, setInstallUrl] = useState('');
+  const [installing, setInstalling] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const nameError = newName.trim() !== '' && INVALID_NAME_RE.test(newName.trim());
 
   useEffect(() => {
@@ -999,6 +1050,13 @@ function SkillsTab() {
       setSkills(r.skills);
       setLoading(false);
     }).catch(() => setLoading(false));
+  }, []);
+
+  const refreshSkills = useCallback(async () => {
+    try {
+      const r = await skillsApi.list();
+      setSkills(r.skills);
+    } catch { /* ignore */ }
   }, []);
 
   const handleCreate = useCallback(async () => {
@@ -1056,6 +1114,63 @@ function SkillsTab() {
     setConfirmDelete(null);
   }, [confirmDelete, t]);
 
+  // --- Upload handlers ---
+  const handleUploadFile = useCallback(async (file: File) => {
+    setInstalling(true);
+    setToast(t('settings.skills.installing'));
+    try {
+      await skillsApi.upload(file);
+      await refreshSkills();
+      setToast(t('settings.skills.installSuccess'));
+      setTimeout(() => setToast(null), 2000);
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : t('settings.skills.installError'));
+      setTimeout(() => setToast(null), 3000);
+    } finally {
+      setInstalling(false);
+    }
+  }, [t, refreshSkills]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleUploadFile(file);
+  }, [handleUploadFile]);
+
+  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleUploadFile(file);
+    // Reset input so the same file can be selected again
+    e.target.value = '';
+  }, [handleUploadFile]);
+
+  // --- URL install handler ---
+  const handleInstallFromUrl = useCallback(async () => {
+    if (!installUrl.trim()) return;
+    setInstalling(true);
+    setToast(t('settings.skills.installing'));
+    try {
+      await skillsApi.installFromUrl(installUrl.trim());
+      await refreshSkills();
+      setInstallUrl('');
+      setToast(t('settings.skills.installSuccess'));
+      setTimeout(() => setToast(null), 2000);
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : t('settings.skills.installError'));
+      setTimeout(() => setToast(null), 3000);
+    } finally {
+      setInstalling(false);
+    }
+  }, [installUrl, t, refreshSkills]);
+
+  // --- AI create handler ---
+  const handleAiCreate = useCallback(() => {
+    onClose?.();
+    // Dispatch a custom event that the chat can listen to for sending /skill-creator
+    window.dispatchEvent(new CustomEvent('skills:ai-create'));
+  }, [onClose]);
+
   if (loading) return <div className="text-text-secondary text-sm">{t('settings.loading')}</div>;
 
   const systemSkills = skills.filter((s) => s.builtin);
@@ -1078,6 +1193,68 @@ function SkillsTab() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Install Actions */}
+      <div data-testid="skill-install-section" className="flex flex-col gap-3">
+        {/* Upload ZIP */}
+        <div
+          data-testid="skill-upload-drop"
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
+          className={`flex items-center justify-center gap-2 px-4 py-6 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+            dragOver
+              ? 'border-accent bg-accent/5'
+              : 'border-border hover:border-accent/50 hover:bg-bg-tertiary'
+          }`}
+        >
+          <Upload size={16} className="text-text-secondary" />
+          <span className="text-sm text-text-secondary">{t('settings.skills.uploadDrop')}</span>
+          <input
+            ref={fileInputRef}
+            data-testid="skill-upload-input"
+            type="file"
+            accept=".zip"
+            onChange={handleFileInput}
+            className="hidden"
+          />
+        </div>
+
+        {/* URL Install */}
+        <div className="flex gap-2">
+          <div className="flex-1 flex items-center gap-2 px-3 py-1.5 bg-bg-secondary border border-border rounded-lg">
+            <Link size={14} className="text-text-secondary shrink-0" />
+            <input
+              data-testid="skill-url-input"
+              type="text"
+              value={installUrl}
+              onChange={(e) => setInstallUrl(e.target.value)}
+              placeholder={t('settings.skills.urlPlaceholder')}
+              className="flex-1 text-sm bg-transparent text-text-primary outline-none placeholder:text-text-secondary/50"
+              onKeyDown={(e) => { if (e.key === 'Enter') handleInstallFromUrl(); }}
+            />
+          </div>
+          <button
+            data-testid="skill-url-install"
+            onClick={handleInstallFromUrl}
+            disabled={!installUrl.trim() || installing}
+            className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+          >
+            {installing ? t('settings.skills.installing') : t('settings.skills.installFromUrl')}
+          </button>
+        </div>
+
+        {/* AI Create */}
+        <button
+          data-testid="skill-ai-create"
+          onClick={handleAiCreate}
+          className="self-start flex items-center gap-2 px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-bg-tertiary text-text-secondary"
+        >
+          <Sparkles size={14} />
+          {t('settings.skills.createWithAI')}
+        </button>
+      </div>
+
       {/* System Skills Section */}
       {systemSkills.length > 0 && (
         <div data-testid="system-skills-section" className="flex flex-col gap-2">
@@ -1293,7 +1470,7 @@ function SkillsTab() {
         </div>
       )}
 
-      {toast && <span className="text-xs text-text-secondary">{toast}</span>}
+      {toast && <span data-testid="skill-toast" className="text-xs text-text-secondary">{toast}</span>}
     </div>
   );
 }

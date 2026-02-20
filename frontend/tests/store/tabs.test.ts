@@ -61,7 +61,7 @@ describe('Tab management', () => {
     it('should persist open tabs to localStorage', () => {
       const tab1Id = openTabAndGetId('conv-1', 'Chat 1');
       const tab2Id = openTabAndGetId('conv-2', 'Chat 2');
-      const stored = JSON.parse(localStorage.getItem('ai-terminal:openTabs') ?? '[]');
+      const stored = JSON.parse(localStorage.getItem('codeforge:openTabs') ?? '[]');
       expect(stored).toHaveLength(2);
       expect(stored[0].id).toBe(tab1Id);
       expect(stored[0].conversationId).toBe('conv-1');
@@ -100,7 +100,7 @@ describe('Tab management', () => {
       const tab1Id = openTabAndGetId('conv-1', 'Chat 1');
       const tab2Id = openTabAndGetId('conv-2', 'Chat 2');
       useAppStore.getState().closeTab(tab1Id);
-      const stored = JSON.parse(localStorage.getItem('ai-terminal:openTabs') ?? '[]');
+      const stored = JSON.parse(localStorage.getItem('codeforge:openTabs') ?? '[]');
       expect(stored).toHaveLength(1);
       expect(stored[0].id).toBe(tab2Id);
     });
@@ -300,7 +300,7 @@ describe('Tab localStorage restore', () => {
       { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
       { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
     ];
-    localStorage.setItem('ai-terminal:openTabs', JSON.stringify(saved));
+    localStorage.setItem('codeforge:openTabs', JSON.stringify(saved));
     useAppStore.getState().restoreOpenTabs();
     const state = useAppStore.getState();
     expect(state.tabOrder).toEqual(['tab-a', 'tab-b']);
@@ -316,13 +316,13 @@ describe('Tab localStorage restore', () => {
     const saved = [
       { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
     ];
-    localStorage.setItem('ai-terminal:openTabs', JSON.stringify(saved));
+    localStorage.setItem('codeforge:openTabs', JSON.stringify(saved));
     useAppStore.getState().restoreOpenTabs();
     expect(useAppStore.getState().activeTabId).toBe('tab-a');
   });
 
   it('should handle empty or invalid localStorage gracefully', () => {
-    localStorage.setItem('ai-terminal:openTabs', 'invalid-json');
+    localStorage.setItem('codeforge:openTabs', 'invalid-json');
     expect(() => useAppStore.getState().restoreOpenTabs()).not.toThrow();
     expect(useAppStore.getState().tabOrder).toEqual([]);
   });
@@ -339,7 +339,7 @@ describe('Tab localStorage restore', () => {
       { id: 'conv-old-1', title: 'Old Chat 1' },
       { id: 'conv-old-2', title: 'Old Chat 2' },
     ];
-    localStorage.setItem('ai-terminal:openTabs', JSON.stringify(oldFormat));
+    localStorage.setItem('codeforge:openTabs', JSON.stringify(oldFormat));
     useAppStore.getState().restoreOpenTabs();
     const state = useAppStore.getState();
     expect(state.tabOrder).toHaveLength(2);
@@ -359,17 +359,17 @@ describe('Tab localStorage restore', () => {
 describe('disabledSkills localStorage restore', () => {
   beforeEach(() => {
     useAppStore.setState({ disabledSkills: [] });
-    localStorage.removeItem('ai-terminal:disabledSkills');
+    localStorage.removeItem('codeforge:disabledSkills');
   });
 
   it('should restore disabledSkills from localStorage via restoreDisabledSkills', () => {
-    localStorage.setItem('ai-terminal:disabledSkills', JSON.stringify(['skill-a', 'skill-b']));
+    localStorage.setItem('codeforge:disabledSkills', JSON.stringify(['skill-a', 'skill-b']));
     useAppStore.getState().restoreDisabledSkills();
     expect(useAppStore.getState().disabledSkills).toEqual(['skill-a', 'skill-b']);
   });
 
   it('should handle invalid JSON gracefully', () => {
-    localStorage.setItem('ai-terminal:disabledSkills', 'not-json');
+    localStorage.setItem('codeforge:disabledSkills', 'not-json');
     expect(() => useAppStore.getState().restoreDisabledSkills()).not.toThrow();
     expect(useAppStore.getState().disabledSkills).toEqual([]);
   });
@@ -461,7 +461,7 @@ describe('Draft tabs (lazy conversation creation)', () => {
   it('draft tabs should NOT be persisted to localStorage', () => {
     useAppStore.getState().openTab(null, 'Draft 1');
     useAppStore.getState().openTab('conv-1', 'Saved Chat');
-    const stored = JSON.parse(localStorage.getItem('ai-terminal:openTabs') ?? '[]');
+    const stored = JSON.parse(localStorage.getItem('codeforge:openTabs') ?? '[]');
     expect(stored).toHaveLength(1);
     expect(stored[0].conversationId).toBe('conv-1');
   });
@@ -478,7 +478,7 @@ describe('Draft tabs (lazy conversation creation)', () => {
     useAppStore.getState().openTab(null, 'Draft');
     const tabId = useAppStore.getState().tabOrder[0];
     useAppStore.getState().materializeTabConversation(tabId, 'conv-new');
-    const stored = JSON.parse(localStorage.getItem('ai-terminal:openTabs') ?? '[]');
+    const stored = JSON.parse(localStorage.getItem('codeforge:openTabs') ?? '[]');
     expect(stored).toHaveLength(1);
     expect(stored[0].conversationId).toBe('conv-new');
   });

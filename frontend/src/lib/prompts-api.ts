@@ -53,11 +53,36 @@ export interface SkillList {
   skills: SkillItem[];
 }
 
+export interface SkillInstallResult {
+  ok: true;
+  name: string;
+  description: string;
+}
+
 export const skillsApi = {
   list: () => apiGet<SkillList>('/api/skills'),
   get: (name: string) => apiGet<SkillItem>(`/api/skills/${name}`),
   put: (name: string, description: string, content: string) => apiPut<{ ok: true }>(`/api/skills/${name}`, { description, content }),
   delete: (name: string) => apiDelete<{ ok: true }>(`/api/skills/${name}`),
+
+  /** Upload a ZIP skill package */
+  upload: async (file: File): Promise<SkillInstallResult> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch('/api/skills/upload', {
+      method: 'POST',
+      body: formData,
+      credentials: 'same-origin',
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(data.error ?? 'Upload failed');
+    }
+    return res.json();
+  },
+
+  /** Install a skill from a URL */
+  installFromUrl: (url: string) => apiPost<SkillInstallResult>('/api/skills/install-url', { url }),
 };
 
 export const memoryApi = {

@@ -74,6 +74,26 @@ describe('db', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
+  it('should have plan_file_path column in conversations table', () => {
+    const dbPath = tempDbPath();
+    dbPaths.push(dbPath);
+
+    const db = initDb(dbPath);
+
+    const columns = db
+      .prepare("PRAGMA table_info('conversations')")
+      .all() as { name: string; type: string }[];
+    const columnNames = columns.map((c) => c.name);
+
+    expect(columnNames).toContain('plan_file_path');
+
+    // Should be TEXT type and nullable (no NOT NULL)
+    const planCol = columns.find((c) => c.name === 'plan_file_path');
+    expect(planCol!.type).toBe('TEXT');
+
+    db.close();
+  });
+
   it('should enable WAL mode and foreign keys', () => {
     const dbPath = tempDbPath();
     dbPaths.push(dbPath);

@@ -18,6 +18,22 @@ export function createSdkUpdateRoute(): Router {
     }
   });
 
+  router.get('/sdk-changelog', async (req, res) => {
+    try {
+      const from = req.query.from as string;
+      const to = req.query.to as string;
+      if (!from || !to) {
+        res.status(400).json({ error: 'Missing "from" and "to" query parameters' });
+        return;
+      }
+      const changelog = await checker.getChangelog(from, to);
+      res.json({ changelog });
+    } catch (err) {
+      log.error({ err }, 'Failed to fetch SDK changelog');
+      res.status(500).json({ error: 'Failed to fetch SDK changelog' });
+    }
+  });
+
   router.post('/sdk-update', async (_req, res) => {
     try {
       const result = await checker.performUpdate();

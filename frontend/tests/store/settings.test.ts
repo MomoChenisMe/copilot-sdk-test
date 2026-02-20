@@ -53,7 +53,7 @@ describe('Store: settings (activePresets + disabledSkills + settingsOpen)', () =
     it('should persist activePresets to localStorage on toggle', () => {
       useAppStore.getState().togglePreset('code-review');
       expect(localStorageMock.setItem).toHaveBeenCalledWith(
-        'ai-terminal:activePresets',
+        'codeforge:activePresets',
         JSON.stringify(['code-review']),
       );
     });
@@ -68,7 +68,7 @@ describe('Store: settings (activePresets + disabledSkills + settingsOpen)', () =
       useAppStore.setState({ activePresets: ['code-review'] });
       useAppStore.getState().removePreset('code-review');
       expect(localStorageMock.setItem).toHaveBeenCalledWith(
-        'ai-terminal:activePresets',
+        'codeforge:activePresets',
         JSON.stringify([]),
       );
     });
@@ -94,7 +94,7 @@ describe('Store: settings (activePresets + disabledSkills + settingsOpen)', () =
     it('should persist disabledSkills to localStorage on toggle', () => {
       useAppStore.getState().toggleSkill('skill-x');
       expect(localStorageMock.setItem).toHaveBeenCalledWith(
-        'ai-terminal:disabledSkills',
+        'codeforge:disabledSkills',
         JSON.stringify(['skill-x']),
       );
     });
@@ -132,7 +132,7 @@ describe('Store: settings (activePresets + disabledSkills + settingsOpen)', () =
     it('should persist to localStorage on setLastSelectedModel', () => {
       useAppStore.getState().setLastSelectedModel('gpt-4o');
       expect(localStorageMock.setItem).toHaveBeenCalledWith(
-        'ai-terminal:lastSelectedModel',
+        'codeforge:lastSelectedModel',
         'gpt-4o',
       );
     });
@@ -142,7 +142,7 @@ describe('Store: settings (activePresets + disabledSkills + settingsOpen)', () =
       useAppStore.getState().setLastSelectedModel('claude-3.5-sonnet');
       expect(useAppStore.getState().lastSelectedModel).toBe('claude-3.5-sonnet');
       expect(localStorageMock.setItem).toHaveBeenLastCalledWith(
-        'ai-terminal:lastSelectedModel',
+        'codeforge:lastSelectedModel',
         'claude-3.5-sonnet',
       );
     });

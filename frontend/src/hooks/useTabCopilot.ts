@@ -223,27 +223,26 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
           if (!currentTab) break;
           const content = data.content as string | undefined;
 
-          if (!currentTab.reasoningText && content) {
-            state.appendTabReasoningText(tabId, content);
-          }
+          // If reasoningText is empty (complete event arrived without deltas), use content directly
+          const reasoningContent = currentTab.reasoningText || content || '';
+          if (!reasoningContent) break;
 
-          const updatedTab = useAppStore.getState().tabs[tabId];
-          if (updatedTab?.reasoningText) {
-            // Replace existing reasoning segment to avoid duplicates
-            useAppStore.setState((s) => {
-              const t = s.tabs[tabId];
-              if (!t) return s;
-              const filtered: TurnSegment[] = t.turnSegments.filter(seg => seg.type !== 'reasoning');
-              const reasoningSeg: TurnSegment = { type: 'reasoning', content: updatedTab.reasoningText };
-              const firstTextIdx = filtered.findIndex(seg => seg.type === 'text');
-              if (firstTextIdx >= 0) {
-                filtered.splice(firstTextIdx, 0, reasoningSeg);
-              } else {
-                filtered.push(reasoningSeg);
-              }
-              return { tabs: { ...s.tabs, [tabId]: { ...t, turnSegments: filtered } } };
-            });
-          }
+          // Commit accumulated reasoning as a new segment and clear reasoningText for the next block
+          useAppStore.setState((s) => {
+            const t = s.tabs[tabId];
+            if (!t) return s;
+            const reasoningSeg: TurnSegment = { type: 'reasoning', content: reasoningContent };
+            return {
+              tabs: {
+                ...s.tabs,
+                [tabId]: {
+                  ...t,
+                  turnSegments: [...t.turnSegments, reasoningSeg],
+                  reasoningText: '',
+                },
+              },
+            };
+          });
           break;
         }
 
@@ -291,6 +290,12 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
           state.setTabIsStreaming(tabId, false);
           state.clearTabStreaming(tabId);
           dedup.receivedMessage = false;
+
+          // Extract planFilePath if present
+          const planFilePath = data.planFilePath as string | undefined;
+          if (planFilePath) {
+            state.setTabPlanFilePath(tabId, planFilePath);
+          }
 
           // Show plan-complete prompt if we just finished in plan mode
           const finalTab = useAppStore.getState().tabs[tabId];
@@ -442,8 +447,8 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
         createdAt: new Date().toISOString(),
       });
 
-      const { activePresets, disabledSkills } = state;
-      const data: Record<string, unknown> = { conversationId, prompt, activePresets, disabledSkills };
+      const { activePresets, disabledSkills, language } = state;
+      const data: Record<string, unknown> = { conversationId, prompt, activePresets, disabledSkills, locale: language };
       if (files && files.length > 0) {
         data.files = files;
       }

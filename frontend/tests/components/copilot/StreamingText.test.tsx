@@ -8,16 +8,9 @@ describe('StreamingText', () => {
     expect(screen.getByText('Hello world')).toBeTruthy();
   });
 
-  it('shows pipe cursor (|) when streaming', () => {
+  it('does not show cursor when streaming', () => {
     const { container } = render(<StreamingText text="Typing..." isStreaming={true} />);
-    expect(container.textContent).toContain('|');
-  });
-
-  it('hides cursor when not streaming', () => {
-    const { container } = render(<StreamingText text="Done." isStreaming={false} />);
-    // No cursor character
-    const cursorEl = container.querySelector('.cursor-blink');
-    expect(cursorEl).toBeNull();
+    expect(container.textContent).not.toContain('|');
   });
 
   it('renders Markdown content (bold)', () => {
@@ -32,19 +25,13 @@ describe('StreamingText', () => {
     expect(code.tagName).toBe('CODE');
   });
 
-  it('cursor has cursor-blink animation class', () => {
-    const { container } = render(<StreamingText text="hi" isStreaming={true} />);
-    const cursor = container.querySelector('.cursor-blink');
-    expect(cursor).toBeTruthy();
-  });
-
   it('returns null when text is empty and not streaming', () => {
     const { container } = render(<StreamingText text="" isStreaming={false} />);
     expect(container.firstChild).toBeNull();
   });
 
-  it('shows cursor even with empty text when streaming', () => {
+  it('returns null when text is empty even when streaming', () => {
     const { container } = render(<StreamingText text="" isStreaming={true} />);
-    expect(container.textContent).toContain('|');
+    expect(container.firstChild).toBeNull();
   });
 });

@@ -10,21 +10,21 @@ describe('Input', () => {
     isStreaming: false,
   };
 
-  it('renders textarea with placeholder "Message AI Terminal..."', () => {
+  it('renders textarea with placeholder "Message CodeForge..."', () => {
     render(<Input {...defaultProps} />);
-    expect(screen.getByPlaceholderText('Message AI Terminal...')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Message CodeForge...')).toBeTruthy();
   });
 
   it('renders textarea with 1 row (auto-grow)', () => {
     render(<Input {...defaultProps} />);
-    const textarea = screen.getByPlaceholderText('Message AI Terminal...');
+    const textarea = screen.getByPlaceholderText('Message CodeForge...');
     expect(textarea.getAttribute('rows')).toBe('1');
   });
 
   it('sends message on Enter (not Shift+Enter)', () => {
     const onSend = vi.fn();
     render(<Input {...defaultProps} onSend={onSend} />);
-    const textarea = screen.getByPlaceholderText('Message AI Terminal...');
+    const textarea = screen.getByPlaceholderText('Message CodeForge...');
     fireEvent.change(textarea, { target: { value: 'hello' } });
     fireEvent.keyDown(textarea, { key: 'Enter' });
     expect(onSend).toHaveBeenCalledWith('hello');
@@ -33,7 +33,7 @@ describe('Input', () => {
   it('does not send on Shift+Enter', () => {
     const onSend = vi.fn();
     render(<Input {...defaultProps} onSend={onSend} />);
-    const textarea = screen.getByPlaceholderText('Message AI Terminal...');
+    const textarea = screen.getByPlaceholderText('Message CodeForge...');
     fireEvent.change(textarea, { target: { value: 'hello' } });
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true });
     expect(onSend).not.toHaveBeenCalled();
@@ -51,14 +51,14 @@ describe('Input', () => {
 
   it('disables textarea when disabled prop is true', () => {
     render(<Input {...defaultProps} disabled={true} />);
-    const textarea = screen.getByPlaceholderText('Message AI Terminal...');
+    const textarea = screen.getByPlaceholderText('Message CodeForge...');
     expect(textarea).toBeDisabled();
   });
 
   it('clears input after sending', () => {
     const onSend = vi.fn();
     render(<Input {...defaultProps} onSend={onSend} />);
-    const textarea = screen.getByPlaceholderText('Message AI Terminal...') as HTMLTextAreaElement;
+    const textarea = screen.getByPlaceholderText('Message CodeForge...') as HTMLTextAreaElement;
     fireEvent.change(textarea, { target: { value: 'hello' } });
     fireEvent.keyDown(textarea, { key: 'Enter' });
     expect(textarea.value).toBe('');
@@ -83,7 +83,7 @@ describe('Input', () => {
     it('does not send when isComposing is true and Enter is pressed', () => {
       const onSend = vi.fn();
       render(<Input {...defaultProps} onSend={onSend} />);
-      const textarea = screen.getByPlaceholderText('Message AI Terminal...');
+      const textarea = screen.getByPlaceholderText('Message CodeForge...');
       fireEvent.change(textarea, { target: { value: '你好' } });
       // isComposing is a standard KeyboardEvent property
       const event = new KeyboardEvent('keydown', {
@@ -99,7 +99,7 @@ describe('Input', () => {
     it('does not send when keyCode is 229 (IME processing)', () => {
       const onSend = vi.fn();
       render(<Input {...defaultProps} onSend={onSend} />);
-      const textarea = screen.getByPlaceholderText('Message AI Terminal...');
+      const textarea = screen.getByPlaceholderText('Message CodeForge...');
       fireEvent.change(textarea, { target: { value: '你好' } });
       fireEvent.keyDown(textarea, {
         key: 'Enter',
@@ -111,7 +111,7 @@ describe('Input', () => {
     it('sends normally after composition ends (isComposing=false)', () => {
       const onSend = vi.fn();
       render(<Input {...defaultProps} onSend={onSend} />);
-      const textarea = screen.getByPlaceholderText('Message AI Terminal...');
+      const textarea = screen.getByPlaceholderText('Message CodeForge...');
       fireEvent.change(textarea, { target: { value: '你好世界' } });
       fireEvent.keyDown(textarea, { key: 'Enter' });
       expect(onSend).toHaveBeenCalledWith('你好世界');
@@ -125,7 +125,7 @@ describe('Input', () => {
       render(
         <Input {...defaultProps} slashCommands={slashCmds} onSlashCommand={vi.fn()} />,
       );
-      const textarea = screen.getByPlaceholderText('Message AI Terminal...');
+      const textarea = screen.getByPlaceholderText('Message CodeForge...');
       fireEvent.change(textarea, { target: { value: '/' } });
       expect(screen.getByRole('listbox')).toBeTruthy();
       // IME ArrowDown should be ignored (keyCode 229)
@@ -152,7 +152,7 @@ describe('Input', () => {
     it('calls onSend with text and attachments', () => {
       const onSend = vi.fn();
       render(<Input {...defaultProps} onSend={onSend} enableAttachments={true} />);
-      const textarea = screen.getByPlaceholderText('Message AI Terminal...');
+      const textarea = screen.getByPlaceholderText('Message CodeForge...');
       fireEvent.change(textarea, { target: { value: 'check this' } });
       fireEvent.keyDown(textarea, { key: 'Enter' });
       // When no attachments, should still call onSend with just text
@@ -183,7 +183,7 @@ describe('Input', () => {
       const fileInput = screen.getByTestId('file-input') as HTMLInputElement;
       const file = new File(['hello'], 'test.txt', { type: 'text/plain' });
       fireEvent.change(fileInput, { target: { files: [file] } });
-      const textarea = screen.getByPlaceholderText('Message AI Terminal...');
+      const textarea = screen.getByPlaceholderText('Message CodeForge...');
       fireEvent.change(textarea, { target: { value: 'check' } });
       fireEvent.keyDown(textarea, { key: 'Enter' });
       expect(screen.queryByText('test.txt')).toBeNull();
@@ -206,7 +206,7 @@ describe('Input', () => {
           onSlashCommand={vi.fn()}
         />,
       );
-      const textarea = screen.getByPlaceholderText('Message AI Terminal...');
+      const textarea = screen.getByPlaceholderText('Message CodeForge...');
       fireEvent.change(textarea, { target: { value: '/' } });
       expect(screen.getByRole('listbox')).toBeTruthy();
     });
@@ -219,7 +219,7 @@ describe('Input', () => {
           onSlashCommand={vi.fn()}
         />,
       );
-      const textarea = screen.getByPlaceholderText('Message AI Terminal...');
+      const textarea = screen.getByPlaceholderText('Message CodeForge...');
       // e.g. "https://url" — the / is not preceded by whitespace or start-of-line
       fireEvent.change(textarea, { target: { value: 'https://example.com' } });
       expect(screen.queryByRole('listbox')).toBeNull();
@@ -233,7 +233,7 @@ describe('Input', () => {
           onSlashCommand={vi.fn()}
         />,
       );
-      const textarea = screen.getByPlaceholderText('Message AI Terminal...');
+      const textarea = screen.getByPlaceholderText('Message CodeForge...');
       fireEvent.change(textarea, { target: { value: '/code' } });
       expect(screen.getByText('/code-review')).toBeTruthy();
       expect(screen.queryByText('/clear')).toBeNull();
@@ -248,7 +248,7 @@ describe('Input', () => {
           onSlashCommand={onSlashCommand}
         />,
       );
-      const textarea = screen.getByPlaceholderText('Message AI Terminal...');
+      const textarea = screen.getByPlaceholderText('Message CodeForge...');
       fireEvent.change(textarea, { target: { value: '/' } });
       fireEvent.click(screen.getByText('/clear'));
       expect(onSlashCommand).toHaveBeenCalledWith(slashCommands[0]);
@@ -263,7 +263,7 @@ describe('Input', () => {
           onSlashCommand={onSlashCommand}
         />,
       );
-      const textarea = screen.getByPlaceholderText('Message AI Terminal...');
+      const textarea = screen.getByPlaceholderText('Message CodeForge...');
       fireEvent.change(textarea, { target: { value: '/' } });
       // Menu should be open
       expect(screen.getByRole('listbox')).toBeTruthy();
@@ -281,7 +281,7 @@ describe('Input', () => {
           onSlashCommand={onSlashCommand}
         />,
       );
-      const textarea = screen.getByPlaceholderText('Message AI Terminal...') as HTMLTextAreaElement;
+      const textarea = screen.getByPlaceholderText('Message CodeForge...') as HTMLTextAreaElement;
       fireEvent.change(textarea, { target: { value: '/code' } });
       // Only code-review should be visible, press Tab
       fireEvent.keyDown(textarea, { key: 'Tab' });
@@ -297,7 +297,7 @@ describe('Input', () => {
           onSlashCommand={onSlashCommand}
         />,
       );
-      const textarea = screen.getByPlaceholderText('Message AI Terminal...') as HTMLTextAreaElement;
+      const textarea = screen.getByPlaceholderText('Message CodeForge...') as HTMLTextAreaElement;
       fireEvent.change(textarea, { target: { value: '/' } });
       fireEvent.click(screen.getByText('/code-review'));
       expect(textarea.value).toBe('/code-review ');
@@ -337,7 +337,7 @@ describe('Input', () => {
           onSlashCommand={vi.fn()}
         />,
       );
-      const textarea = screen.getByPlaceholderText('Message AI Terminal...') as HTMLTextAreaElement;
+      const textarea = screen.getByPlaceholderText('Message CodeForge...') as HTMLTextAreaElement;
       // Simulate cursor at end: "hello /"
       fireEvent.change(textarea, { target: { value: 'hello /', selectionStart: 7, selectionEnd: 7 } });
       expect(screen.getByRole('listbox')).toBeTruthy();
@@ -351,7 +351,7 @@ describe('Input', () => {
           onSlashCommand={vi.fn()}
         />,
       );
-      const textarea = screen.getByPlaceholderText('Message AI Terminal...') as HTMLTextAreaElement;
+      const textarea = screen.getByPlaceholderText('Message CodeForge...') as HTMLTextAreaElement;
       fireEvent.change(textarea, { target: { value: 'hello /cl', selectionStart: 9, selectionEnd: 9 } });
       expect(screen.getByRole('listbox')).toBeTruthy();
       expect(screen.getByText('/clear')).toBeTruthy();
@@ -366,7 +366,7 @@ describe('Input', () => {
           onSlashCommand={vi.fn()}
         />,
       );
-      const textarea = screen.getByPlaceholderText('Message AI Terminal...') as HTMLTextAreaElement;
+      const textarea = screen.getByPlaceholderText('Message CodeForge...') as HTMLTextAreaElement;
       fireEvent.change(textarea, { target: { value: 'visit https://google.com', selectionStart: 24, selectionEnd: 24 } });
       expect(screen.queryByRole('listbox')).toBeNull();
     });
@@ -380,7 +380,7 @@ describe('Input', () => {
           onSlashCommand={onSlashCommand}
         />,
       );
-      const textarea = screen.getByPlaceholderText('Message AI Terminal...') as HTMLTextAreaElement;
+      const textarea = screen.getByPlaceholderText('Message CodeForge...') as HTMLTextAreaElement;
       fireEvent.change(textarea, { target: { value: 'please /code', selectionStart: 12, selectionEnd: 12 } });
       expect(screen.getByRole('listbox')).toBeTruthy();
       fireEvent.click(screen.getByText('/code-review'));
@@ -395,7 +395,7 @@ describe('Input', () => {
           onSlashCommand={vi.fn()}
         />,
       );
-      const textarea = screen.getByPlaceholderText('Message AI Terminal...') as HTMLTextAreaElement;
+      const textarea = screen.getByPlaceholderText('Message CodeForge...') as HTMLTextAreaElement;
       fireEvent.change(textarea, { target: { value: 'line1\n/', selectionStart: 7, selectionEnd: 7 } });
       expect(screen.getByRole('listbox')).toBeTruthy();
     });

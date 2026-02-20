@@ -226,5 +226,61 @@ describe('bash-exec handler', () => {
       expect(doneCalls).toHaveLength(1);
       expect(doneCalls[0][0].data.exitCode).toBe(0);
     });
+
+    it('should call onBashComplete with expanded signature including meta (user, hostname, gitBranch)', async () => {
+      const onBashComplete = vi.fn();
+      const cbHandler = createBashExecHandler('/tmp', onBashComplete);
+      const cbSend = vi.fn();
+
+      const h = typeof cbHandler === 'function' ? cbHandler : cbHandler.onMessage;
+      h({ type: 'bash:exec', data: { command: 'echo meta-test', cwd: '/tmp' } }, cbSend);
+
+      await new Promise((r) => setTimeout(r, 3000));
+
+      expect(onBashComplete).toHaveBeenCalledTimes(1);
+      const [command, output, exitCode, cwd, meta] = onBashComplete.mock.calls[0];
+      expect(command).toBe('echo meta-test');
+      expect(output).toContain('meta-test');
+      expect(exitCode).toBe(0);
+      expect(typeof cwd).toBe('string');
+      // Verify meta object contains user, hostname, gitBranch
+      expect(meta).toBeDefined();
+      expect(typeof meta.user).toBe('string');
+      expect(meta.user.length).toBeGreaterThan(0);
+      expect(typeof meta.hostname).toBe('string');
+      expect(meta.hostname.length).toBeGreaterThan(0);
+      expect(typeof meta.gitBranch).toBe('string');
+    });
+
+    it('should include gitBranch in meta when inside a git repo', async () => {
+      const onBashComplete = vi.fn();
+      const projectRoot = process.cwd();
+      const cbHandler = createBashExecHandler(projectRoot, onBashComplete);
+      const cbSend = vi.fn();
+
+      const h = typeof cbHandler === 'function' ? cbHandler : cbHandler.onMessage;
+      h({ type: 'bash:exec', data: { command: 'echo git-meta', cwd: projectRoot } }, cbSend);
+
+      await new Promise((r) => setTimeout(r, 3000));
+
+      expect(onBashComplete).toHaveBeenCalledTimes(1);
+      const [, , , , meta] = onBashComplete.mock.calls[0];
+      expect(meta.gitBranch.length).toBeGreaterThan(0);
+    });
+
+    it('should include empty gitBranch in meta when not inside a git repo', async () => {
+      const onBashComplete = vi.fn();
+      const cbHandler = createBashExecHandler('/tmp', onBashComplete);
+      const cbSend = vi.fn();
+
+      const h = typeof cbHandler === 'function' ? cbHandler : cbHandler.onMessage;
+      h({ type: 'bash:exec', data: { command: 'echo no-git', cwd: '/tmp' } }, cbSend);
+
+      await new Promise((r) => setTimeout(r, 3000));
+
+      expect(onBashComplete).toHaveBeenCalledTimes(1);
+      const [, , , , meta] = onBashComplete.mock.calls[0];
+      expect(meta.gitBranch).toBe('');
+    });
   });
 });

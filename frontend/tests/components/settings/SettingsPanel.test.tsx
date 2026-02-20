@@ -280,6 +280,71 @@ describe('SettingsPanel', () => {
     });
   });
 
+  // === SDK Analyze Changes ===
+  describe('SDK Analyze Changes', () => {
+    it('should show "Analyze Changes" button when SDK update is available', async () => {
+      const { apiGet } = await import('../../../src/lib/api');
+      (apiGet as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        currentVersion: '0.1.0',
+        latestVersion: '0.2.0',
+        updateAvailable: true,
+      });
+
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('analyze-changes-button')).toBeTruthy();
+      });
+
+      expect(screen.getByTestId('analyze-changes-button').textContent).toBe('Analyze Changes');
+    });
+
+    it('should NOT show "Analyze Changes" button when no update is available', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('sdk-version')).toBeTruthy();
+      });
+
+      expect(screen.queryByTestId('analyze-changes-button')).toBeNull();
+    });
+
+    it('should dispatch settings:analyzeChanges event and close settings on click', async () => {
+      const { apiGet } = await import('../../../src/lib/api');
+      (apiGet as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({
+          currentVersion: '0.1.0',
+          latestVersion: '0.2.0',
+          updateAvailable: true,
+        })
+        .mockResolvedValueOnce({ changelog: '## v0.2.0\nNew features' });
+
+      const eventSpy = vi.fn();
+      document.addEventListener('settings:analyzeChanges', eventSpy);
+
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('analyze-changes-button')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('analyze-changes-button'));
+
+      await waitFor(() => {
+        expect(eventSpy).toHaveBeenCalled();
+      });
+
+      const detail = (eventSpy.mock.calls[0][0] as CustomEvent).detail;
+      expect(detail.message).toContain('v0.1.0');
+      expect(detail.message).toContain('v0.2.0');
+
+      document.removeEventListener('settings:analyzeChanges', eventSpy);
+    });
+  });
+
   // === System Prompt Tab ===
   describe('System Prompt tab', () => {
     it('should load and display system prompt content', async () => {

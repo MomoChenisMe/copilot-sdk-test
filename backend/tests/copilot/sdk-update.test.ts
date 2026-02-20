@@ -125,6 +125,57 @@ describe('SdkUpdateChecker', () => {
     });
   });
 
+  describe('getChangelog', () => {
+    it('should return changelog from GitHub Releases API on success', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve([
+            { tag_name: 'v0.1.24', body: 'Fix bug A' },
+            { tag_name: 'v0.1.25', body: 'Add feature B' },
+            { tag_name: 'v0.1.23', body: 'Old release' },
+          ]),
+      });
+
+      const result = await checker.getChangelog('0.1.23', '0.1.25');
+      expect(result).toContain('v0.1.24');
+      expect(result).toContain('Fix bug A');
+      expect(result).toContain('v0.1.25');
+      expect(result).toContain('Add feature B');
+      expect(result).not.toContain('Old release');
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('github.com/repos/'),
+        expect.objectContaining({ headers: { Accept: 'application/vnd.github.v3+json' } }),
+      );
+    });
+
+    it('should fallback to npm registry when GitHub API fails', async () => {
+      // GitHub fails
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 403 });
+      // npm registry fallback succeeds
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({ description: 'Copilot SDK', gitHead: 'abc123' }),
+      });
+
+      const result = await checker.getChangelog('0.1.23', '0.1.25');
+      expect(result).toContain('Copilot SDK');
+      expect(result).toContain('abc123');
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should return null when both GitHub and npm fail', async () => {
+      // GitHub fails
+      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+      // npm fails
+      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+
+      const result = await checker.getChangelog('0.1.23', '0.1.25');
+      expect(result).toBeNull();
+    });
+  });
+
   describe('performUpdate', () => {
     it('should run npm update command', async () => {
       (exec as any).mockImplementation((_cmd: string, _opts: any, cb: Function) => {

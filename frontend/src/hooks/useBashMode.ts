@@ -16,11 +16,14 @@ export function useBashMode({ subscribe, send, tabId, onCwdChange }: UseBashMode
   onCwdChangeRef.current = onCwdChange;
 
   const sendBashCommand = useCallback(
-    (command: string, cwd: string) => {
+    (command: string, cwd: string, conversationId?: string) => {
+      // Resolve conversationId from tab if not provided
+      const convId = conversationId || useAppStore.getState().tabs[tabId]?.conversationId || '';
+
       // Add user message to tab
       const userMsg = {
         id: `bash-user-${Date.now()}`,
-        conversationId: '',
+        conversationId: convId,
         role: 'user' as const,
         content: command,
         metadata: { bash: true },
@@ -33,10 +36,10 @@ export function useBashMode({ subscribe, send, tabId, onCwdChange }: UseBashMode
       outputBufferRef.current = '';
       cwdRef.current = cwd;
 
-      // Send to backend
+      // Send to backend (include conversationId so messages can be persisted)
       send({
         type: 'bash:exec',
-        data: { command, cwd },
+        data: { command, cwd, conversationId: convId || undefined },
       });
     },
     [tabId, send],

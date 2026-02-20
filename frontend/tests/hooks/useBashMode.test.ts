@@ -36,7 +36,7 @@ describe('useBashMode', () => {
 
     expect(sendFn).toHaveBeenCalledWith({
       type: 'bash:exec',
-      data: { command: 'ls -la', cwd: '/tmp' },
+      data: { command: 'ls -la', cwd: '/tmp', conversationId: 'conv-bash' },
     });
   });
 

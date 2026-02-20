@@ -392,6 +392,27 @@ describe('useTabCopilot', () => {
       expect(useAppStore.getState().tabs[tabIdA].showPlanCompletePrompt).toBe(true);
     });
 
+    it('should extract planFilePath from copilot:idle event data', () => {
+      useAppStore.getState().setTabPlanMode(tabIdA, true);
+      useAppStore.getState().setTabIsStreaming(tabIdA, true);
+      useAppStore.getState().updateStreamStatus('conv-A', 'running');
+      renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        emit({ type: 'copilot:idle', data: { conversationId: 'conv-A', planFilePath: '/tmp/.codeforge/plans/2026-02-19-plan.md' } });
+      });
+      expect(useAppStore.getState().tabs[tabIdA].planFilePath).toBe('/tmp/.codeforge/plans/2026-02-19-plan.md');
+    });
+
+    it('should not set planFilePath when idle event has no planFilePath', () => {
+      useAppStore.getState().setTabIsStreaming(tabIdA, true);
+      useAppStore.getState().updateStreamStatus('conv-A', 'running');
+      renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        emit({ type: 'copilot:idle', data: { conversationId: 'conv-A' } });
+      });
+      expect(useAppStore.getState().tabs[tabIdA].planFilePath).toBeNull();
+    });
+
     it('should not show plan complete prompt when idle fires in act mode', () => {
       // planMode defaults to false
       useAppStore.getState().setTabIsStreaming(tabIdA, true);
@@ -401,6 +422,33 @@ describe('useTabCopilot', () => {
         emit({ type: 'copilot:idle', data: { conversationId: 'conv-A' } });
       });
       expect(useAppStore.getState().tabs[tabIdA].showPlanCompletePrompt).toBe(false);
+    });
+  });
+
+  // --- Locale ---
+  describe('locale', () => {
+    it('should include locale in copilot:send payload', () => {
+      useAppStore.setState({ language: 'zh-TW' });
+      const { result } = renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        result.current.sendMessage(tabIdA, 'hello');
+      });
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'copilot:send',
+        data: expect.objectContaining({ locale: 'zh-TW' }),
+      }));
+    });
+
+    it('should default locale to en when language is en', () => {
+      useAppStore.setState({ language: 'en' });
+      const { result } = renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        result.current.sendMessage(tabIdA, 'hello');
+      });
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'copilot:send',
+        data: expect.objectContaining({ locale: 'en' }),
+      }));
     });
   });
 
