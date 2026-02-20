@@ -78,8 +78,6 @@ export function ChatView({
   const reasoningText = tab?.reasoningText ?? globalReasoningText;
   const turnSegments = tab?.turnSegments ?? globalTurnSegments;
   const copilotError = tab?.copilotError ?? globalCopilotError;
-  const activePresets = useAppStore((s) => s.activePresets);
-  const removePreset = useAppStore((s) => s.removePreset);
   const skills = useAppStore((s) => s.skills);
   const disabledSkills = useAppStore((s) => s.disabledSkills);
   const sdkCommands = useAppStore((s) => s.sdkCommands);
@@ -384,26 +382,6 @@ export function ChatView({
               )}
               {tabId && <PlanActToggle planMode={planMode} onToggle={handlePlanModeToggle} disabled={isStreaming} />}
             </div>
-            {activePresets.length > 0 && (
-              <div data-testid="preset-pills" className="mb-2 flex gap-1.5 overflow-x-auto whitespace-nowrap">
-                {activePresets.map((name) => (
-                  <span
-                    key={name}
-                    data-testid={`preset-pill-${name}`}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-accent-soft text-accent border border-accent/20"
-                  >
-                    {name}
-                    <button
-                      data-testid={`preset-pill-remove-${name}`}
-                      onClick={() => removePreset(name)}
-                      className="hover:text-error"
-                    >
-                      <X size={12} />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
             <Input
               onSend={isTerminalMode ? handleTerminalSend : onSend}
               onAbort={onAbort}
@@ -624,26 +602,6 @@ export function ChatView({
                 )}
                 {tabId && <PlanActToggle planMode={planMode} onToggle={handlePlanModeToggle} disabled={isStreaming} />}
               </div>
-              {activePresets.length > 0 && (
-                <div data-testid="preset-pills" className="mb-2 flex gap-1.5 overflow-x-auto whitespace-nowrap">
-                  {activePresets.map((name) => (
-                    <span
-                      key={name}
-                      data-testid={`preset-pill-${name}`}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-accent-soft text-accent border border-accent/20"
-                    >
-                      {name}
-                      <button
-                        data-testid={`preset-pill-remove-${name}`}
-                        onClick={() => removePreset(name)}
-                        className="hover:text-error"
-                      >
-                        <X size={12} />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
               <Input
                 onSend={isTerminalMode ? handleTerminalSend : onSend}
                 onAbort={onAbort}

@@ -78,7 +78,6 @@ export function createCopilotHandler(
           // Delegate to StreamManager
           void (async () => {
             try {
-              const activePresets = (payload.activePresets as string[]) ?? [];
               const disabledSkills = (payload.disabledSkills as string[]) ?? [];
               const mode = payload.mode as 'plan' | 'act' | undefined;
               const locale = payload.locale as string | undefined;
@@ -87,7 +86,6 @@ export function createCopilotHandler(
                 sdkSessionId: conversation.sdkSessionId,
                 model: conversation.model,
                 cwd: conversation.cwd,
-                activePresets,
                 disabledSkills,
                 files,
                 ...(mode && { mode }),

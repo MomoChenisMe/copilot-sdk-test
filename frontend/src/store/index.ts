@@ -47,11 +47,19 @@ export interface TaskItem {
   blockedBy: string[];
 }
 
+export interface ToastItem {
+  id: string;
+  type: 'success' | 'error' | 'info';
+  title: string;
+  message?: string;
+  onClick?: () => void;
+}
+
 export interface TabState {
   id: string;
   conversationId: string | null;
   title: string;
-  mode: 'copilot' | 'terminal';
+  mode: 'copilot' | 'terminal' | 'cron';
   messages: Message[];
   streamingText: string;
   isStreaming: boolean;
@@ -128,7 +136,6 @@ export interface AppState {
   sdkCommandsLoaded: boolean;
 
   // Settings
-  activePresets: string[];
   disabledSkills: string[];
   settingsOpen: boolean;
 
@@ -184,8 +191,6 @@ export interface AppState {
   setSdkCommandsLoaded: (loaded: boolean) => void;
 
   // Actions — Settings
-  togglePreset: (name: string) => void;
-  removePreset: (name: string) => void;
   toggleSkill: (name: string) => void;
   setSettingsOpen: (open: boolean) => void;
 
@@ -223,7 +228,7 @@ export interface AppState {
   addTabTurnSegment: (tabId: string, segment: TurnSegment) => void;
   updateTabToolInTurnSegments: (tabId: string, toolCallId: string, updates: Partial<ToolRecord>) => void;
   setTabCopilotError: (tabId: string, error: string | null) => void;
-  setTabMode: (tabId: string, mode: 'copilot' | 'terminal') => void;
+  setTabMode: (tabId: string, mode: 'copilot' | 'terminal' | 'cron') => void;
 
   // Actions — Per-tab usage
   updateTabUsage: (tabId: string, inputTokens: number, outputTokens: number, cacheReadTokens?: number, cacheWriteTokens?: number, model?: string) => void;
@@ -243,12 +248,23 @@ export interface AppState {
   addTabArtifacts: (tabId: string, artifacts: ParsedArtifact[]) => void;
   setTabActiveArtifact: (tabId: string, artifactId: string | null) => void;
   setTabArtifactsPanelOpen: (tabId: string, open: boolean) => void;
+
+  // Toast notifications
+  toasts: ToastItem[];
+  addToast: (toast: Omit<ToastItem, 'id'>) => void;
+  removeToast: (id: string) => void;
+
+  // Cron badge
+  cronUnreadCount: number;
+  cronFailedCount: number;
+  setCronBadge: (unread: number, failed: number) => void;
+  cronRefreshTrigger: number;
+  triggerCronRefresh: () => void;
 }
 
 const MIGRATION_KEYS = [
   'lastSelectedModel',
   'openTabs',
-  'activePresets',
   'disabledSkills',
 ] as const;
 
@@ -325,7 +341,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   skillsLoaded: false,
   sdkCommands: [],
   sdkCommandsLoaded: false,
-  activePresets: [],
   disabledSkills: [],
   settingsOpen: false,
   lastSelectedModel: (() => {
@@ -445,21 +460,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSdkCommandsLoaded: (loaded) => set({ sdkCommandsLoaded: loaded }),
 
   // Settings actions
-  togglePreset: (name) => {
-    const current = get().activePresets;
-    const next = current.includes(name)
-      ? current.filter((p) => p !== name)
-      : [...current, name];
-    try { localStorage.setItem('codeforge:activePresets', JSON.stringify(next)); } catch { /* noop */ }
-    set({ activePresets: next });
-  },
-
-  removePreset: (name) => {
-    const next = get().activePresets.filter((p) => p !== name);
-    try { localStorage.setItem('codeforge:activePresets', JSON.stringify(next)); } catch { /* noop */ }
-    set({ activePresets: next });
-  },
-
   toggleSkill: (name) => {
     const current = get().disabledSkills;
     const next = current.includes(name)
@@ -979,6 +979,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       return { tabs: { ...state.tabs, [tabId]: { ...tab, tasks: updatedTasks } } };
     }),
+
+  // Toast notifications
+  toasts: [],
+  addToast: (toast) =>
+    set((state) => ({
+      toasts: [...state.toasts, { ...toast, id: `toast-${Date.now()}-${Math.random().toString(36).slice(2)}` }],
+    })),
+  removeToast: (id) =>
+    set((state) => ({
+      toasts: state.toasts.filter((t) => t.id !== id),
+    })),
+
+  // Cron badge
+  cronUnreadCount: 0,
+  cronFailedCount: 0,
+  setCronBadge: (unread, failed) => set({ cronUnreadCount: unread, cronFailedCount: failed }),
+  cronRefreshTrigger: 0,
+  triggerCronRefresh: () => set((s) => ({ cronRefreshTrigger: s.cronRefreshTrigger + 1 })),
 }));
 
 function persistOpenTabs(tabs: Record<string, TabState>, tabOrder: string[]) {

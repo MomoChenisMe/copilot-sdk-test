@@ -30,14 +30,14 @@ describe('PromptComposer — .codeforge.md support', () => {
   it('should read .codeforge.md when it exists', () => {
     fs.writeFileSync(path.join(cwdDir, '.codeforge.md'), 'CodeForge project rules');
 
-    const result = composer.compose([], cwdDir);
+    const result = composer.compose(cwdDir);
     expect(result).toContain('CodeForge project rules');
   });
 
   it('should fall back to .ai-terminal.md when .codeforge.md does not exist', () => {
     fs.writeFileSync(path.join(cwdDir, '.ai-terminal.md'), 'Legacy project rules');
 
-    const result = composer.compose([], cwdDir);
+    const result = composer.compose(cwdDir);
     expect(result).toContain('Legacy project rules');
   });
 
@@ -45,7 +45,7 @@ describe('PromptComposer — .codeforge.md support', () => {
     fs.writeFileSync(path.join(cwdDir, '.codeforge.md'), 'New rules');
     fs.writeFileSync(path.join(cwdDir, '.ai-terminal.md'), 'Old rules');
 
-    const result = composer.compose([], cwdDir);
+    const result = composer.compose(cwdDir);
     expect(result).toContain('New rules');
     expect(result).not.toContain('Old rules');
   });
@@ -53,14 +53,14 @@ describe('PromptComposer — .codeforge.md support', () => {
   it('should ignore both when neither file exists', () => {
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
 
-    const result = composer.compose([], cwdDir);
+    const result = composer.compose(cwdDir);
     expect(result).toBe('Profile');
   });
 
   it('should ignore both when cwd is not provided', () => {
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
 
-    const result = composer.compose([]);
+    const result = composer.compose();
     expect(result).toBe('Profile');
   });
 });

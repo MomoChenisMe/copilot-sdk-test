@@ -162,7 +162,7 @@ export function McpTab() {
                 type="text"
                 value={formArgs}
                 onChange={(e) => setFormArgs(e.target.value)}
-                placeholder="comma-separated"
+                placeholder={t('mcp.argsPlaceholder')}
                 className="w-full p-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-primary"
               />
             </>

@@ -105,57 +105,11 @@ describe('promptsApi', () => {
     });
   });
 
-  describe('presets', () => {
-    it('listPresets calls GET /api/prompts/presets', async () => {
-      const presets = { presets: [{ name: 'code-review', content: '# Review' }] };
-      mockFetch.mockResolvedValue(mockResponse(presets));
-
-      const result = await promptsApi.listPresets();
-
-      expect(mockFetch).toHaveBeenCalledWith('/api/prompts/presets', expect.objectContaining({
-        credentials: 'same-origin',
-      }));
-      expect(result).toEqual(presets);
-    });
-
-    it('getPreset calls GET /api/prompts/presets/:name', async () => {
-      mockFetch.mockResolvedValue(mockResponse({ content: '# Review preset' }));
-
-      const result = await promptsApi.getPreset('code-review');
-
-      expect(mockFetch).toHaveBeenCalledWith('/api/prompts/presets/code-review', expect.objectContaining({
-        credentials: 'same-origin',
-      }));
-      expect(result).toEqual({ content: '# Review preset' });
-    });
-
-    it('putPreset calls PUT /api/prompts/presets/:name', async () => {
-      mockFetch.mockResolvedValue(mockResponse({ ok: true }));
-
-      await promptsApi.putPreset('devops', 'DevOps rules');
-
-      expect(mockFetch).toHaveBeenCalledWith('/api/prompts/presets/devops', expect.objectContaining({
-        method: 'PUT',
-        body: JSON.stringify({ content: 'DevOps rules' }),
-      }));
-    });
-
-    it('deletePreset calls DELETE /api/prompts/presets/:name', async () => {
-      mockFetch.mockResolvedValue(mockResponse({ ok: true }));
-
-      await promptsApi.deletePreset('old-preset');
-
-      expect(mockFetch).toHaveBeenCalledWith('/api/prompts/presets/old-preset', expect.objectContaining({
-        method: 'DELETE',
-      }));
-    });
-  });
-
   describe('error handling', () => {
     it('throws on non-ok response', async () => {
       mockFetch.mockResolvedValue(mockResponse({ error: 'Not found' }, false, 404));
 
-      await expect(promptsApi.getPreset('missing')).rejects.toThrow();
+      await expect(promptsApi.getSystemPrompt()).rejects.toThrow();
     });
   });
 });

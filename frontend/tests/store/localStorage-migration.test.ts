@@ -4,7 +4,6 @@ import { migrateLocalStorageKeys } from '../../src/store/index';
 const KEYS = [
   'lastSelectedModel',
   'openTabs',
-  'activePresets',
   'disabledSkills',
 ];
 
@@ -16,14 +15,12 @@ describe('migrateLocalStorageKeys', () => {
   it('should copy ai-terminal:* keys to codeforge:* keys', () => {
     localStorage.setItem('ai-terminal:lastSelectedModel', 'gpt-4o');
     localStorage.setItem('ai-terminal:openTabs', '[{"id":"1","title":"Tab"}]');
-    localStorage.setItem('ai-terminal:activePresets', '["concise"]');
     localStorage.setItem('ai-terminal:disabledSkills', '["git"]');
 
     migrateLocalStorageKeys();
 
     expect(localStorage.getItem('codeforge:lastSelectedModel')).toBe('gpt-4o');
     expect(localStorage.getItem('codeforge:openTabs')).toBe('[{"id":"1","title":"Tab"}]');
-    expect(localStorage.getItem('codeforge:activePresets')).toBe('["concise"]');
     expect(localStorage.getItem('codeforge:disabledSkills')).toBe('["git"]');
   });
 

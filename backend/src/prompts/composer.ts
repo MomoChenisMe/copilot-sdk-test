@@ -16,7 +16,7 @@ export class PromptComposer {
     private memoryStore?: MemoryStore,
   ) {}
 
-  compose(activePresets: string[], cwd?: string, locale?: string): string {
+  compose(cwd?: string, locale?: string): string {
     const sections: string[] = [];
 
     // 1. SYSTEM_PROMPT.md
@@ -27,16 +27,9 @@ export class PromptComposer {
     const profile = this.store.readFile('PROFILE.md');
     if (profile.trim()) sections.push(profile);
 
-    // 2. AGENT.md
+    // 3. AGENT.md
     const agent = this.store.readFile('AGENT.md');
     if (agent.trim()) sections.push(agent);
-
-    // 3. Active presets (alphabetical order)
-    const sortedPresets = [...activePresets].sort();
-    for (const name of sortedPresets) {
-      const content = this.store.readFile(`presets/${name}.md`);
-      if (content.trim()) sections.push(content);
-    }
 
     // 4. memory/preferences.md
     const preferences = this.store.readFile('memory/preferences.md');

@@ -1327,7 +1327,7 @@ describe('StreamManager', () => {
   });
 
   describe('startStream with promptComposer', () => {
-    it('should call promptComposer.compose with activePresets and pass systemMessage to session', async () => {
+    it('should call promptComposer.compose with cwd and pass systemMessage to session', async () => {
       const mockComposer = {
         compose: vi.fn().mockReturnValue('Composed system prompt'),
       };
@@ -1345,10 +1345,9 @@ describe('StreamManager', () => {
         sdkSessionId: null,
         model: 'gpt-5',
         cwd: '/tmp',
-        activePresets: ['code-review'],
       });
 
-      expect(mockComposer.compose).toHaveBeenCalledWith(['code-review'], '/tmp', undefined);
+      expect(mockComposer.compose).toHaveBeenCalledWith('/tmp', undefined);
       expect(mockSessionManager.getOrCreateSession).toHaveBeenCalledWith(
         expect.objectContaining({
           systemMessage: { mode: 'append', content: 'Composed system prompt' },
@@ -1377,28 +1376,6 @@ describe('StreamManager', () => {
 
       const sessionOpts = mockSessionManager.getOrCreateSession.mock.calls[0][0];
       expect(sessionOpts.systemMessage).toBeUndefined();
-    });
-
-    it('should default activePresets to empty array when not provided', async () => {
-      const mockComposer = {
-        compose: vi.fn().mockReturnValue(''),
-      };
-
-      StreamManager.resetInstance();
-      const smDefault = StreamManager.getInstance({
-        sessionManager: mockSessionManager as any,
-        repo: mockRepo as any,
-        promptComposer: mockComposer as any,
-      });
-
-      await smDefault.startStream('conv-1', {
-        prompt: 'hello',
-        sdkSessionId: null,
-        model: 'gpt-5',
-        cwd: '/tmp',
-      });
-
-      expect(mockComposer.compose).toHaveBeenCalledWith([], '/tmp', undefined);
     });
   });
 

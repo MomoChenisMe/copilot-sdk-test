@@ -22,36 +22,26 @@ describe('PromptComposer', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('should compose in order: SYSTEM_PROMPT → PROFILE → AGENT → presets → preferences → .codeforge.md', () => {
+  it('should compose in order: SYSTEM_PROMPT → PROFILE → AGENT → preferences', () => {
     fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), 'System prompt content');
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile content');
     fs.writeFileSync(path.join(tmpDir, 'AGENT.md'), 'Agent content');
-    fs.writeFileSync(path.join(tmpDir, 'presets', 'alpha.md'), 'Alpha preset');
     fs.writeFileSync(path.join(tmpDir, 'memory', 'preferences.md'), 'Preferences content');
 
-    const result = composer.compose(['alpha']);
+    const result = composer.compose();
     const sections = result.split('\n\n---\n\n');
     expect(sections[0]).toBe('System prompt content');
     expect(sections[1]).toBe('Profile content');
     expect(sections[2]).toBe('Agent content');
-    expect(sections[3]).toBe('Alpha preset');
-    expect(sections[4]).toBe('Preferences content');
+    expect(sections[3]).toBe('Preferences content');
   });
 
   it('should skip SYSTEM_PROMPT when empty', () => {
     fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile content');
 
-    const result = composer.compose([]);
+    const result = composer.compose();
     expect(result).toBe('Profile content');
-  });
-
-  it('should include presets in alphabetical order', () => {
-    fs.writeFileSync(path.join(tmpDir, 'presets', 'zebra.md'), 'Zebra');
-    fs.writeFileSync(path.join(tmpDir, 'presets', 'alpha.md'), 'Alpha');
-
-    const result = composer.compose(['zebra', 'alpha']);
-    expect(result.indexOf('Alpha')).toBeLessThan(result.indexOf('Zebra'));
   });
 
   it('should skip empty sections (no extra separators)', () => {
@@ -60,14 +50,14 @@ describe('PromptComposer', () => {
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile only');
     // AGENT.md is empty (created by ensureDirectories)
 
-    const result = composer.compose([]);
+    const result = composer.compose();
     expect(result).toBe('Profile only');
     expect(result).not.toContain('---');
   });
 
   it('should return empty string when all sections are empty', () => {
     fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
-    const result = composer.compose([]);
+    const result = composer.compose();
     expect(result).toBe('');
   });
 
@@ -76,7 +66,7 @@ describe('PromptComposer', () => {
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), '   \n  ');
     fs.writeFileSync(path.join(tmpDir, 'AGENT.md'), 'Agent rules');
 
-    const result = composer.compose([]);
+    const result = composer.compose();
     expect(result).toBe('Agent rules');
   });
 
@@ -85,7 +75,7 @@ describe('PromptComposer', () => {
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), longContent);
 
     const shortComposer = new PromptComposer(store, 100);
-    const result = shortComposer.compose([]);
+    const result = shortComposer.compose();
     expect(result.length).toBeLessThanOrEqual(116); // 100 + '\n[... truncated]'.length
     expect(result).toContain('[... truncated]');
   });
@@ -96,7 +86,7 @@ describe('PromptComposer', () => {
     fs.writeFileSync(path.join(cwdDir, '.ai-terminal.md'), 'Project rules');
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
 
-    const result = composer.compose([], cwdDir);
+    const result = composer.compose(cwdDir);
     expect(result).toContain('Project rules');
     expect(result).toContain('Profile');
 
@@ -107,17 +97,8 @@ describe('PromptComposer', () => {
     fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
 
-    const result = composer.compose([], '/nonexistent-dir');
+    const result = composer.compose('/nonexistent-dir');
     expect(result).toBe('Profile');
-  });
-
-  it('should only include active presets, not all presets in directory', () => {
-    fs.writeFileSync(path.join(tmpDir, 'presets', 'active.md'), 'Active preset');
-    fs.writeFileSync(path.join(tmpDir, 'presets', 'inactive.md'), 'Inactive preset');
-
-    const result = composer.compose(['active']);
-    expect(result).toContain('Active preset');
-    expect(result).not.toContain('Inactive preset');
   });
 
   describe('locale injection', () => {
@@ -125,7 +106,7 @@ describe('PromptComposer', () => {
       fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
       fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
 
-      const result = composer.compose([], undefined, 'zh-TW');
+      const result = composer.compose(undefined, 'zh-TW');
       expect(result).toContain('# Language');
       expect(result).toContain('繁體中文（台灣）');
     });
@@ -134,7 +115,7 @@ describe('PromptComposer', () => {
       fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
       fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
 
-      const result = composer.compose([], undefined, 'en');
+      const result = composer.compose(undefined, 'en');
       expect(result).not.toContain('# Language');
     });
 
@@ -142,7 +123,7 @@ describe('PromptComposer', () => {
       fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
       fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
 
-      const result = composer.compose([]);
+      const result = composer.compose();
       expect(result).not.toContain('# Language');
     });
 
@@ -150,7 +131,7 @@ describe('PromptComposer', () => {
       fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
       fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
 
-      const result = composer.compose([], undefined, 'fr');
+      const result = composer.compose(undefined, 'fr');
       expect(result).toContain('Always respond in fr');
     });
   });
@@ -166,7 +147,7 @@ describe('PromptComposer', () => {
       fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
       fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
 
-      const result = composerWithMem.compose([]);
+      const result = composerWithMem.compose();
       expect(result).toContain('User prefers dark mode');
       expect(result).toContain('Project uses pnpm');
 
@@ -182,7 +163,7 @@ describe('PromptComposer', () => {
       fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
       fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
 
-      const result = composerWithMem.compose([]);
+      const result = composerWithMem.compose();
       expect(result).toBe('Profile');
 
       fs.rmSync(memDir, { recursive: true, force: true });
@@ -199,7 +180,7 @@ describe('PromptComposer', () => {
       fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
       fs.writeFileSync(path.join(tmpDir, 'memory', 'preferences.md'), 'Preferences');
 
-      const result = composerWithMem.compose([]);
+      const result = composerWithMem.compose();
       expect(result.indexOf('Preferences')).toBeLessThan(result.indexOf('Memory facts here'));
 
       fs.rmSync(memDir, { recursive: true, force: true });

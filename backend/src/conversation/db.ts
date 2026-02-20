@@ -110,7 +110,7 @@ function migrate(db: Database.Database) {
       job_id TEXT NOT NULL REFERENCES cron_jobs(id) ON DELETE CASCADE,
       started_at TEXT NOT NULL,
       finished_at TEXT,
-      status TEXT NOT NULL CHECK(status IN ('success', 'error', 'timeout')),
+      status TEXT NOT NULL CHECK(status IN ('success', 'error', 'timeout', 'running')),
       output TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -124,5 +124,41 @@ function migrate(db: Database.Database) {
     .all() as { name: string }[];
   if (!cols.some((c) => c.name === 'plan_file_path')) {
     db.exec(`ALTER TABLE conversations ADD COLUMN plan_file_path TEXT`);
+  }
+
+  // Migration: update cron_history status CHECK to include 'running'
+  const cronHistorySql = (db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='cron_history'",
+  ).get() as any)?.sql as string | undefined;
+  if (cronHistorySql && !cronHistorySql.includes("'running'")) {
+    db.exec(`
+      CREATE TABLE cron_history_new (
+        id TEXT PRIMARY KEY,
+        job_id TEXT NOT NULL REFERENCES cron_jobs(id) ON DELETE CASCADE,
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        status TEXT NOT NULL CHECK(status IN ('success', 'error', 'timeout', 'running')),
+        output TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO cron_history_new SELECT id, job_id, started_at, finished_at, status, output, created_at FROM cron_history;
+      DROP TABLE cron_history;
+      ALTER TABLE cron_history_new RENAME TO cron_history;
+      CREATE INDEX IF NOT EXISTS idx_cron_history_job_id ON cron_history(job_id, created_at DESC);
+    `);
+  }
+
+  // Migration: add rich execution data columns to cron_history
+  const cronHistoryMigrations = [
+    'ALTER TABLE cron_history ADD COLUMN prompt TEXT',
+    'ALTER TABLE cron_history ADD COLUMN config_snapshot TEXT',
+    'ALTER TABLE cron_history ADD COLUMN turn_segments TEXT',
+    'ALTER TABLE cron_history ADD COLUMN tool_records TEXT',
+    'ALTER TABLE cron_history ADD COLUMN reasoning TEXT',
+    'ALTER TABLE cron_history ADD COLUMN usage TEXT',
+    'ALTER TABLE cron_history ADD COLUMN content TEXT',
+  ];
+  for (const sql of cronHistoryMigrations) {
+    try { db.exec(sql); } catch { /* column already exists */ }
   }
 }

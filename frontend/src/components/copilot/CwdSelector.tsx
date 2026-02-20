@@ -6,7 +6,7 @@ import { DirectoryPicker } from './DirectoryPicker';
 interface CwdSelectorProps {
   currentCwd: string;
   onCwdChange: (newCwd: string) => void;
-  mode?: 'copilot' | 'terminal';
+  mode?: 'copilot' | 'terminal' | 'cron';
   onModeChange?: (mode: 'copilot' | 'terminal') => void;
 }
 
@@ -66,6 +66,7 @@ export function CwdSelector({ currentCwd, onCwdChange, mode, onModeChange }: Cwd
             currentPath={currentCwd}
             onSelect={handleSelect}
             onClose={handleClose}
+            onFallback={onCwdChange}
           />
         </div>
       )}

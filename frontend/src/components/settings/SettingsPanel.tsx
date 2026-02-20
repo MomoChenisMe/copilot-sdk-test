@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Globe, LogOut, X, Upload, Link, Sparkles } from 'lucide-react';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { promptsApi, memoryApi, skillsApi } from '../../lib/prompts-api';
-import type { PresetItem, MemoryItem, SkillItem } from '../../lib/prompts-api';
+import type { MemoryItem, SkillItem } from '../../lib/prompts-api';
 import { memoryApi as autoMemoryApi } from '../../lib/api';
 import type { MemoryConfig, MemoryStats } from '../../lib/api';
 import { useAppStore } from '../../store';
@@ -11,17 +11,13 @@ import type { ModelInfo } from '../../store';
 import { Markdown } from '../shared/Markdown';
 import { ApiKeysTab } from './ApiKeysTab';
 import { McpTab } from './McpTab';
-import { CronTab } from './CronTab';
-
 const INVALID_NAME_RE = /[.]{2}|[/\\]|\0/;
 
-type TabId = 'general' | 'system-prompt' | 'profile' | 'agent' | 'presets' | 'memory' | 'skills' | 'api-keys' | 'mcp' | 'cron';
+type TabId = 'general' | 'system-prompt' | 'profile' | 'agent' | 'memory' | 'skills' | 'api-keys' | 'mcp';
 
 interface SettingsPanelProps {
   open: boolean;
   onClose: () => void;
-  activePresets: string[];
-  onTogglePreset: (name: string) => void;
   onLanguageToggle?: () => void;
   language?: string;
   onLogout?: () => void;
@@ -32,15 +28,13 @@ const TABS: { id: TabId; labelKey: string }[] = [
   { id: 'system-prompt', labelKey: 'settings.tabs.systemPrompt' },
   { id: 'profile', labelKey: 'settings.tabs.profile' },
   { id: 'agent', labelKey: 'settings.tabs.agent' },
-  { id: 'presets', labelKey: 'settings.tabs.presets' },
   { id: 'memory', labelKey: 'settings.tabs.memory' },
   { id: 'skills', labelKey: 'settings.tabs.skills' },
   { id: 'api-keys', labelKey: 'settings.tabs.apiKeys' },
   { id: 'mcp', labelKey: 'settings.tabs.mcp' },
-  { id: 'cron', labelKey: 'settings.tabs.cron' },
 ];
 
-export function SettingsPanel({ open, onClose, activePresets, onTogglePreset, onLanguageToggle, language, onLogout }: SettingsPanelProps) {
+export function SettingsPanel({ open, onClose, onLanguageToggle, language, onLogout }: SettingsPanelProps) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabId>('system-prompt');
 
@@ -126,14 +120,10 @@ export function SettingsPanel({ open, onClose, activePresets, onTogglePreset, on
             {activeTab === 'system-prompt' && <SystemPromptTab />}
             {activeTab === 'profile' && <ProfileTab />}
             {activeTab === 'agent' && <AgentTab />}
-            {activeTab === 'presets' && (
-              <PresetsTab activePresets={activePresets} onTogglePreset={onTogglePreset} />
-            )}
             {activeTab === 'memory' && <MemoryTab />}
             {activeTab === 'skills' && <SkillsTab onClose={onClose} />}
             {activeTab === 'api-keys' && <ApiKeysTab />}
             {activeTab === 'mcp' && <McpTab />}
-            {activeTab === 'cron' && <CronTab />}
           </div>
         </div>
       </div>
@@ -407,176 +397,6 @@ function AgentTab() {
         </button>
         {toast && <span className="text-xs text-text-secondary">{toast}</span>}
       </div>
-    </div>
-  );
-}
-
-// === Presets Tab ===
-function PresetsTab({
-  activePresets,
-  onTogglePreset,
-}: {
-  activePresets: string[];
-  onTogglePreset: (name: string) => void;
-}) {
-  const { t } = useTranslation();
-  const [presets, setPresets] = useState<PresetItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [expandedPreset, setExpandedPreset] = useState<string | null>(null);
-  const [editContent, setEditContent] = useState('');
-  const [toast, setToast] = useState<string | null>(null);
-
-  useEffect(() => {
-    promptsApi.listPresets().then((r) => {
-      setPresets(r.presets);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, []);
-
-  const handleExpand = useCallback((name: string, content: string) => {
-    if (expandedPreset === name) {
-      setExpandedPreset(null);
-    } else {
-      setExpandedPreset(name);
-      setEditContent(content);
-    }
-  }, [expandedPreset]);
-
-  const handleSavePreset = useCallback(async () => {
-    if (!expandedPreset) return;
-    try {
-      await promptsApi.putPreset(expandedPreset, editContent);
-      setPresets((prev) =>
-        prev.map((p) => (p.name === expandedPreset ? { ...p, content: editContent } : p)),
-      );
-      setToast(t('settings.toast.saved'));
-      setTimeout(() => setToast(null), 2000);
-    } catch {
-      setToast(t('settings.toast.saveFailed'));
-      setTimeout(() => setToast(null), 2000);
-    }
-  }, [expandedPreset, editContent, t]);
-
-  const handleDeletePreset = useCallback(async (name: string) => {
-    try {
-      await promptsApi.deletePreset(name);
-      setPresets((prev) => prev.filter((p) => p.name !== name));
-    } catch {
-      setToast(t('settings.toast.deleteFailed'));
-      setTimeout(() => setToast(null), 2000);
-    }
-  }, [t]);
-
-  const handleExport = useCallback(async () => {
-    try {
-      const data = await promptsApi.exportPresets();
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'presets.json';
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      setToast(t('settings.toast.saveFailed'));
-      setTimeout(() => setToast(null), 2000);
-    }
-  }, [t]);
-
-  const handleImport = useCallback(() => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      try {
-        const text = await file.text();
-        const data = JSON.parse(text);
-        if (!Array.isArray(data.presets)) throw new Error('Invalid format');
-        await promptsApi.importPresets(data.presets);
-        // Refresh list
-        const r = await promptsApi.listPresets();
-        setPresets(r.presets);
-        setToast(t('settings.toast.saved'));
-        setTimeout(() => setToast(null), 2000);
-      } catch {
-        setToast(t('settings.toast.saveFailed'));
-        setTimeout(() => setToast(null), 2000);
-      }
-    };
-    input.click();
-  }, [t]);
-
-  if (loading) return <div className="text-text-secondary text-sm">{t('settings.loading')}</div>;
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex gap-2 mb-2">
-        <button
-          data-testid="presets-export"
-          onClick={handleExport}
-          className="px-3 py-1.5 text-xs font-medium bg-bg-tertiary text-text-secondary rounded-lg hover:bg-bg-secondary"
-        >
-          Export
-        </button>
-        <button
-          data-testid="presets-import"
-          onClick={handleImport}
-          className="px-3 py-1.5 text-xs font-medium bg-bg-tertiary text-text-secondary rounded-lg hover:bg-bg-secondary"
-        >
-          Import
-        </button>
-      </div>
-      {presets.map((preset) => (
-        <div key={preset.name} className="border border-border rounded-lg overflow-hidden">
-          <div className="flex items-center gap-2 px-3 py-2">
-            {/* Toggle switch */}
-            <ToggleSwitch
-              data-testid={`preset-toggle-${preset.name}`}
-              checked={activePresets.includes(preset.name)}
-              onChange={() => onTogglePreset(preset.name)}
-            />
-
-            {/* Name + expand */}
-            <button
-              data-testid={`preset-expand-${preset.name}`}
-              onClick={() => handleExpand(preset.name, preset.content)}
-              className="flex-1 text-left text-sm text-text-primary hover:text-accent"
-            >
-              {preset.name}
-            </button>
-
-            {/* Delete */}
-            <button
-              data-testid={`preset-delete-${preset.name}`}
-              onClick={() => handleDeletePreset(preset.name)}
-              className="p-1 text-text-secondary hover:text-error"
-            >
-              <X size={14} />
-            </button>
-          </div>
-
-          {/* Expanded edit area */}
-          {expandedPreset === preset.name && (
-            <div className="px-3 pb-3 flex flex-col gap-2 border-t border-border-subtle">
-              <textarea
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-                className="w-full h-32 p-2 text-sm bg-bg-secondary border border-border rounded-lg resize-y font-mono text-text-primary mt-2"
-              />
-              <button
-                onClick={handleSavePreset}
-                className="self-start px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
-              >
-                {t('settings.save')}
-              </button>
-            </div>
-          )}
-        </div>
-      ))}
-
-      {toast && <span className="text-xs text-text-secondary">{toast}</span>}
     </div>
   );
 }

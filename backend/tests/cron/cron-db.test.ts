@@ -94,4 +94,29 @@ describe('Cron DB migration', () => {
     const indexNames = indexes.map((i: any) => i.name);
     expect(indexNames.some((n: string) => n.includes('job_id'))).toBe(true);
   });
+
+  it('should have rich execution data columns in cron_history', () => {
+    const cols = db.prepare("PRAGMA table_info('cron_history')").all() as any[];
+    const colNames = cols.map((c: any) => c.name);
+    expect(colNames).toContain('prompt');
+    expect(colNames).toContain('config_snapshot');
+    expect(colNames).toContain('turn_segments');
+    expect(colNames).toContain('tool_records');
+    expect(colNames).toContain('reasoning');
+    expect(colNames).toContain('usage');
+    expect(colNames).toContain('content');
+  });
+
+  it('should be idempotent on repeated migration', () => {
+    // Close and re-init — should not throw
+    db.close();
+    const db2 = initDb(dbPath);
+    const cols = db2.prepare("PRAGMA table_info('cron_history')").all() as any[];
+    const colNames = cols.map((c: any) => c.name);
+    expect(colNames).toContain('prompt');
+    expect(colNames).toContain('content');
+    db2.close();
+    // Re-open for afterEach cleanup
+    db = initDb(dbPath);
+  });
 });

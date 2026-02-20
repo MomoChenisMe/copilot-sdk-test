@@ -8,6 +8,7 @@ import path from 'node:path';
 import { initDb } from '../../src/conversation/db.js';
 import { CronStore } from '../../src/cron/cron-store.js';
 import { CronScheduler } from '../../src/cron/cron-scheduler.js';
+import { ConversationRepository } from '../../src/conversation/repository.js';
 import { createCronRoutes } from '../../src/cron/cron-routes.js';
 
 function tempDbPath() {
@@ -18,6 +19,7 @@ describe('Cron REST API', () => {
   let db: Database.Database;
   let store: CronStore;
   let scheduler: CronScheduler;
+  let repo: ConversationRepository;
   let app: express.Express;
   let dbPath: string;
 
@@ -25,13 +27,14 @@ describe('Cron REST API', () => {
     dbPath = tempDbPath();
     db = initDb(dbPath);
     store = new CronStore(db);
+    repo = new ConversationRepository(db);
     scheduler = new CronScheduler(store, {
       executeAiTask: vi.fn().mockResolvedValue({ output: 'done' }),
       executeShellTask: vi.fn().mockResolvedValue({ output: 'done' }),
     });
     app = express();
     app.use(express.json());
-    app.use('/api/cron', createCronRoutes(store, scheduler));
+    app.use('/api/cron', createCronRoutes(store, scheduler, repo));
   });
 
   afterEach(async () => {
@@ -139,6 +142,83 @@ describe('Cron REST API', () => {
       expect(res.status).toBe(200);
       expect(res.body.history).toHaveLength(1);
       expect(res.body.history[0].status).toBe('success');
+    });
+  });
+
+  // --- New endpoints ---
+
+  describe('GET /api/cron/history/recent', () => {
+    it('should return recent history across all jobs', async () => {
+      const jobA = store.create({ name: 'Job A', type: 'ai', scheduleType: 'cron', scheduleValue: '0 9 * * *', config: { prompt: 'a' } });
+      const jobB = store.create({ name: 'Job B', type: 'ai', scheduleType: 'cron', scheduleValue: '0 9 * * *', config: { prompt: 'b' } });
+      store.addHistory({ jobId: jobA.id, startedAt: '2026-02-20T00:00:00Z', status: 'success', output: 'a ok' });
+      store.addHistory({ jobId: jobB.id, startedAt: '2026-02-20T01:00:00Z', status: 'error', output: 'b fail' });
+
+      const res = await request(app).get('/api/cron/history/recent');
+      expect(res.status).toBe(200);
+      expect(res.body.history).toHaveLength(2);
+      // Most recent first
+      expect(res.body.history[0].jobName).toBe('Job B');
+      expect(res.body.history[1].jobName).toBe('Job A');
+    });
+
+    it('should respect limit param', async () => {
+      const job = store.create({ name: 'Job', type: 'ai', scheduleType: 'cron', scheduleValue: '0 9 * * *', config: { prompt: 'x' } });
+      for (let i = 0; i < 5; i++) {
+        store.addHistory({ jobId: job.id, startedAt: `2026-02-${String(i + 1).padStart(2, '0')}T00:00:00Z`, status: 'success' });
+      }
+      const res = await request(app).get('/api/cron/history/recent?limit=3');
+      expect(res.body.history).toHaveLength(3);
+    });
+  });
+
+  describe('GET /api/cron/history/unread-count', () => {
+    it('should return unread and failed counts', async () => {
+      const job = store.create({ name: 'Job', type: 'ai', scheduleType: 'cron', scheduleValue: '0 9 * * *', config: { prompt: 'x' } });
+      store.addHistory({ jobId: job.id, startedAt: '2026-02-20T00:00:00Z', status: 'success' });
+      store.addHistory({ jobId: job.id, startedAt: '2026-02-20T01:00:00Z', status: 'error', output: 'fail' });
+      store.addHistory({ jobId: job.id, startedAt: '2026-02-20T02:00:00Z', status: 'error', output: 'fail2' });
+
+      const res = await request(app).get('/api/cron/history/unread-count?since=2020-01-01T00:00:00Z');
+      expect(res.status).toBe(200);
+      expect(res.body.unread).toBe(3);
+      expect(res.body.failed).toBe(2);
+    });
+  });
+
+  describe('POST /api/cron/history/:historyId/open-conversation', () => {
+    it('should create a conversation from history and return 201', async () => {
+      const job = store.create({ name: 'Open Test', type: 'ai', scheduleType: 'cron', scheduleValue: '0 9 * * *', config: { prompt: 'check disk', model: 'gpt-4o', cwd: '/tmp' } });
+      const history = store.addHistory({
+        jobId: job.id,
+        startedAt: '2026-02-20T00:00:00Z',
+        finishedAt: '2026-02-20T00:01:00Z',
+        status: 'success',
+        output: 'Disk is fine',
+        prompt: 'check disk',
+        configSnapshot: { model: 'gpt-4o', cwd: '/tmp' },
+        turnSegments: [{ type: 'text', content: 'Disk is fine' }],
+        toolRecords: [{ toolCallId: 't1', toolName: 'bash', status: 'success' }],
+        usage: { inputTokens: 100, outputTokens: 50, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        content: 'Disk is fine, no issues found.',
+      });
+
+      const res = await request(app).post(`/api/cron/history/${history.id}/open-conversation`);
+      expect(res.status).toBe(201);
+      expect(res.body.conversation).toBeDefined();
+      expect(res.body.conversation.id).toBeDefined();
+
+      // Verify conversation has messages
+      const messages = repo.getMessages(res.body.conversation.id);
+      expect(messages).toHaveLength(1);
+      expect(messages[0].role).toBe('assistant');
+      expect(messages[0].content).toContain('check disk');
+      expect(messages[0].content).toContain('Disk is fine');
+    });
+
+    it('should return 404 for non-existent history', async () => {
+      const res = await request(app).post('/api/cron/history/nonexistent/open-conversation');
+      expect(res.status).toBe(404);
     });
   });
 });

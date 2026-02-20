@@ -14,14 +14,6 @@ vi.mock('../../../src/lib/prompts-api', () => ({
     putProfile: vi.fn().mockResolvedValue({ ok: true }),
     getAgent: vi.fn().mockResolvedValue({ content: '# Agent content' }),
     putAgent: vi.fn().mockResolvedValue({ ok: true }),
-    listPresets: vi.fn().mockResolvedValue({
-      presets: [
-        { name: 'code-review', content: '# Code Review' },
-        { name: 'devops', content: '# DevOps' },
-      ],
-    }),
-    putPreset: vi.fn().mockResolvedValue({ ok: true }),
-    deletePreset: vi.fn().mockResolvedValue({ ok: true }),
     getSystemPrompt: vi.fn().mockResolvedValue({ content: '# System Prompt' }),
     putSystemPrompt: vi.fn().mockResolvedValue({ ok: true }),
     resetSystemPrompt: vi.fn().mockResolvedValue({ content: '# Default System Prompt' }),
@@ -82,8 +74,6 @@ describe('SettingsPanel', () => {
   const defaultProps = {
     open: true,
     onClose: vi.fn(),
-    activePresets: ['code-review'] as string[],
-    onTogglePreset: vi.fn(),
     onLanguageToggle: vi.fn(),
     language: 'en',
     onLogout: vi.fn(),
@@ -105,14 +95,14 @@ describe('SettingsPanel', () => {
       expect(screen.queryByTestId('settings-panel')).toBeNull();
     });
 
-    it('should render all category tabs using i18n keys', () => {
+    it('should render all category tabs using i18n keys (no presets)', () => {
       render(<SettingsPanel {...defaultProps} />);
       // Tab names should come from t('settings.tabs.*') — en.json values
       expect(screen.getByRole('tab', { name: /general/i })).toBeTruthy();
       expect(screen.getByRole('tab', { name: /system prompt/i })).toBeTruthy();
       expect(screen.getByRole('tab', { name: /profile/i })).toBeTruthy();
       expect(screen.getByRole('tab', { name: /agent/i })).toBeTruthy();
-      expect(screen.getByRole('tab', { name: /presets/i })).toBeTruthy();
+      expect(screen.queryByRole('tab', { name: /presets/i })).toBeNull();
       expect(screen.getByRole('tab', { name: /memory/i })).toBeTruthy();
       expect(screen.getByRole('tab', { name: /skills/i })).toBeTruthy();
       expect(screen.getByRole('tab', { name: /api keys/i })).toBeTruthy();
@@ -441,57 +431,6 @@ describe('SettingsPanel', () => {
     });
   });
 
-  // === Presets Tab ===
-  describe('Presets tab', () => {
-    it('should list presets with toggle switches', async () => {
-      render(<SettingsPanel {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: /presets/i }));
-
-      await waitFor(() => {
-        expect(screen.getByText('code-review')).toBeTruthy();
-        expect(screen.getByText('devops')).toBeTruthy();
-      });
-    });
-
-    it('should show toggle as active for presets in activePresets', async () => {
-      render(<SettingsPanel {...defaultProps} activePresets={['code-review']} />);
-      fireEvent.click(screen.getByRole('tab', { name: /presets/i }));
-
-      await waitFor(() => {
-        const toggle = screen.getByTestId('preset-toggle-code-review');
-        expect(toggle.getAttribute('aria-checked')).toBe('true');
-      });
-    });
-
-    it('should call onTogglePreset when toggle is clicked', async () => {
-      const onTogglePreset = vi.fn();
-      render(<SettingsPanel {...defaultProps} onTogglePreset={onTogglePreset} />);
-      fireEvent.click(screen.getByRole('tab', { name: /presets/i }));
-
-      await waitFor(() => {
-        expect(screen.getByTestId('preset-toggle-devops')).toBeTruthy();
-      });
-
-      fireEvent.click(screen.getByTestId('preset-toggle-devops'));
-      expect(onTogglePreset).toHaveBeenCalledWith('devops');
-    });
-
-    it('should expand preset for editing when clicked', async () => {
-      render(<SettingsPanel {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: /presets/i }));
-
-      await waitFor(() => {
-        expect(screen.getByText('code-review')).toBeTruthy();
-      });
-
-      fireEvent.click(screen.getByTestId('preset-expand-code-review'));
-
-      await waitFor(() => {
-        expect(screen.getByDisplayValue('# Code Review')).toBeTruthy();
-      });
-    });
-  });
-
   // === Skills Tab ===
   describe('Skills tab', () => {
     beforeEach(() => {
@@ -708,27 +647,8 @@ describe('SettingsPanel', () => {
     });
   });
 
-  // === ToggleSwitch integration (Presets + Skills) ===
+  // === ToggleSwitch integration (Skills) ===
   describe('ToggleSwitch integration', () => {
-    it('should render accent toggle for active preset', async () => {
-      render(<SettingsPanel {...defaultProps} activePresets={['code-review']} />);
-      fireEvent.click(screen.getByRole('tab', { name: /presets/i }));
-      await waitFor(() => {
-        const toggle = screen.getByTestId('preset-toggle-code-review');
-        expect(toggle.className).toContain('bg-accent');
-      });
-    });
-
-    it('should render neutral toggle for inactive preset', async () => {
-      render(<SettingsPanel {...defaultProps} activePresets={[]} />);
-      fireEvent.click(screen.getByRole('tab', { name: /presets/i }));
-      await waitFor(() => {
-        const toggle = screen.getByTestId('preset-toggle-code-review');
-        expect(toggle.className).toContain('bg-bg-tertiary');
-        expect(toggle.className).not.toContain('bg-accent');
-      });
-    });
-
     it('should render green toggle for enabled skill', async () => {
       useAppStore.setState({ disabledSkills: [] });
       render(<SettingsPanel {...defaultProps} />);

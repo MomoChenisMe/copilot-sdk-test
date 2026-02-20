@@ -1,4 +1,6 @@
 import { createServer } from 'node:http';
+import fs from 'node:fs';
+import { homedir } from 'node:os';
 import path from 'node:path';
 import express from 'express';
 import bcrypt from 'bcrypt';
@@ -41,6 +43,7 @@ import { TaskRepository } from './task/repository.js';
 import { createTaskTools } from './copilot/tools/task-tools.js';
 import { createConfigRoutes, readBraveApiKey } from './config-routes.js';
 import { createDirectoryRoutes } from './directory/routes.js';
+import { createGithubRoutes } from './github/routes.js';
 import { createWebSearchTool } from './copilot/tools/web-search.js';
 import { MemoryStore } from './memory/memory-store.js';
 import { MemoryIndex } from './memory/memory-index.js';
@@ -57,6 +60,8 @@ import { CronStore } from './cron/cron-store.js';
 import { CronScheduler } from './cron/cron-scheduler.js';
 import { createCronRoutes } from './cron/cron-routes.js';
 import { createAiTaskExecutor, createShellTaskExecutor } from './cron/cron-executors.js';
+import { BackgroundSessionRunner } from './cron/background-session-runner.js';
+import { createCronHandler } from './ws/handlers/cron.js';
 
 const log = createLogger('main');
 
@@ -170,12 +175,20 @@ export function createApp() {
   app.use('/api/upload', authMiddleware, createUploadRoutes(path.resolve(config.dbPath, '../uploads')));
   app.use('/api/auto-memory', authMiddleware, createAutoMemoryRoutes(memoryStore, memoryIndex, memoryBasePath, memoryCompactor));
   app.use('/api/directories', authMiddleware, createDirectoryRoutes());
+  app.use('/api/github', authMiddleware, createGithubRoutes());
 
   // Config routes (Brave API key etc.) — mounted after streamManager below
 
   // Config endpoint (returns non-sensitive config values)
   app.get('/api/config', authMiddleware, (_req, res) => {
-    res.json({ defaultCwd: config.defaultCwd });
+    // Validate defaultCwd exists; fall back to os.homedir() if not
+    let cwd = config.defaultCwd;
+    try {
+      if (!fs.statSync(cwd).isDirectory()) cwd = homedir();
+    } catch {
+      cwd = homedir();
+    }
+    res.json({ defaultCwd: cwd });
   });
 
   // Serve static files in production
@@ -235,14 +248,24 @@ export function createApp() {
     getMcpTools: () => adaptMcpTools(mcpManager),
   });
 
-  // Cron scheduler
+  // Cron scheduler with BackgroundSessionRunner (independent of StreamManager)
   const cronStore = new CronStore(db);
+  const backgroundRunner = new BackgroundSessionRunner(sessionManager);
+  const cronHandler = createCronHandler();
+  const cronToolDeps = {
+    selfControlTools: [...selfControlTools],
+    getMcpTools: () => adaptMcpTools(mcpManager),
+    memoryTools: memoryConfig.enabled ? createMemoryTools(memoryStore, memoryIndex) : [],
+    webSearchTool,
+    taskTools,
+    skillStore: mergedSkillStore,
+  };
   const cronScheduler = new CronScheduler(cronStore, {
-    executeAiTask: createAiTaskExecutor(repo, streamManager),
+    executeAiTask: createAiTaskExecutor(backgroundRunner, cronToolDeps),
     executeShellTask: createShellTaskExecutor(),
-  });
+  }, cronHandler.broadcast.bind(cronHandler));
   cronScheduler.loadAll();
-  app.use('/api/cron', authMiddleware, createCronRoutes(cronStore, cronScheduler));
+  app.use('/api/cron', authMiddleware, createCronRoutes(cronStore, cronScheduler, repo));
 
   // Config routes (Brave API key etc.) — mounted after streamManager so callback can update tools
   app.use('/api/config', authMiddleware, createConfigRoutes(promptStore, {
@@ -265,6 +288,7 @@ export function createApp() {
   // Register WS handlers
   const copilotHandler = createCopilotHandler(streamManager, repo);
   registerHandler('copilot', copilotHandler);
+  registerHandler('cron', cronHandler);
   registerHandler('terminal', createTerminalHandler(config.defaultCwd));
   registerHandler('cwd', createCwdHandler((newCwd) => {
     log.info({ cwd: newCwd }, 'Working directory changed');

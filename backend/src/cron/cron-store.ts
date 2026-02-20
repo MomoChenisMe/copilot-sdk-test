@@ -1,6 +1,31 @@
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 
+// --- Structured config interfaces ---
+
+export interface CronToolConfig {
+  skills?: boolean;
+  selfControlTools?: boolean;
+  memoryTools?: boolean;
+  webSearchTool?: boolean;
+  taskTools?: boolean;
+  mcpTools?: boolean;
+  disabledSkills?: string[];
+  mcpServers?: Record<string, boolean>;
+}
+
+export interface CronJobConfig {
+  prompt?: string;
+  model?: string;
+  cwd?: string;
+  command?: string;
+  timeout?: number;
+  timeoutMs?: number;
+  toolConfig?: CronToolConfig;
+}
+
+// --- Job interfaces ---
+
 export interface CronJob {
   id: string;
   name: string;
@@ -34,13 +59,22 @@ export interface UpdateCronJobInput {
   nextRun?: string;
 }
 
+// --- History interfaces ---
+
 export interface CronHistory {
   id: string;
   jobId: string;
   startedAt: string;
   finishedAt: string | null;
-  status: 'success' | 'error' | 'timeout';
+  status: 'success' | 'error' | 'timeout' | 'running';
   output: string | null;
+  prompt: string | null;
+  configSnapshot: Record<string, unknown> | null;
+  turnSegments: unknown[] | null;
+  toolRecords: unknown[] | null;
+  reasoning: string | null;
+  usage: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number } | null;
+  content: string | null;
   createdAt: string;
 }
 
@@ -48,8 +82,30 @@ export interface AddHistoryInput {
   jobId: string;
   startedAt: string;
   finishedAt?: string;
-  status: 'success' | 'error' | 'timeout';
+  status: 'success' | 'error' | 'timeout' | 'running';
   output?: string;
+  prompt?: string;
+  configSnapshot?: Record<string, unknown>;
+  turnSegments?: unknown[];
+  toolRecords?: unknown[];
+  reasoning?: string;
+  usage?: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number };
+  content?: string;
+}
+
+export interface UpdateHistoryInput {
+  finishedAt?: string;
+  status?: 'success' | 'error' | 'timeout';
+  output?: string;
+  turnSegments?: unknown[];
+  toolRecords?: unknown[];
+  reasoning?: string;
+  usage?: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number };
+  content?: string;
+}
+
+export interface CronHistoryWithJob extends CronHistory {
+  jobName: string;
 }
 
 export class CronStore {
@@ -109,10 +165,43 @@ export class CronStore {
   addHistory(input: AddHistoryInput): CronHistory {
     const id = randomUUID();
     this.db.prepare(
-      `INSERT INTO cron_history (id, job_id, started_at, finished_at, status, output)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(id, input.jobId, input.startedAt, input.finishedAt ?? null, input.status, input.output ?? null);
+      `INSERT INTO cron_history (id, job_id, started_at, finished_at, status, output, prompt, config_snapshot, turn_segments, tool_records, reasoning, usage, content)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      id,
+      input.jobId,
+      input.startedAt,
+      input.finishedAt ?? null,
+      input.status,
+      input.output ?? null,
+      input.prompt ?? null,
+      input.configSnapshot ? JSON.stringify(input.configSnapshot) : null,
+      input.turnSegments ? JSON.stringify(input.turnSegments) : null,
+      input.toolRecords ? JSON.stringify(input.toolRecords) : null,
+      input.reasoning ?? null,
+      input.usage ? JSON.stringify(input.usage) : null,
+      input.content ?? null,
+    );
     return this.getHistoryById(id)!;
+  }
+
+  updateHistory(id: string, updates: UpdateHistoryInput): void {
+    const setClauses: string[] = [];
+    const params: unknown[] = [];
+
+    if (updates.finishedAt !== undefined) { setClauses.push('finished_at = ?'); params.push(updates.finishedAt); }
+    if (updates.status !== undefined) { setClauses.push('status = ?'); params.push(updates.status); }
+    if (updates.output !== undefined) { setClauses.push('output = ?'); params.push(updates.output); }
+    if (updates.turnSegments !== undefined) { setClauses.push('turn_segments = ?'); params.push(JSON.stringify(updates.turnSegments)); }
+    if (updates.toolRecords !== undefined) { setClauses.push('tool_records = ?'); params.push(JSON.stringify(updates.toolRecords)); }
+    if (updates.reasoning !== undefined) { setClauses.push('reasoning = ?'); params.push(updates.reasoning); }
+    if (updates.usage !== undefined) { setClauses.push('usage = ?'); params.push(JSON.stringify(updates.usage)); }
+    if (updates.content !== undefined) { setClauses.push('content = ?'); params.push(updates.content); }
+
+    if (setClauses.length === 0) return;
+
+    params.push(id);
+    this.db.prepare(`UPDATE cron_history SET ${setClauses.join(', ')} WHERE id = ?`).run(...params);
   }
 
   getHistory(jobId: string, limit = 20): CronHistory[] {
@@ -122,9 +211,52 @@ export class CronStore {
     return rows.map((r) => this.mapHistory(r));
   }
 
-  private getHistoryById(id: string): CronHistory | null {
+  getHistoryById(id: string): CronHistory | null {
     const row = this.db.prepare('SELECT * FROM cron_history WHERE id = ?').get(id) as any;
     return row ? this.mapHistory(row) : null;
+  }
+
+  getAllRecentHistory(limit = 50): CronHistoryWithJob[] {
+    const rows = this.db.prepare(
+      `SELECT h.*, j.name as job_name FROM cron_history h
+       JOIN cron_jobs j ON j.id = h.job_id
+       ORDER BY h.started_at DESC LIMIT ?`,
+    ).all(limit) as any[];
+    return rows.map((r) => ({ ...this.mapHistory(r), jobName: r.job_name }));
+  }
+
+  deleteHistory(id: string): boolean {
+    const result = this.db.prepare('DELETE FROM cron_history WHERE id = ?').run(id);
+    return result.changes > 0;
+  }
+
+  clearHistory(): number {
+    const result = this.db.prepare('DELETE FROM cron_history').run();
+    return result.changes;
+  }
+
+  pruneHistory(keepCount: number): number {
+    // Keep the most recent `keepCount` entries, delete the rest
+    const result = this.db.prepare(
+      `DELETE FROM cron_history WHERE id NOT IN (
+        SELECT id FROM cron_history ORDER BY started_at DESC LIMIT ?
+      )`,
+    ).run(keepCount);
+    return result.changes;
+  }
+
+  getUnreadCount(since: string): number {
+    const row = this.db.prepare(
+      'SELECT COUNT(*) as cnt FROM cron_history WHERE created_at > ?',
+    ).get(since) as any;
+    return row.cnt;
+  }
+
+  getFailedCount(since: string): number {
+    const row = this.db.prepare(
+      "SELECT COUNT(*) as cnt FROM cron_history WHERE status = 'error' AND created_at > ?",
+    ).get(since) as any;
+    return row.cnt;
   }
 
   private mapJob(row: any): CronJob {
@@ -151,6 +283,13 @@ export class CronStore {
       finishedAt: row.finished_at,
       status: row.status,
       output: row.output,
+      prompt: row.prompt ?? null,
+      configSnapshot: row.config_snapshot ? JSON.parse(row.config_snapshot) : null,
+      turnSegments: row.turn_segments ? JSON.parse(row.turn_segments) : null,
+      toolRecords: row.tool_records ? JSON.parse(row.tool_records) : null,
+      reasoning: row.reasoning ?? null,
+      usage: row.usage ? JSON.parse(row.usage) : null,
+      content: row.content ?? null,
       createdAt: row.created_at,
     };
   }

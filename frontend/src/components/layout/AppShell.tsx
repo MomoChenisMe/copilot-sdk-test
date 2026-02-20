@@ -9,6 +9,7 @@ import { useBashMode } from '../../hooks/useBashMode';
 import { useModels } from '../../hooks/useModels';
 import { useSkills } from '../../hooks/useSkills';
 import { useGlobalShortcuts } from '../../hooks/useGlobalShortcuts';
+import { useCronNotifications } from '../../hooks/useCronNotifications';
 import { conversationApi, configApi } from '../../lib/api';
 import { sumUsageFromMessages } from '../../lib/usage-utils';
 import { uploadFiles } from '../../lib/upload-api';
@@ -17,9 +18,11 @@ import { TopBar } from './TopBar';
 import { TabBar } from './TabBar';
 import { ChatView } from '../copilot/ChatView';
 import { ArtifactsPanel } from '../copilot/ArtifactsPanel';
+import { CronPage } from '../cron/CronPage';
 import { SettingsPanel } from '../settings/SettingsPanel';
 import { ShortcutsPanel } from '../shared/ShortcutsPanel';
 import { SdkUpdateBanner } from '../copilot/SdkUpdateBanner';
+import { ToastContainer } from '../shared/ToastContainer';
 
 export function AppShell({ onLogout }: { onLogout: () => void }) {
   const { t } = useTranslation();
@@ -37,6 +40,9 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   // Load models and skills from API
   useModels();
   useSkills();
+
+  // Subscribe to cron job notifications
+  useCronNotifications({ subscribe, send });
 
   const activeConversationId = useAppStore((s) => s.activeConversationId);
   const setActiveConversationId = useAppStore((s) => s.setActiveConversationId);
@@ -87,8 +93,6 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   const setLanguage = useAppStore((s) => s.setLanguage);
   const settingsOpen = useAppStore((s) => s.settingsOpen);
   const setSettingsOpen = useAppStore((s) => s.setSettingsOpen);
-  const activePresets = useAppStore((s) => s.activePresets);
-  const togglePreset = useAppStore((s) => s.togglePreset);
 
   // Initialize theme from localStorage on mount
   useEffect(() => {
@@ -423,11 +427,44 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
 
   const handleCwdChange = useCallback(
     async (newCwd: string) => {
+      setCwd(newCwd);
       const convId = getActiveConversationId();
       if (!convId) return;
       await updateConversation(convId, { cwd: newCwd, sdkSessionId: null });
     },
     [getActiveConversationId, updateConversation],
+  );
+
+  // --- Cron tab management ---
+  const handleOpenCronTab = useCallback(() => {
+    const state = useAppStore.getState();
+    // Find existing cron tab
+    const existingCronTabId = state.tabOrder.find(
+      (tid) => state.tabs[tid]?.mode === 'cron',
+    );
+    if (existingCronTabId) {
+      setActiveTab(existingCronTabId);
+      setActiveConversationId(null);
+    } else {
+      openTab(null, 'Cron Jobs');
+      const newTabId = useAppStore.getState().activeTabId;
+      if (newTabId) {
+        useAppStore.getState().setTabMode(newTabId, 'cron');
+      }
+      setActiveConversationId(null);
+    }
+  }, [openTab, setActiveTab, setActiveConversationId]);
+
+  const handleOpenCronAsConversation = useCallback(
+    (conversationId: string) => {
+      openTab(conversationId, 'Cron Result');
+      const newTabId = useAppStore.getState().activeTabId;
+      if (newTabId) {
+        setActiveConversationId(conversationId);
+        handleSelectTab(newTabId);
+      }
+    },
+    [openTab, setActiveConversationId, handleSelectTab],
   );
 
   // WebSocket reconnect: re-subscribe to all active streams
@@ -525,6 +562,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         onCloseTab={handleCloseTab}
         onSwitchConversation={handleSwitchConversation}
         onDeleteConversation={handleDeleteConversation}
+        onOpenCronTab={handleOpenCronTab}
         onOpenConversation={(conversationId) => {
           const conv = conversations.find((c) => c.id === conversationId);
           openTab(conversationId, conv?.title || 'Chat');
@@ -543,73 +581,77 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       />
 
       <div className="flex-1 overflow-hidden relative">
-        {/* Main content area: flex row for ChatView + ArtifactsPanel */}
-        <div className="h-full flex flex-row">
-          {/* Chat area — shrinks when artifacts panel is open on desktop */}
-          <div className="flex-1 flex flex-col min-w-0 h-full">
-            <ChatView
-              tabId={activeTabId}
-              onNewConversation={handleNewTab}
-              onSend={handleSend}
-              onAbort={handleAbort}
-              onBashSend={handleBashSend}
-              isStreaming={activeTab?.isStreaming ?? false}
-              disabled={!activeTabId}
-              currentModel={activeConversation?.model || defaultModel}
-              onModelChange={handleModelChange}
-              currentCwd={activeConversation?.cwd || cwd}
-              onCwdChange={handleCwdChange}
-              onClearConversation={handleClearConversation}
-              onSettingsOpen={() => setSettingsOpen(true)}
-              onUserInputResponse={(requestId, answer, wasFreeform) => {
-                const tab = activeTabId ? useAppStore.getState().tabs[activeTabId] : null;
-                if (tab?.conversationId) {
-                  sendUserInputResponse(tab.conversationId, requestId, answer, wasFreeform);
-                }
-              }}
-              onOpenConversation={(conversationId) => {
-                const conv = conversations.find((c) => c.id === conversationId);
-                openTab(conversationId, conv?.title || 'Chat');
-                const newActiveTabId = useAppStore.getState().activeTabId;
-                if (newActiveTabId) {
-                  handleSelectTab(newActiveTabId);
-                }
-              }}
-              onExecutePlan={handleExecutePlan}
-            />
-          </div>
+        {activeTab?.mode === 'cron' ? (
+          <CronPage onOpenConversation={handleOpenCronAsConversation} />
+        ) : (
+          /* Main content area: flex row for ChatView + ArtifactsPanel */
+          <div className="h-full flex flex-row">
+            {/* Chat area — shrinks when artifacts panel is open on desktop */}
+            <div className="flex-1 flex flex-col min-w-0 h-full">
+              <ChatView
+                tabId={activeTabId}
+                onNewConversation={handleNewTab}
+                onSend={handleSend}
+                onAbort={handleAbort}
+                onBashSend={handleBashSend}
+                isStreaming={activeTab?.isStreaming ?? false}
+                disabled={!activeTabId}
+                currentModel={activeConversation?.model || defaultModel}
+                onModelChange={handleModelChange}
+                currentCwd={activeConversation?.cwd || cwd}
+                onCwdChange={handleCwdChange}
+                onClearConversation={handleClearConversation}
+                onSettingsOpen={() => setSettingsOpen(true)}
+                onUserInputResponse={(requestId, answer, wasFreeform) => {
+                  const tab = activeTabId ? useAppStore.getState().tabs[activeTabId] : null;
+                  if (tab?.conversationId) {
+                    sendUserInputResponse(tab.conversationId, requestId, answer, wasFreeform);
+                  }
+                }}
+                onOpenConversation={(conversationId) => {
+                  const conv = conversations.find((c) => c.id === conversationId);
+                  openTab(conversationId, conv?.title || 'Chat');
+                  const newActiveTabId = useAppStore.getState().activeTabId;
+                  if (newActiveTabId) {
+                    handleSelectTab(newActiveTabId);
+                  }
+                }}
+                onExecutePlan={handleExecutePlan}
+              />
+            </div>
 
-          {/* Artifacts panel — full overlay on mobile, side panel on desktop */}
-          {activeTab?.artifactsPanelOpen && activeTab.artifacts.length > 0 && (
-            <ArtifactsPanel
-              artifacts={activeTab.artifacts}
-              activeArtifactId={activeTab.activeArtifactId}
-              onSelectArtifact={(id) => {
-                if (activeTabId) {
-                  useAppStore.getState().setTabActiveArtifact(activeTabId, id);
-                }
-              }}
-              onClose={() => {
-                if (activeTabId) {
-                  useAppStore.getState().setTabArtifactsPanelOpen(activeTabId, false);
-                }
-              }}
-            />
-          )}
-        </div>
+            {/* Artifacts panel — full overlay on mobile, side panel on desktop */}
+            {activeTab?.artifactsPanelOpen && activeTab.artifacts.length > 0 && (
+              <ArtifactsPanel
+                artifacts={activeTab.artifacts}
+                activeArtifactId={activeTab.activeArtifactId}
+                onSelectArtifact={(id) => {
+                  if (activeTabId) {
+                    useAppStore.getState().setTabActiveArtifact(activeTabId, id);
+                  }
+                }}
+                onClose={() => {
+                  if (activeTabId) {
+                    useAppStore.getState().setTabArtifactsPanelOpen(activeTabId, false);
+                  }
+                }}
+              />
+            )}
+          </div>
+        )}
       </div>
 
       <SettingsPanel
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
-        activePresets={activePresets}
-        onTogglePreset={togglePreset}
         onLanguageToggle={handleLanguageToggle}
         language={language}
         onLogout={onLogout}
       />
 
       <ShortcutsPanel open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+
+      <ToastContainer />
     </div>
   );
 }

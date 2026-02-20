@@ -1,32 +1,50 @@
 import { exec } from 'node:child_process';
+import type { BackgroundSessionRunner, BackgroundExecutionResult } from './background-session-runner.js';
+import { assembleCronTools } from './cron-tool-assembler.js';
+import type { CronToolAssemblerDeps } from './cron-tool-assembler.js';
+import type { CronJobConfig, CronToolConfig } from './cron-store.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('cron-executors');
 
 const MAX_OUTPUT_LENGTH = 10000;
 
-export function createAiTaskExecutor(
-  repo: { create: (input: any) => { id: string } },
-  streamManager: { startStream: (convId: string, message: any) => Promise<void>; waitForStreamEnd?: (convId: string) => Promise<void> },
-) {
-  return async (config: Record<string, unknown>): Promise<{ output?: string }> => {
-    const prompt = config.prompt as string;
-    const model = (config.model as string) || 'gpt-4o';
-    const cwd = (config.cwd as string) || process.cwd();
+export interface AiExecutorResult {
+  output?: string;
+  executionData?: BackgroundExecutionResult;
+}
 
-    const conversation = repo.create({
-      title: `Cron: ${prompt.slice(0, 50)}`,
+export function createAiTaskExecutor(
+  runner: BackgroundSessionRunner,
+  toolDeps: CronToolAssemblerDeps,
+) {
+  return async (config: Record<string, unknown>): Promise<AiExecutorResult> => {
+    const jobConfig = config as unknown as CronJobConfig;
+    const prompt = jobConfig.prompt as string;
+    const model = jobConfig.model || 'gpt-4o';
+    const cwd = jobConfig.cwd || process.cwd();
+    const toolConfig: CronToolConfig = jobConfig.toolConfig ?? {};
+
+    // Assemble tools based on per-job config
+    const assembled = await assembleCronTools(toolConfig, toolDeps);
+
+    const executionData = await runner.run({
+      prompt,
       model,
-      cwd,
+      workingDirectory: cwd,
+      tools: assembled.tools.length > 0 ? assembled.tools : undefined,
+      skillDirectories: assembled.skillDirectories,
+      disabledSkills: assembled.disabledSkills,
+      timeoutMs: jobConfig.timeoutMs,
     });
 
-    await streamManager.startStream(conversation.id, { role: 'user', content: prompt });
+    // Build a human-readable output summary
+    const contentPreview = executionData.contentSegments.join('\n').slice(0, MAX_OUTPUT_LENGTH);
+    const output = executionData.error
+      ? `Error: ${executionData.error}\n\n${contentPreview}`
+      : contentPreview || 'completed';
 
-    if (streamManager.waitForStreamEnd) {
-      await streamManager.waitForStreamEnd(conversation.id);
-    }
-
-    return { output: `Conversation ${conversation.id} started` };
+    return { output, executionData };
   };
 }
 

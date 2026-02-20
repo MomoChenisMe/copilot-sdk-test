@@ -96,7 +96,6 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
           sdkSessionId: 'sdk-1',
           model: 'gpt-5',
           cwd: '/tmp',
-          activePresets: [],
           disabledSkills: [],
         });
       });
@@ -160,24 +159,6 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
       });
     });
 
-    it('should pass activePresets to streamManager.startStream', async () => {
-      handle({
-        type: 'copilot:send',
-        data: { conversationId: 'conv-1', prompt: 'Hello', activePresets: ['code-review', 'devops'] },
-      });
-
-      await vi.waitFor(() => {
-        expect(mockStreamManager.startStream).toHaveBeenCalledWith('conv-1', {
-          prompt: 'Hello',
-          sdkSessionId: 'sdk-1',
-          model: 'gpt-5',
-          cwd: '/tmp',
-          activePresets: ['code-review', 'devops'],
-          disabledSkills: [],
-        });
-      });
-    });
-
     it('should pass disabledSkills to streamManager.startStream', async () => {
       handle({
         type: 'copilot:send',
@@ -200,19 +181,6 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
       await vi.waitFor(() => {
         expect(mockStreamManager.startStream).toHaveBeenCalledWith('conv-1', expect.objectContaining({
           disabledSkills: [],
-        }));
-      });
-    });
-
-    it('should default activePresets to empty array when not provided', async () => {
-      handle({
-        type: 'copilot:send',
-        data: { conversationId: 'conv-1', prompt: 'Hello' },
-      });
-
-      await vi.waitFor(() => {
-        expect(mockStreamManager.startStream).toHaveBeenCalledWith('conv-1', expect.objectContaining({
-          activePresets: [],
         }));
       });
     });

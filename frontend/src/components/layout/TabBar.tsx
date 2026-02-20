@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, X, AlertTriangle, ChevronDown, History } from 'lucide-react';
+import { Plus, X, AlertTriangle, ChevronDown, History, Clock } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { ConversationPopover } from './ConversationPopover';
 
@@ -11,16 +11,19 @@ interface TabBarProps {
   onSwitchConversation: (tabId: string, conversationId: string) => void;
   onDeleteConversation?: (conversationId: string) => void;
   onOpenConversation?: (conversationId: string) => void;
+  onOpenCronTab?: () => void;
   conversations: Array<{ id: string; title: string; pinned?: boolean; updatedAt?: string }>;
 }
 
-export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation, onDeleteConversation, onOpenConversation, conversations }: TabBarProps) {
+export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation, onDeleteConversation, onOpenConversation, onOpenCronTab, conversations }: TabBarProps) {
   const { t } = useTranslation();
   const tabOrder = useAppStore((s) => s.tabOrder);
   const tabs = useAppStore((s) => s.tabs);
   const activeTabId = useAppStore((s) => s.activeTabId);
   const activeStreams = useAppStore((s) => s.activeStreams);
   const tabLimitWarning = useAppStore((s) => s.tabLimitWarning);
+  const cronUnreadCount = useAppStore((s) => s.cronUnreadCount);
+  const cronFailedCount = useAppStore((s) => s.cronFailedCount);
 
   const [popoverTabId, setPopoverTabId] = useState<string | null>(null);
   const [globalHistoryOpen, setGlobalHistoryOpen] = useState(false);
@@ -129,6 +132,27 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
       >
         <Plus size={16} />
       </button>
+
+      {/* Cron tab button with badge */}
+      {onOpenCronTab && (
+        <button
+          data-testid="cron-tab-button"
+          onClick={onOpenCronTab}
+          className="relative shrink-0 p-1.5 text-text-muted hover:text-text-secondary hover:bg-bg-tertiary rounded-lg transition-colors"
+          title={t('cron.title')}
+        >
+          <Clock size={16} />
+          {(cronUnreadCount > 0 || cronFailedCount > 0) && (
+            <span
+              className={`absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center text-[10px] font-bold text-white rounded-full px-1 ${
+                cronFailedCount > 0 ? 'bg-red-500' : 'bg-accent'
+              }`}
+            >
+              {cronUnreadCount + cronFailedCount}
+            </span>
+          )}
+        </button>
+      )}
 
       {/* Global history dropdown button */}
       <div className="relative shrink-0">

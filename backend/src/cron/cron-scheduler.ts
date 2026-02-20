@@ -1,11 +1,24 @@
 import { Cron } from 'croner';
 import type { CronStore, CronJob } from './cron-store.js';
+import type { WsMessage } from '../ws/types.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('cron-scheduler');
 
+export interface AiExecutorResult {
+  output?: string;
+  executionData?: {
+    turnSegments: unknown[];
+    toolRecords: unknown[];
+    contentSegments: string[];
+    reasoningText: string;
+    usage: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number };
+    error?: string;
+  };
+}
+
 export interface CronExecutors {
-  executeAiTask: (config: Record<string, unknown>) => Promise<{ output?: string }>;
+  executeAiTask: (config: Record<string, unknown>) => Promise<AiExecutorResult>;
   executeShellTask: (config: Record<string, unknown>) => Promise<{ output?: string }>;
 }
 
@@ -16,6 +29,7 @@ export class CronScheduler {
   constructor(
     private store: CronStore,
     private executors: CronExecutors,
+    private broadcastFn?: (msg: WsMessage) => void,
   ) {}
 
   loadAll(): void {
@@ -86,13 +100,32 @@ export class CronScheduler {
     if (!job) throw new Error(`Job ${jobId} not found`);
 
     const startedAt = new Date().toISOString();
+    const prompt = (job.config as any)?.prompt as string | undefined;
+
+    // Create a 'running' history record
+    const history = this.store.addHistory({
+      jobId: job.id,
+      startedAt,
+      status: 'running',
+      prompt,
+      configSnapshot: job.config,
+    });
+
     let status: 'success' | 'error' | 'timeout' = 'success';
     let output: string | undefined;
+    let executionData: AiExecutorResult['executionData'];
 
     try {
       const executor = job.type === 'ai' ? this.executors.executeAiTask : this.executors.executeShellTask;
       const result = await executor(job.config);
       output = result.output ?? 'completed';
+
+      if ('executionData' in result) {
+        executionData = (result as AiExecutorResult).executionData;
+        if (executionData?.error) {
+          status = executionData.error.includes('timeout') ? 'timeout' : 'error';
+        }
+      }
     } catch (err: any) {
       status = 'error';
       output = err.message ?? String(err);
@@ -100,15 +133,38 @@ export class CronScheduler {
 
     const finishedAt = new Date().toISOString();
 
-    this.store.addHistory({
-      jobId: job.id,
-      startedAt,
-      finishedAt,
+    // Update the history record with final results
+    this.store.updateHistory(history.id, {
       status,
+      finishedAt,
       output,
+      ...(executionData && {
+        turnSegments: executionData.turnSegments,
+        toolRecords: executionData.toolRecords,
+        reasoning: executionData.reasoningText,
+        usage: executionData.usage,
+        content: executionData.contentSegments?.join('\n'),
+      }),
     });
 
     this.store.update(job.id, { lastRun: finishedAt });
+
+    // Broadcast WebSocket notification
+    if (this.broadcastFn) {
+      const msgType = status === 'success' ? 'cron:job_completed' : 'cron:job_failed';
+      this.broadcastFn({
+        type: msgType,
+        data: {
+          historyId: history.id,
+          jobId: job.id,
+          jobName: job.name,
+          status,
+          startedAt,
+          finishedAt,
+          outputPreview: (output ?? '').slice(0, 200),
+        },
+      });
+    }
   }
 
   async shutdown(): Promise<void> {

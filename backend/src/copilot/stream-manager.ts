@@ -145,7 +145,6 @@ export interface StartStreamOptions {
   sdkSessionId: string | null;
   model: string;
   cwd: string;
-  activePresets?: string[];
   disabledSkills?: string[];
   files?: FileReference[];
   mode?: 'plan' | 'act';
@@ -321,7 +320,7 @@ export class StreamManager extends EventEmitter {
       };
 
       if (this.promptComposer) {
-        const composed = this.promptComposer.compose(options.activePresets ?? [], resolvedCwd, options.locale);
+        const composed = this.promptComposer.compose(resolvedCwd, options.locale);
         if (composed) {
           sessionOpts.systemMessage = { mode: 'append', content: composed };
         }

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { CronStore } from './cron-store.js';
 import type { CronScheduler } from './cron-scheduler.js';
+import type { ConversationRepository } from '../conversation/repository.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('cron-routes');
@@ -8,7 +9,7 @@ const log = createLogger('cron-routes');
 const VALID_TYPES = ['ai', 'shell'] as const;
 const VALID_SCHEDULE_TYPES = ['cron', 'interval', 'once'] as const;
 
-export function createCronRoutes(store: CronStore, scheduler: CronScheduler): Router {
+export function createCronRoutes(store: CronStore, scheduler: CronScheduler, repo?: ConversationRepository): Router {
   const router = Router();
 
   // GET /jobs - list all
@@ -97,6 +98,108 @@ export function createCronRoutes(store: CronStore, scheduler: CronScheduler): Ro
     const limit = parseInt(req.query.limit as string) || 20;
     const history = store.getHistory(id, limit);
     res.json({ history });
+  });
+
+  // --- New endpoints ---
+
+  // GET /history/recent - global recent history across all jobs
+  router.get('/history/recent', (req, res) => {
+    const limit = parseInt(req.query.limit as string) || 50;
+    const history = store.getAllRecentHistory(limit);
+    res.json({ history });
+  });
+
+  // GET /history/unread-count - badge counts
+  router.get('/history/unread-count', (req, res) => {
+    const since = (req.query.since as string) || new Date(0).toISOString();
+    const unread = store.getUnreadCount(since);
+    const failed = store.getFailedCount(since);
+    res.json({ unread, failed });
+  });
+
+  // DELETE /history/:historyId - delete a single history entry
+  router.delete('/history/:historyId', (req, res) => {
+    const { historyId } = req.params;
+    const deleted = store.deleteHistory(historyId);
+    if (!deleted) {
+      return res.status(404).json({ error: 'History record not found' });
+    }
+    res.status(204).send();
+  });
+
+  // DELETE /history - clear all history or prune to keep N entries
+  router.delete('/history', (req, res) => {
+    const keep = req.query.keep ? parseInt(req.query.keep as string) : undefined;
+    let deleted: number;
+    if (keep != null && keep >= 0) {
+      deleted = store.pruneHistory(keep);
+    } else {
+      deleted = store.clearHistory();
+    }
+    res.json({ deleted });
+  });
+
+  // POST /history/:historyId/open-conversation - create conversation from history
+  router.post('/history/:historyId/open-conversation', (req, res) => {
+    if (!repo) {
+      return res.status(500).json({ error: 'Conversation repository not configured' });
+    }
+
+    const { historyId } = req.params;
+    const history = store.getHistoryById(historyId);
+    if (!history) {
+      return res.status(404).json({ error: 'History record not found' });
+    }
+
+    try {
+      // Build a summary from the history record
+      const prompt = history.prompt ?? 'Cron job execution';
+      const contentPreview = history.content ? history.content.slice(0, 500) : history.output ?? 'No output';
+      const toolCount = Array.isArray(history.toolRecords) ? history.toolRecords.length : 0;
+      const usageInfo = history.usage
+        ? `Tokens: ${history.usage.inputTokens} in / ${history.usage.outputTokens} out`
+        : '';
+
+      const summary = [
+        `**Cron Job Execution Summary**`,
+        `- **Prompt:** ${prompt}`,
+        `- **Status:** ${history.status}`,
+        `- **Started:** ${history.startedAt}`,
+        history.finishedAt ? `- **Finished:** ${history.finishedAt}` : '',
+        toolCount > 0 ? `- **Tool calls:** ${toolCount}` : '',
+        usageInfo ? `- **${usageInfo}**` : '',
+        '',
+        '---',
+        '',
+        contentPreview,
+      ].filter(Boolean).join('\n');
+
+      // Create a new conversation
+      const cwd = (history.configSnapshot as any)?.cwd || process.cwd();
+      const model = (history.configSnapshot as any)?.model || 'gpt-4o';
+
+      const conversation = repo.create({ model, cwd });
+      repo.update(conversation.id, { title: `Cron: ${prompt.slice(0, 50)}` });
+
+      // Add the summary as an assistant message with metadata
+      repo.addMessage(conversation.id, {
+        role: 'assistant',
+        content: summary,
+        metadata: {
+          cronExecution: true,
+          historyId: history.id,
+          jobId: history.jobId,
+          turnSegments: history.turnSegments,
+          toolRecords: history.toolRecords,
+          usage: history.usage,
+        },
+      });
+
+      res.status(201).json({ conversation });
+    } catch (err: any) {
+      log.error({ err, historyId }, 'Failed to create conversation from cron history');
+      res.status(500).json({ error: err.message });
+    }
   });
 
   return router;

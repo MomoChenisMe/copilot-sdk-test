@@ -48,6 +48,7 @@ export async function apiDelete<T>(path: string): Promise<T> {
     const data = await res.json().catch(() => ({ error: res.statusText }));
     throw new ApiError(res.status, data.error ?? 'Request failed');
   }
+  if (res.status === 204) return undefined as T;
   return res.json();
 }
 
@@ -274,9 +275,20 @@ export interface CronHistory {
   jobId: string;
   startedAt: string;
   finishedAt: string | null;
-  status: 'success' | 'error' | 'timeout';
+  status: 'success' | 'error' | 'timeout' | 'running';
   output: string | null;
+  prompt: string | null;
+  configSnapshot: Record<string, unknown> | null;
+  turnSegments: unknown[] | null;
+  toolRecords: unknown[] | null;
+  reasoning: string | null;
+  usage: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number } | null;
+  content: string | null;
   createdAt: string;
+}
+
+export interface CronHistoryWithJob extends CronHistory {
+  jobName: string;
 }
 
 export type CronJobInput = Pick<CronJob, 'name' | 'type' | 'scheduleType' | 'scheduleValue' | 'config' | 'enabled'>;
@@ -290,6 +302,22 @@ export const cronApi = {
   getHistory: (id: string, limit?: number) => {
     const params = limit ? `?limit=${limit}` : '';
     return apiGet<{ history: CronHistory[] }>(`/api/cron/jobs/${id}/history${params}`);
+  },
+  getRecentHistory: (limit?: number) => {
+    const params = limit ? `?limit=${limit}` : '';
+    return apiGet<{ history: CronHistoryWithJob[] }>(`/api/cron/history/recent${params}`);
+  },
+  getUnreadCount: (since?: string) => {
+    const params = since ? `?since=${encodeURIComponent(since)}` : '';
+    return apiGet<{ unread: number; failed: number }>(`/api/cron/history/unread-count${params}`);
+  },
+  openAsConversation: (historyId: string) =>
+    apiPost<{ conversation: Conversation }>(`/api/cron/history/${historyId}/open-conversation`),
+  deleteHistoryEntry: (historyId: string) =>
+    apiDelete<void>(`/api/cron/history/${historyId}`),
+  clearHistory: (keep?: number) => {
+    const params = keep != null ? `?keep=${keep}` : '';
+    return apiDelete<{ deleted: number }>(`/api/cron/history${params}`);
   },
 };
 
