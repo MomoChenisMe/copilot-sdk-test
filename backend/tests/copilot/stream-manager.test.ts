@@ -1522,6 +1522,108 @@ describe('StreamManager', () => {
     });
   });
 
+  // === Quota cache ===
+  describe('quota cache', () => {
+    it('getQuota should return null initially', () => {
+      expect(sm.getQuota()).toBeNull();
+    });
+
+    it('updateQuotaCache should store quota data', () => {
+      sm.updateQuotaCache({
+        used: 5,
+        total: 50,
+        resetDate: '2026-03-01T00:00:00Z',
+        unlimited: false,
+      });
+
+      const quota = sm.getQuota();
+      expect(quota).toEqual({
+        used: 5,
+        total: 50,
+        resetDate: '2026-03-01T00:00:00Z',
+        unlimited: false,
+        updatedAt: expect.any(String),
+      });
+    });
+
+    it('updateQuotaCache should overwrite previous cache', () => {
+      sm.updateQuotaCache({ used: 1, total: 50, resetDate: null, unlimited: false });
+      sm.updateQuotaCache({ used: 10, total: 50, resetDate: null, unlimited: false });
+
+      const quota = sm.getQuota();
+      expect(quota!.used).toBe(10);
+    });
+
+    it('getQuota should return cached data across different StreamManager.getInstance calls', () => {
+      sm.updateQuotaCache({ used: 7, total: 100, resetDate: null, unlimited: true });
+
+      const sm2 = StreamManager.getInstance();
+      expect(sm2.getQuota()).toEqual(
+        expect.objectContaining({ used: 7, total: 100, unlimited: true }),
+      );
+    });
+
+    it('processEvent should update quota cache when copilot:quota event is received', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+      });
+      await tick();
+
+      // Simulate the event-relay forwarding a copilot:quota event
+      fireEvent('assistant.usage', {
+        inputTokens: 100,
+        outputTokens: 50,
+        quotaSnapshots: [
+          { type: 'premiumRequests', used: 3, limit: 50, resetsAt: '2026-03-01T00:00:00Z' },
+        ],
+      });
+
+      const quota = sm.getQuota();
+      expect(quota).not.toBeNull();
+      expect(quota!.used).toBe(3);
+      expect(quota!.total).toBe(50);
+      expect(quota!.resetDate).toBe('2026-03-01T00:00:00Z');
+      expect(quota!.unlimited).toBe(false);
+    });
+
+    it('processEvent should handle unlimited quota (limit=0)', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+      });
+      await tick();
+
+      fireEvent('assistant.usage', {
+        inputTokens: 100,
+        outputTokens: 50,
+        quotaSnapshots: [
+          { type: 'premiumRequests', used: 15, limit: 0 },
+        ],
+      });
+
+      const quota = sm.getQuota();
+      expect(quota).not.toBeNull();
+      expect(quota!.used).toBe(15);
+      expect(quota!.unlimited).toBe(true);
+    });
+
+    it('resetInstance should clear the quota cache', () => {
+      sm.updateQuotaCache({ used: 5, total: 50, resetDate: null, unlimited: false });
+
+      StreamManager.resetInstance();
+      const sm2 = StreamManager.getInstance({
+        sessionManager: mockSessionManager as any,
+        repo: mockRepo as any,
+      });
+      expect(sm2.getQuota()).toBeNull();
+    });
+  });
+
   // === AskUser timeout pause/resume ===
   describe('user input timeout pause/resume', () => {
     it('should use 30-minute timeout instead of 5 minutes', async () => {

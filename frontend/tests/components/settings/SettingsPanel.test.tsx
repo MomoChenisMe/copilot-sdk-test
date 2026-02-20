@@ -14,6 +14,8 @@ vi.mock('../../../src/lib/prompts-api', () => ({
     putProfile: vi.fn().mockResolvedValue({ ok: true }),
     getAgent: vi.fn().mockResolvedValue({ content: '# Agent content' }),
     putAgent: vi.fn().mockResolvedValue({ ok: true }),
+    getOpenspecSdd: vi.fn().mockResolvedValue({ content: '# OpenSpec SDD content' }),
+    putOpenspecSdd: vi.fn().mockResolvedValue({ ok: true }),
     getSystemPrompt: vi.fn().mockResolvedValue({ content: '# System Prompt' }),
     putSystemPrompt: vi.fn().mockResolvedValue({ ok: true }),
     resetSystemPrompt: vi.fn().mockResolvedValue({ content: '# Default System Prompt' }),
@@ -49,6 +51,8 @@ vi.mock('../../../src/lib/api', () => ({
     get: vi.fn().mockResolvedValue({ defaultCwd: '/home' }),
     getBraveApiKey: vi.fn().mockResolvedValue({ hasKey: false, maskedKey: '' }),
     putBraveApiKey: vi.fn().mockResolvedValue({ ok: true }),
+    getOpenspecSdd: vi.fn().mockResolvedValue({ enabled: false }),
+    putOpenspecSdd: vi.fn().mockResolvedValue({ ok: true }),
   },
   memoryApi: {
     getMain: vi.fn().mockResolvedValue({ content: '- User prefers TypeScript' }),
@@ -427,6 +431,163 @@ describe('SettingsPanel', () => {
 
       await waitFor(() => {
         expect(screen.getByDisplayValue('# Agent content')).toBeTruthy();
+      });
+    });
+
+    it('should render OpenSpec SDD toggle in Agent tab', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /agent/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('openspec-sdd-toggle')).toBeTruthy();
+      });
+    });
+
+    it('should show OpenSpec SDD toggle as OFF by default', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /agent/i }));
+
+      await waitFor(() => {
+        const toggle = screen.getByTestId('openspec-sdd-toggle');
+        expect(toggle.getAttribute('aria-checked')).toBe('false');
+      });
+    });
+
+    it('should call configApi.putOpenspecSdd when toggle is clicked', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /agent/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('openspec-sdd-toggle')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('openspec-sdd-toggle'));
+
+      await waitFor(() => {
+        expect(configApi.putOpenspecSdd).toHaveBeenCalledWith(true);
+      });
+    });
+
+    it('should show OpenSpec SDD textarea when toggle is enabled', async () => {
+      (configApi.getOpenspecSdd as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ enabled: true });
+
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /agent/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('openspec-sdd-textarea')).toBeTruthy();
+      });
+    });
+
+    it('should NOT show OpenSpec SDD textarea when toggle is disabled', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /agent/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('openspec-sdd-toggle')).toBeTruthy();
+      });
+
+      expect(screen.queryByTestId('openspec-sdd-textarea')).toBeNull();
+    });
+
+    it('should call batchSetSkillsDisabled(names, false) when toggle is turned ON', async () => {
+      const { skillsApi } = await import('../../../src/lib/prompts-api');
+      (skillsApi.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        skills: [
+          { name: 'openspec-explore', description: '', content: '', builtin: true },
+          { name: 'openspec-workflow', description: '', content: '', builtin: true },
+          { name: 'other-skill', description: '', content: '', builtin: false },
+        ],
+      });
+      // Start disabled
+      (configApi.getOpenspecSdd as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ enabled: false });
+
+      const batchSpy = vi.spyOn(useAppStore.getState(), 'batchSetSkillsDisabled');
+
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /agent/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('openspec-sdd-toggle')).toBeTruthy();
+      });
+
+      // Initial sync should disable openspec skills
+      expect(batchSpy).toHaveBeenCalledWith(
+        expect.arrayContaining(['openspec-explore', 'openspec-workflow']),
+        true,
+      );
+
+      // Now toggle ON
+      fireEvent.click(screen.getByTestId('openspec-sdd-toggle'));
+
+      await waitFor(() => {
+        expect(configApi.putOpenspecSdd).toHaveBeenCalledWith(true);
+      });
+
+      // Should enable openspec skills
+      expect(batchSpy).toHaveBeenCalledWith(
+        expect.arrayContaining(['openspec-explore', 'openspec-workflow']),
+        false,
+      );
+
+      batchSpy.mockRestore();
+    });
+
+    it('should call batchSetSkillsDisabled(names, true) when toggle is turned OFF', async () => {
+      const { skillsApi } = await import('../../../src/lib/prompts-api');
+      (skillsApi.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        skills: [
+          { name: 'openspec-explore', description: '', content: '', builtin: true },
+          { name: 'other-skill', description: '', content: '', builtin: false },
+        ],
+      });
+      // Start enabled
+      (configApi.getOpenspecSdd as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ enabled: true });
+
+      const batchSpy = vi.spyOn(useAppStore.getState(), 'batchSetSkillsDisabled');
+
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /agent/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('openspec-sdd-toggle')).toBeTruthy();
+      });
+
+      // Now toggle OFF
+      fireEvent.click(screen.getByTestId('openspec-sdd-toggle'));
+
+      await waitFor(() => {
+        expect(configApi.putOpenspecSdd).toHaveBeenCalledWith(false);
+      });
+
+      // Should disable openspec skills
+      expect(batchSpy).toHaveBeenCalledWith(
+        expect.arrayContaining(['openspec-explore']),
+        true,
+      );
+
+      batchSpy.mockRestore();
+    });
+
+    it('should save OpenSpec SDD content when save button is clicked', async () => {
+      const { promptsApi } = await import('../../../src/lib/prompts-api');
+      (configApi.getOpenspecSdd as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ enabled: true });
+
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /agent/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('openspec-sdd-textarea')).toBeTruthy();
+      });
+
+      fireEvent.change(screen.getByTestId('openspec-sdd-textarea'), {
+        target: { value: 'Updated OpenSpec content' },
+      });
+
+      fireEvent.click(screen.getByTestId('save-openspec-sdd'));
+
+      await waitFor(() => {
+        expect(promptsApi.putOpenspecSdd).toHaveBeenCalledWith('Updated OpenSpec content');
       });
     });
   });

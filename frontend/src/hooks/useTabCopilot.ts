@@ -335,6 +335,13 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
                 snap.resetDate ?? null,
                 unlimited,
               );
+              // Dual-write to global store for cross-tab premium badge
+              state.setPremiumQuota({
+                used: snap.usedRequests ?? 0,
+                total: snap.entitlementRequests ?? 0,
+                resetDate: snap.resetDate ?? null,
+                unlimited,
+              });
             }
           }
           break;

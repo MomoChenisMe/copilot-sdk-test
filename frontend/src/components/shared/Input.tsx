@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useLayoutEffect, forwardRef, useImperativeHandle } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowUp, Square, Paperclip } from 'lucide-react';
 import { SlashCommandMenu } from './SlashCommandMenu';
@@ -16,9 +16,14 @@ interface InputProps {
   enableAttachments?: boolean;
   attachmentsDisabledReason?: string;
   placeholder?: string;
+  statusText?: string;
 }
 
-export function Input({ onSend, onAbort, isStreaming, disabled, slashCommands, onSlashCommand, enableAttachments, attachmentsDisabledReason, placeholder }: InputProps) {
+export interface InputHandle {
+  focus: () => void;
+}
+
+export const Input = forwardRef<InputHandle, InputProps>(function Input({ onSend, onAbort, isStreaming, disabled, slashCommands, onSlashCommand, enableAttachments, attachmentsDisabledReason, placeholder, statusText }, ref) {
   const { t } = useTranslation();
   const [text, setText] = useState('');
   const [showSlashMenu, setShowSlashMenu] = useState(false);
@@ -30,6 +35,10 @@ export function Input({ onSend, onAbort, isStreaming, disabled, slashCommands, o
   const highlightRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingCursorRef = useRef<number | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    focus: () => textareaRef.current?.focus(),
+  }), []);
 
   const adjustHeight = useCallback(() => {
     const el = textareaRef.current;
@@ -344,6 +353,9 @@ export function Input({ onSend, onAbort, isStreaming, disabled, slashCommands, o
         />
       </div>
       <div className="absolute bottom-2 right-2 flex items-center gap-1">
+        {statusText && (
+          <span className="text-[10px] text-text-muted tabular-nums mr-1">{statusText}</span>
+        )}
         {enableAttachments && (
           <>
             <button
@@ -389,4 +401,4 @@ export function Input({ onSend, onAbort, isStreaming, disabled, slashCommands, o
       </div>
     </div>
   );
-}
+});

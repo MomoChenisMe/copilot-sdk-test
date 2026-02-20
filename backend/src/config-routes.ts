@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { PromptFileStore } from './prompts/file-store.js';
+import { DEFAULT_OPENSPEC_SDD } from './prompts/defaults.js';
 
 const CONFIG_FILE = 'CONFIG.json';
 
@@ -47,6 +48,30 @@ export function createConfigRoutes(promptStore: PromptFileStore, options?: Confi
     res.json({ ok: true });
   });
 
+  // --- OpenSpec SDD ---
+
+  router.get('/openspec-sdd', (_req, res) => {
+    const config = readConfig(promptStore);
+    res.json({ enabled: Boolean(config.openspecSddEnabled) });
+  });
+
+  router.put('/openspec-sdd', (req, res) => {
+    const enabled = Boolean(req.body.enabled);
+    const config = readConfig(promptStore);
+    config.openspecSddEnabled = enabled;
+    writeConfig(promptStore, config);
+
+    // Auto-create OPENSPEC_SDD.md from default template on first enable
+    if (enabled) {
+      const existing = promptStore.readFile('OPENSPEC_SDD.md');
+      if (!existing.trim()) {
+        promptStore.writeFile('OPENSPEC_SDD.md', DEFAULT_OPENSPEC_SDD);
+      }
+    }
+
+    res.json({ ok: true });
+  });
+
   return router;
 }
 
@@ -54,4 +79,10 @@ export function createConfigRoutes(promptStore: PromptFileStore, options?: Confi
 export function readBraveApiKey(promptStore: PromptFileStore): string {
   const config = readConfig(promptStore);
   return (config.braveApiKey as string) ?? '';
+}
+
+/** Read the OpenSpec SDD toggle from stored config. */
+export function readOpenspecSddEnabled(promptStore: PromptFileStore): boolean {
+  const config = readConfig(promptStore);
+  return Boolean(config.openspecSddEnabled);
 }

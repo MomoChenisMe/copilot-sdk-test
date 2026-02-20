@@ -79,4 +79,105 @@ describe('Config routes', () => {
       expect(config.otherSetting).toBe(true);
     });
   });
+
+  // --- OpenSpec SDD Config ---
+
+  describe('GET /api/config/openspec-sdd', () => {
+    it('should return enabled: false when not set', async () => {
+      const res = await request(app).get('/api/config/openspec-sdd');
+      expect(res.status).toBe(200);
+      expect(res.body.enabled).toBe(false);
+    });
+
+    it('should return enabled: true when set', async () => {
+      promptStore.writeFile('CONFIG.json', JSON.stringify({ openspecSddEnabled: true }));
+      const res = await request(app).get('/api/config/openspec-sdd');
+      expect(res.status).toBe(200);
+      expect(res.body.enabled).toBe(true);
+    });
+
+    it('should return enabled: false when CONFIG.json does not exist', async () => {
+      const res = await request(app).get('/api/config/openspec-sdd');
+      expect(res.status).toBe(200);
+      expect(res.body.enabled).toBe(false);
+    });
+  });
+
+  describe('PUT /api/config/openspec-sdd', () => {
+    it('should save enabled: true', async () => {
+      const res = await request(app)
+        .put('/api/config/openspec-sdd')
+        .send({ enabled: true });
+      expect(res.status).toBe(200);
+      expect(res.body.ok).toBe(true);
+
+      const raw = promptStore.readFile('CONFIG.json');
+      const config = JSON.parse(raw);
+      expect(config.openspecSddEnabled).toBe(true);
+    });
+
+    it('should save enabled: false', async () => {
+      promptStore.writeFile('CONFIG.json', JSON.stringify({ openspecSddEnabled: true }));
+      const res = await request(app)
+        .put('/api/config/openspec-sdd')
+        .send({ enabled: false });
+      expect(res.status).toBe(200);
+
+      const raw = promptStore.readFile('CONFIG.json');
+      const config = JSON.parse(raw);
+      expect(config.openspecSddEnabled).toBe(false);
+    });
+
+    it('should preserve other config values (braveApiKey)', async () => {
+      promptStore.writeFile('CONFIG.json', JSON.stringify({ braveApiKey: 'my-key' }));
+      await request(app)
+        .put('/api/config/openspec-sdd')
+        .send({ enabled: true });
+
+      const raw = promptStore.readFile('CONFIG.json');
+      const config = JSON.parse(raw);
+      expect(config.openspecSddEnabled).toBe(true);
+      expect(config.braveApiKey).toBe('my-key');
+    });
+
+    it('should auto-create OPENSPEC_SDD.md from default template on first enable', async () => {
+      await request(app)
+        .put('/api/config/openspec-sdd')
+        .send({ enabled: true });
+
+      const content = promptStore.readFile('OPENSPEC_SDD.md');
+      expect(content).toBeTruthy();
+      expect(content).toContain('OpenSpec SDD');
+      expect(content).toContain('Core Philosophy');
+    });
+
+    it('should not overwrite existing OPENSPEC_SDD.md when enabling again', async () => {
+      promptStore.writeFile('OPENSPEC_SDD.md', 'My custom OpenSpec rules');
+      await request(app)
+        .put('/api/config/openspec-sdd')
+        .send({ enabled: true });
+
+      const content = promptStore.readFile('OPENSPEC_SDD.md');
+      expect(content).toBe('My custom OpenSpec rules');
+    });
+
+    it('should not create OPENSPEC_SDD.md when disabling', async () => {
+      await request(app)
+        .put('/api/config/openspec-sdd')
+        .send({ enabled: false });
+
+      const content = promptStore.readFile('OPENSPEC_SDD.md');
+      expect(content).toBe('');
+    });
+
+    it('should not delete OPENSPEC_SDD.md when disabling', async () => {
+      promptStore.writeFile('OPENSPEC_SDD.md', 'Custom content');
+      await request(app)
+        .put('/api/config/openspec-sdd')
+        .send({ enabled: false });
+
+      const content = promptStore.readFile('OPENSPEC_SDD.md');
+      expect(content).toBe('Custom content');
+    });
+  });
 });

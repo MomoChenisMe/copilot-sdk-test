@@ -136,6 +136,69 @@ describe('PromptComposer', () => {
     });
   });
 
+  describe('OPENSPEC_SDD.md injection', () => {
+    it('should inject OPENSPEC_SDD.md when toggle is enabled in CONFIG.json', () => {
+      fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
+      fs.writeFileSync(path.join(tmpDir, 'AGENT.md'), 'Agent rules');
+      fs.writeFileSync(path.join(tmpDir, 'OPENSPEC_SDD.md'), 'OpenSpec content');
+      fs.writeFileSync(path.join(tmpDir, 'CONFIG.json'), JSON.stringify({ openspecSddEnabled: true }));
+
+      const result = composer.compose();
+      expect(result).toContain('OpenSpec content');
+    });
+
+    it('should place OPENSPEC_SDD.md after AGENT.md and before preferences', () => {
+      fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
+      fs.writeFileSync(path.join(tmpDir, 'AGENT.md'), 'Agent rules');
+      fs.writeFileSync(path.join(tmpDir, 'OPENSPEC_SDD.md'), 'OpenSpec content');
+      fs.writeFileSync(path.join(tmpDir, 'memory', 'preferences.md'), 'Preferences');
+      fs.writeFileSync(path.join(tmpDir, 'CONFIG.json'), JSON.stringify({ openspecSddEnabled: true }));
+
+      const result = composer.compose();
+      const sections = result.split('\n\n---\n\n');
+      const agentIdx = sections.indexOf('Agent rules');
+      const sddIdx = sections.indexOf('OpenSpec content');
+      const prefIdx = sections.indexOf('Preferences');
+      expect(agentIdx).toBeLessThan(sddIdx);
+      expect(sddIdx).toBeLessThan(prefIdx);
+    });
+
+    it('should NOT inject OPENSPEC_SDD.md when toggle is disabled', () => {
+      fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
+      fs.writeFileSync(path.join(tmpDir, 'OPENSPEC_SDD.md'), 'OpenSpec content');
+      fs.writeFileSync(path.join(tmpDir, 'CONFIG.json'), JSON.stringify({ openspecSddEnabled: false }));
+
+      const result = composer.compose();
+      expect(result).not.toContain('OpenSpec content');
+    });
+
+    it('should NOT inject OPENSPEC_SDD.md when CONFIG.json does not exist', () => {
+      fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
+      fs.writeFileSync(path.join(tmpDir, 'OPENSPEC_SDD.md'), 'OpenSpec content');
+
+      const result = composer.compose();
+      expect(result).not.toContain('OpenSpec content');
+    });
+
+    it('should skip empty OPENSPEC_SDD.md even when enabled', () => {
+      fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
+      fs.writeFileSync(path.join(tmpDir, 'OPENSPEC_SDD.md'), '');
+      fs.writeFileSync(path.join(tmpDir, 'CONFIG.json'), JSON.stringify({ openspecSddEnabled: true }));
+
+      const result = composer.compose();
+      expect(result).toBe('');
+    });
+
+    it('should handle malformed CONFIG.json gracefully', () => {
+      fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
+      fs.writeFileSync(path.join(tmpDir, 'OPENSPEC_SDD.md'), 'OpenSpec content');
+      fs.writeFileSync(path.join(tmpDir, 'CONFIG.json'), 'NOT VALID JSON');
+
+      const result = composer.compose();
+      expect(result).not.toContain('OpenSpec content');
+    });
+  });
+
   describe('MEMORY.md injection', () => {
     it('should include MEMORY.md content when memoryStore is provided', () => {
       const memDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mem-'));

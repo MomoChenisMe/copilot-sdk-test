@@ -12,6 +12,7 @@ import { ToolRecordErrorBoundary } from './ToolRecordErrorBoundary';
 import { ToolResultBlock } from './ToolResultBlock';
 import { parseArtifacts, parseToolArtifacts } from '../../lib/artifact-parser';
 import { Sparkles, FileText, Code, Globe, Image as ImageIcon } from 'lucide-react';
+import { ContextCard } from './ContextCard';
 
 const INLINE_RESULT_TOOLS = ['bash', 'shell', 'execute', 'run'];
 
@@ -147,6 +148,20 @@ export function MessageBlock({ message }: MessageBlockProps) {
           />
         )}
         <BashOutput content={message.content} exitCode={metadata.exitCode!} />
+      </div>
+    );
+  }
+
+  // Context card rendering
+  if (message.role === 'system' && (metadata as any)?.type === 'context' && (metadata as any)?.contextData) {
+    return (
+      <div className="mb-4 flex gap-3" data-testid="context-card-wrapper">
+        <div className="shrink-0 w-6 h-6 rounded-full bg-accent/10 flex items-center justify-center mt-0.5">
+          <Sparkles size={14} className="text-accent" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <ContextCard data={(metadata as any).contextData} />
+        </div>
       </div>
     );
   }

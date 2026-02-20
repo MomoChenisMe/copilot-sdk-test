@@ -138,4 +138,45 @@ describe('prompts routes', () => {
     });
   });
 
+  // --- OpenSpec SDD ---
+
+  describe('GET /api/prompts/openspec-sdd', () => {
+    it('should return content when file exists', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'OPENSPEC_SDD.md'), 'OpenSpec rules');
+      const res = await fetch(`${baseUrl}/api/prompts/openspec-sdd`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.content).toBe('OpenSpec rules');
+    });
+
+    it('should return empty string when file does not exist', async () => {
+      const res = await fetch(`${baseUrl}/api/prompts/openspec-sdd`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.content).toBe('');
+    });
+  });
+
+  describe('PUT /api/prompts/openspec-sdd', () => {
+    it('should write content and return ok', async () => {
+      const res = await fetch(`${baseUrl}/api/prompts/openspec-sdd`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'Updated OpenSpec rules' }),
+      });
+      expect(res.status).toBe(200);
+      expect(fs.readFileSync(path.join(tmpDir, 'OPENSPEC_SDD.md'), 'utf-8')).toBe('Updated OpenSpec rules');
+    });
+
+    it('should allow empty content', async () => {
+      const res = await fetch(`${baseUrl}/api/prompts/openspec-sdd`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: '' }),
+      });
+      expect(res.status).toBe(200);
+      expect(fs.readFileSync(path.join(tmpDir, 'OPENSPEC_SDD.md'), 'utf-8')).toBe('');
+    });
+  });
+
 });

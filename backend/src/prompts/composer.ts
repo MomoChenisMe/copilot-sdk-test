@@ -31,6 +31,18 @@ export class PromptComposer {
     const agent = this.store.readFile('AGENT.md');
     if (agent.trim()) sections.push(agent);
 
+    // 3.5 OPENSPEC_SDD.md (conditionally injected based on CONFIG.json toggle)
+    try {
+      const rawConfig = this.store.readFile('CONFIG.json');
+      const config = rawConfig ? JSON.parse(rawConfig) : {};
+      if (config.openspecSddEnabled) {
+        const openspecSdd = this.store.readFile('OPENSPEC_SDD.md');
+        if (openspecSdd.trim()) sections.push(openspecSdd);
+      }
+    } catch {
+      // CONFIG.json missing or malformed — skip silently
+    }
+
     // 4. memory/preferences.md
     const preferences = this.store.readFile('memory/preferences.md');
     if (preferences.trim()) sections.push(preferences);

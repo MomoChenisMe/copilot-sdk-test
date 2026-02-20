@@ -24,6 +24,9 @@ export const promptsApi = {
   getAgent: () => apiGet<PromptContent>('/api/prompts/agent'),
   putAgent: (content: string) => apiPut<{ ok: true }>('/api/prompts/agent', { content }),
 
+  getOpenspecSdd: () => apiGet<PromptContent>('/api/prompts/openspec-sdd'),
+  putOpenspecSdd: (content: string) => apiPut<{ ok: true }>('/api/prompts/openspec-sdd', { content }),
+
 };
 
 export interface SkillItem {

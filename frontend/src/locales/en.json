@@ -81,7 +81,9 @@
     "settingsDesc": "Open settings",
     "newDesc": "New conversation",
     "contextDesc": "Show system context info",
-    "copilot": "Copilot"
+    "copilot": "Copilot",
+    "systemSkills": "System Skills",
+    "userSkills": "User Skills"
   },
   "cwd": {
     "label": "Working Directory",
@@ -139,6 +141,11 @@
     "general": {
       "language": "Language",
       "logout": "Logout"
+    },
+    "agent": {
+      "openspecSdd": "OpenSpec SDD Workflow",
+      "openspecSddDesc": "Inject the OpenSpec specification-driven development workflow rules into every AI conversation.",
+      "openspecSddEnabled": "Enable OpenSpec SDD"
     },
     "toast": {
       "saved": "Saved",
@@ -406,7 +413,11 @@
     "enabled": "enabled",
     "disabled": "disabled",
     "none": "None",
-    "fetchError": "Failed to fetch context"
+    "fetchError": "Failed to fetch context",
+    "estimated": "Estimated",
+    "systemPromptLabel": "System Prompt",
+    "skillsLabel": "Skills",
+    "mcpLabel": "MCP Servers"
   },
   "sdk": {
     "analyzeChanges": "Analyze Changes",

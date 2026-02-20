@@ -192,6 +192,7 @@ export interface AppState {
 
   // Actions — Settings
   toggleSkill: (name: string) => void;
+  batchSetSkillsDisabled: (names: string[], disabled: boolean) => void;
   setSettingsOpen: (open: boolean) => void;
 
   // Actions — Error
@@ -260,6 +261,10 @@ export interface AppState {
   setCronBadge: (unread: number, failed: number) => void;
   cronRefreshTrigger: number;
   triggerCronRefresh: () => void;
+
+  // Premium quota (global, not per-tab)
+  premiumQuota: { used: number; total: number; resetDate: string | null; unlimited: boolean } | null;
+  setPremiumQuota: (quota: { used: number; total: number; resetDate: string | null; unlimited: boolean } | null) => void;
 }
 
 const MIGRATION_KEYS = [
@@ -465,6 +470,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     const next = current.includes(name)
       ? current.filter((s) => s !== name)
       : [...current, name];
+    try { localStorage.setItem('codeforge:disabledSkills', JSON.stringify(next)); } catch { /* noop */ }
+    set({ disabledSkills: next });
+  },
+
+  batchSetSkillsDisabled: (names, disabled) => {
+    const current = get().disabledSkills;
+    let next: string[];
+    if (disabled) {
+      next = [...new Set([...current, ...names])];
+    } else {
+      const nameSet = new Set(names);
+      next = current.filter((s) => !nameSet.has(s));
+    }
     try { localStorage.setItem('codeforge:disabledSkills', JSON.stringify(next)); } catch { /* noop */ }
     set({ disabledSkills: next });
   },
@@ -997,6 +1015,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   setCronBadge: (unread, failed) => set({ cronUnreadCount: unread, cronFailedCount: failed }),
   cronRefreshTrigger: 0,
   triggerCronRefresh: () => set((s) => ({ cronRefreshTrigger: s.cronRefreshTrigger + 1 })),
+
+  // Premium quota (global)
+  premiumQuota: null,
+  setPremiumQuota: (quota) => set({ premiumQuota: quota }),
 }));
 
 function persistOpenTabs(tabs: Record<string, TabState>, tabOrder: string[]) {

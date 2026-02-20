@@ -32,3 +32,5 @@ Settings SHALL 包含 9 個分類：General、System Prompt、Profile、Agent Ru
 **Reason**: 使用者決定不需要預設模板功能，移除以精簡設定頁面。
 
 **Migration**: 無遷移需求。預設模板功能完整移除，localStorage 中殘留的 `activePresets` 資料會被忽略。
+
+## Requirements

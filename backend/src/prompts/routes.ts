@@ -49,5 +49,18 @@ export function createPromptsRoutes(store: PromptFileStore): Router {
     res.json({ ok: true });
   });
 
+  // --- OpenSpec SDD ---
+
+  router.get('/openspec-sdd', (_req, res) => {
+    const content = store.readFile('OPENSPEC_SDD.md');
+    res.json({ content });
+  });
+
+  router.put('/openspec-sdd', (req, res) => {
+    const { content } = req.body;
+    store.writeFile('OPENSPEC_SDD.md', content ?? '');
+    res.json({ ok: true });
+  });
+
   return router;
 }

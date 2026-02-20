@@ -10,7 +10,9 @@ import { useModels } from '../../hooks/useModels';
 import { useSkills } from '../../hooks/useSkills';
 import { useGlobalShortcuts } from '../../hooks/useGlobalShortcuts';
 import { useCronNotifications } from '../../hooks/useCronNotifications';
+import { useQuota } from '../../hooks/useQuota';
 import { conversationApi, configApi } from '../../lib/api';
+import { skillsApi } from '../../lib/prompts-api';
 import { sumUsageFromMessages } from '../../lib/usage-utils';
 import { uploadFiles } from '../../lib/upload-api';
 import type { AttachedFile } from '../shared/AttachmentPreview';
@@ -37,9 +39,10 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     search: searchConversations,
   } = useConversations();
 
-  // Load models and skills from API
+  // Load models, skills, and quota from API
   useModels();
   useSkills();
+  useQuota();
 
   // Subscribe to cron job notifications
   useCronNotifications({ subscribe, send });
@@ -131,6 +134,13 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   useEffect(() => {
     useAppStore.getState().restoreOpenTabs();
     useAppStore.getState().restoreDisabledSkills();
+    // Sync openspec skills disabled state based on toggle
+    configApi.getOpenspecSdd().then(({ enabled }) => {
+      skillsApi.list().then(({ skills }) => {
+        const names = skills.filter((s: { name: string }) => s.name.startsWith('openspec-')).map((s: { name: string }) => s.name);
+        useAppStore.getState().batchSetSkillsDisabled(names, !enabled);
+      }).catch(() => {});
+    }).catch(() => {});
     // Sync activeConversationId with restored activeTabId
     const restoredTabId = useAppStore.getState().activeTabId;
     if (restoredTabId) {

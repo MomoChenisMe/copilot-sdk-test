@@ -23,7 +23,7 @@ describe('SlashCommandMenu', () => {
   it('renders all commands grouped by type', () => {
     render(<SlashCommandMenu {...defaultProps} />);
     expect(screen.getByText('Commands')).toBeTruthy();
-    expect(screen.getByText('Skills')).toBeTruthy();
+    expect(screen.getByText('User Skills')).toBeTruthy();
     expect(screen.getByText('/clear')).toBeTruthy();
     expect(screen.getByText('/code-review')).toBeTruthy();
   });
@@ -62,7 +62,7 @@ describe('SlashCommandMenu', () => {
   it('hides group header when no commands match in that group', () => {
     render(<SlashCommandMenu {...defaultProps} filter="clear" />);
     expect(screen.getByText('Commands')).toBeTruthy();
-    expect(screen.queryByText('Skills')).toBeNull();
+    expect(screen.queryByText('User Skills')).toBeNull();
   });
 
   it('renders SDK commands section when sdk type commands present', () => {
@@ -73,10 +73,23 @@ describe('SlashCommandMenu', () => {
     ];
     render(<SlashCommandMenu {...defaultProps} commands={withSdk} />);
     expect(screen.getByText('Commands')).toBeTruthy();
-    expect(screen.getByText('Skills')).toBeTruthy();
+    expect(screen.getByText('User Skills')).toBeTruthy();
     expect(screen.getByText('Copilot')).toBeTruthy();
     expect(screen.getByText('/explain')).toBeTruthy();
     expect(screen.getByText('/fix')).toBeTruthy();
+  });
+
+  it('separates system and user skills into different sections', () => {
+    const withBuiltin: SlashCommand[] = [
+      { name: 'clear', description: 'Clear', type: 'builtin' },
+      { name: 'sys-skill', description: 'System skill', type: 'skill', builtin: true },
+      { name: 'user-skill', description: 'User skill', type: 'skill', builtin: false },
+    ];
+    render(<SlashCommandMenu {...defaultProps} commands={withBuiltin} />);
+    expect(screen.getByText('System Skills')).toBeTruthy();
+    expect(screen.getByText('User Skills')).toBeTruthy();
+    expect(screen.getByText('/sys-skill')).toBeTruthy();
+    expect(screen.getByText('/user-skill')).toBeTruthy();
   });
 
   it('hides SDK section header when no sdk commands match filter', () => {

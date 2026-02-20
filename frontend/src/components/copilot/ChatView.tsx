@@ -13,6 +13,7 @@ import { ReasoningBlock } from './ReasoningBlock';
 import { ModelSelector } from './ModelSelector';
 import { CwdSelector } from './CwdSelector';
 import { Input } from '../shared/Input';
+import type { InputHandle } from '../shared/Input';
 import { UsageBar } from './UsageBar';
 import { ScrollToBottom } from './ScrollToBottom';
 import PlanActToggle from './PlanActToggle';
@@ -91,6 +92,7 @@ export function ChatView({
   const showPlanCompletePrompt = tab?.showPlanCompletePrompt ?? false;
   const planFilePath = tab?.planFilePath ?? null;
   const tasks = tab?.tasks ?? [];
+  const premiumQuota = useAppStore((s) => s.premiumQuota);
   const setTabShowPlanCompletePrompt = useAppStore((s) => s.setTabShowPlanCompletePrompt);
 
   const handleModeChange = useCallback(
@@ -136,6 +138,7 @@ export function ChatView({
   );
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<InputHandle>(null);
   const isAutoScrolling = useRef(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -158,6 +161,17 @@ export function ChatView({
     }
   }, [messages, streamingText, toolRecords]);
 
+  // Auto-focus input on new tab (tabId changed + empty messages)
+  useEffect(() => {
+    if (tabId && messages.length === 0) {
+      // Delay to ensure Input component is fully mounted after tab switch
+      const raf = requestAnimationFrame(() => {
+        inputRef.current?.focus();
+      });
+      return () => cancelAnimationFrame(raf);
+    }
+  }, [tabId, messages.length]);
+
   const scrollToBottom = useCallback(() => {
     scrollRef.current?.scrollTo({
       top: scrollRef.current.scrollHeight,
@@ -177,7 +191,7 @@ export function ChatView({
     ];
     const skillCmds: SlashCommand[] = skills
       .filter((s) => !disabledSkills.includes(s.name))
-      .map((s) => ({ name: s.name, description: s.description, type: 'skill' as const }));
+      .map((s) => ({ name: s.name, description: s.description, type: 'skill' as const, builtin: !!s.builtin }));
     const sdkCmds: SlashCommand[] = sdkCommands.map((c) => ({
       name: c.name,
       description: c.description,
@@ -209,58 +223,13 @@ export function ChatView({
               sdkVersion: string | null;
             }>('/api/copilot/context')
               .then((ctx) => {
-                const lines: string[] = [];
-                lines.push(`**${t('context.title', 'System Context')}**`);
-                lines.push('');
-
-                // System Prompt
-                lines.push(`**${t('context.systemPrompt', 'System Prompt')}**`);
-                for (const layer of ctx.systemPrompt.layers) {
-                  const status = layer.active
-                    ? t('context.active', 'active')
-                    : t('context.inactive', 'inactive');
-                  lines.push(`- ${layer.name}: ${layer.charCount} chars (${status})`);
-                }
-                lines.push(`- ${t('context.totalChars', 'Total')}: ${ctx.systemPrompt.totalChars} / ${ctx.systemPrompt.maxChars}`);
-                lines.push('');
-
-                // Skills
-                lines.push(`**${t('context.skills', 'Skills')}**`);
-                if (ctx.skills.builtin.length > 0) {
-                  lines.push(`${t('context.builtinSkills', 'Built-in')}: ${ctx.skills.builtin.map((s) => s.name).join(', ')}`);
-                }
-                if (ctx.skills.user.length > 0) {
-                  lines.push(`${t('context.userSkills', 'User')}: ${ctx.skills.user.map((s) => s.name).join(', ')}`);
-                }
-                if (ctx.skills.builtin.length === 0 && ctx.skills.user.length === 0) {
-                  lines.push(t('context.none', 'None'));
-                }
-                lines.push('');
-
-                // MCP
-                lines.push(`**${t('context.mcpServers', 'MCP Servers')}**`);
-                if (ctx.mcp.servers.length > 0) {
-                  for (const s of ctx.mcp.servers) {
-                    lines.push(`- ${s.name} (${s.transport}) — ${s.toolCount} ${t('context.tools', 'tools')}`);
-                  }
-                } else {
-                  lines.push(t('context.none', 'None'));
-                }
-                lines.push('');
-
-                // Model & SDK
-                lines.push(`**${t('context.model', 'Model')}**: ${currentModel || t('context.none', 'None')}`);
-                lines.push(`**${t('context.sdkVersion', 'SDK Version')}**: ${ctx.sdkVersion || t('context.none', 'None')}`);
-
-                const content = lines.join('\n');
-
                 if (tabId) {
                   useAppStore.getState().addTabMessage(tabId, {
                     id: `ctx-${Date.now()}`,
                     conversationId: '',
                     role: 'system',
-                    content,
-                    metadata: null,
+                    content: '',
+                    metadata: { type: 'context', contextData: ctx },
                     createdAt: new Date().toISOString(),
                   });
                 }
@@ -392,6 +361,7 @@ export function ChatView({
               enableAttachments={canAttach}
               attachmentsDisabledReason={attachmentsDisabledReason}
               placeholder={isTerminalMode ? t('terminal.placeholder', '$ enter command...') : undefined}
+              statusText={premiumQuota ? (premiumQuota.unlimited ? `${premiumQuota.used} PR` : `${premiumQuota.used}/${premiumQuota.total} PR`) : undefined}
             />
           </div>
         </div>
@@ -531,11 +501,6 @@ export function ChatView({
               cacheWriteTokens={tab.usage.cacheWriteTokens}
               contextWindowUsed={tab.usage.contextWindowUsed}
               contextWindowMax={tab.usage.contextWindowMax}
-              premiumRequestsUsed={tab.usage.premiumRequestsUsed}
-              premiumRequestsLocal={tab.usage.premiumRequestsLocal}
-              premiumRequestsTotal={tab.usage.premiumRequestsTotal}
-              premiumResetDate={tab.usage.premiumResetDate}
-              premiumUnlimited={tab.usage.premiumUnlimited}
               model={tab.usage.model}
             />
           </div>
@@ -603,6 +568,7 @@ export function ChatView({
                 {tabId && <PlanActToggle planMode={planMode} onToggle={handlePlanModeToggle} disabled={isStreaming} />}
               </div>
               <Input
+                ref={inputRef}
                 onSend={isTerminalMode ? handleTerminalSend : onSend}
                 onAbort={onAbort}
                 isStreaming={isStreaming}
@@ -612,6 +578,7 @@ export function ChatView({
                 enableAttachments={canAttach}
                 attachmentsDisabledReason={attachmentsDisabledReason}
                 placeholder={isTerminalMode ? t('terminal.placeholder', '$ enter command...') : undefined}
+                statusText={premiumQuota ? (premiumQuota.unlimited ? `${premiumQuota.used} PR` : `${premiumQuota.used}/${premiumQuota.total} PR`) : undefined}
               />
             </>
           )}

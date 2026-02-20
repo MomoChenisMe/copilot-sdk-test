@@ -165,6 +165,8 @@ export const configApi = {
   get: () => apiGet<AppConfig>('/api/config'),
   getBraveApiKey: () => apiGet<{ hasKey: boolean; maskedKey: string }>('/api/config/brave-api-key'),
   putBraveApiKey: (apiKey: string) => apiPut<{ ok: true }>('/api/config/brave-api-key', { apiKey }),
+  getOpenspecSdd: () => apiGet<{ enabled: boolean }>('/api/config/openspec-sdd'),
+  putOpenspecSdd: (enabled: boolean) => apiPut<{ ok: true }>('/api/config/openspec-sdd', { enabled }),
 };
 
 // --- Auto Memory API ---

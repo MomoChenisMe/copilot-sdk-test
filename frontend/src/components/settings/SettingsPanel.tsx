@@ -360,9 +360,25 @@ function AgentTab() {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
 
+  // OpenSpec SDD state
+  const [openspecEnabled, setOpenspecEnabled] = useState(false);
+  const [openspecContent, setOpenspecContent] = useState('');
+  const [openspecSkillNames, setOpenspecSkillNames] = useState<string[]>([]);
+
   useEffect(() => {
-    promptsApi.getAgent().then((r) => {
-      setContent(r.content);
+    Promise.all([
+      promptsApi.getAgent(),
+      import('../../lib/api').then(({ configApi }) => configApi.getOpenspecSdd()),
+      skillsApi.list(),
+    ]).then(([agentRes, openspecRes, skillsRes]) => {
+      setContent(agentRes.content);
+      setOpenspecEnabled(openspecRes.enabled);
+      if (openspecRes.enabled) {
+        promptsApi.getOpenspecSdd().then((r) => setOpenspecContent(r.content)).catch(() => {});
+      }
+      const names = skillsRes.skills.filter((s: { name: string }) => s.name.startsWith('openspec-')).map((s: { name: string }) => s.name);
+      setOpenspecSkillNames(names);
+      useAppStore.getState().batchSetSkillsDisabled(names, !openspecRes.enabled);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -378,24 +394,88 @@ function AgentTab() {
     }
   }, [content, t]);
 
+  const handleToggleOpenspec = useCallback(async () => {
+    const newEnabled = !openspecEnabled;
+    try {
+      const { configApi } = await import('../../lib/api');
+      await configApi.putOpenspecSdd(newEnabled);
+      setOpenspecEnabled(newEnabled);
+      if (newEnabled) {
+        promptsApi.getOpenspecSdd().then((r) => setOpenspecContent(r.content)).catch(() => {});
+      }
+      useAppStore.getState().batchSetSkillsDisabled(openspecSkillNames, !newEnabled);
+    } catch {
+      setToast(t('settings.toast.saveFailed'));
+      setTimeout(() => setToast(null), 2000);
+    }
+  }, [openspecEnabled, openspecSkillNames, t]);
+
+  const handleSaveOpenspec = useCallback(async () => {
+    try {
+      await promptsApi.putOpenspecSdd(openspecContent);
+      setToast(t('settings.toast.saved'));
+      setTimeout(() => setToast(null), 2000);
+    } catch {
+      setToast(t('settings.toast.saveFailed'));
+      setTimeout(() => setToast(null), 2000);
+    }
+  }, [openspecContent, t]);
+
   if (loading) return <div className="text-text-secondary text-sm">{t('settings.loading')}</div>;
 
   return (
-    <div className="flex flex-col gap-3">
-      <textarea
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-        className="w-full h-48 p-2 text-sm bg-bg-secondary border border-border rounded-lg resize-y font-mono text-text-primary"
-      />
-      <div className="flex items-center gap-2">
-        <button
-          data-testid="save-agent"
-          onClick={handleSave}
-          className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
-        >
-          {t('settings.save')}
-        </button>
-        {toast && <span className="text-xs text-text-secondary">{toast}</span>}
+    <div className="flex flex-col gap-6">
+      {/* AGENT.md section */}
+      <div className="flex flex-col gap-3">
+        <textarea
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          className="w-full h-48 p-2 text-sm bg-bg-secondary border border-border rounded-lg resize-y font-mono text-text-primary"
+        />
+        <div className="flex items-center gap-2">
+          <button
+            data-testid="save-agent"
+            onClick={handleSave}
+            className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
+          >
+            {t('settings.save')}
+          </button>
+          {toast && <span className="text-xs text-text-secondary">{toast}</span>}
+        </div>
+      </div>
+
+      {/* OpenSpec SDD section */}
+      <div className="border-t border-border-subtle pt-4 flex flex-col gap-3">
+        <div>
+          <h3 className="text-xs font-semibold text-text-secondary uppercase mb-1">{t('settings.agent.openspecSdd')}</h3>
+          <p className="text-[11px] text-text-secondary/70 mb-2">{t('settings.agent.openspecSddDesc')}</p>
+          <div className="flex items-center gap-2">
+            <ToggleSwitch
+              data-testid="openspec-sdd-toggle"
+              checked={openspecEnabled}
+              onChange={handleToggleOpenspec}
+            />
+            <span className="text-xs text-text-secondary">{t('settings.agent.openspecSddEnabled')}</span>
+          </div>
+        </div>
+
+        {openspecEnabled && (
+          <div className="flex flex-col gap-2">
+            <textarea
+              data-testid="openspec-sdd-textarea"
+              value={openspecContent}
+              onChange={(e) => setOpenspecContent(e.target.value)}
+              className="w-full h-48 p-2 text-sm bg-bg-secondary border border-border rounded-lg resize-y font-mono text-text-primary"
+            />
+            <button
+              data-testid="save-openspec-sdd"
+              onClick={handleSaveOpenspec}
+              className="self-start px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
+            >
+              {t('settings.save')}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -876,6 +956,7 @@ function SkillsTab({ onClose }: { onClose?: () => void }) {
     try {
       const r = await skillsApi.list();
       setSkills(r.skills);
+      useAppStore.getState().setSkills(r.skills);
     } catch { /* ignore */ }
   }, []);
 
@@ -883,7 +964,12 @@ function SkillsTab({ onClose }: { onClose?: () => void }) {
     if (!newName.trim() || INVALID_NAME_RE.test(newName.trim())) return;
     try {
       await skillsApi.put(newName.trim(), newDescription, newContent);
-      setSkills((prev) => [...prev, { name: newName.trim(), description: newDescription, content: newContent, builtin: false }]);
+      const newSkill = { name: newName.trim(), description: newDescription, content: newContent, builtin: false };
+      setSkills((prev) => {
+        const updated = [...prev, newSkill];
+        useAppStore.getState().setSkills(updated);
+        return updated;
+      });
       setNewName('');
       setNewDescription('');
       setNewContent('');
@@ -911,7 +997,11 @@ function SkillsTab({ onClose }: { onClose?: () => void }) {
     if (!expandedSkill) return;
     try {
       await skillsApi.put(expandedSkill, editDescription, editContent);
-      setSkills((prev) => prev.map((s) => (s.name === expandedSkill ? { ...s, description: editDescription, content: editContent } : s)));
+      setSkills((prev) => {
+        const updated = prev.map((s) => (s.name === expandedSkill ? { ...s, description: editDescription, content: editContent } : s));
+        useAppStore.getState().setSkills(updated);
+        return updated;
+      });
       setToast(t('settings.toast.saved'));
       setTimeout(() => setToast(null), 2000);
     } catch {
@@ -924,7 +1014,11 @@ function SkillsTab({ onClose }: { onClose?: () => void }) {
     if (!confirmDelete) return;
     try {
       await skillsApi.delete(confirmDelete);
-      setSkills((prev) => prev.filter((s) => s.name !== confirmDelete));
+      setSkills((prev) => {
+        const updated = prev.filter((s) => s.name !== confirmDelete);
+        useAppStore.getState().setSkills(updated);
+        return updated;
+      });
       setToast(t('settings.toast.deleted'));
       setTimeout(() => setToast(null), 2000);
     } catch {

@@ -103,3 +103,5 @@
 **Reason**: 隨預設集功能一同移除。
 
 **Migration**: 移除 Zustand store 中的 `activePresets: string[]` 狀態、`togglePreset` action、以及 localStorage key `'ai-terminal:activePresets'` 的讀寫邏輯。WebSocket 訊息中的 `activePresets` 欄位也一同移除。
+
+## Requirements

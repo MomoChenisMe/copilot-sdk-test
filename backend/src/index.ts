@@ -248,6 +248,21 @@ export function createApp() {
     getMcpTools: () => adaptMcpTools(mcpManager),
   });
 
+  // Quota endpoint — returns premium quota data (cache first, then live SDK query)
+  app.get('/api/copilot/quota', authMiddleware, async (_req, res) => {
+    // Try cached value first
+    let quota = streamManager.getQuota();
+    if (!quota) {
+      // No cache — proactively query SDK
+      const live = await clientManager.getQuota();
+      if (live) {
+        streamManager.updateQuotaCache(live);
+        quota = streamManager.getQuota();
+      }
+    }
+    res.json({ quota });
+  });
+
   // Cron scheduler with BackgroundSessionRunner (independent of StreamManager)
   const cronStore = new CronStore(db);
   const backgroundRunner = new BackgroundSessionRunner(sessionManager);

@@ -5,6 +5,7 @@ export interface SlashCommand {
   name: string;
   description: string;
   type: 'builtin' | 'skill' | 'sdk';
+  builtin?: boolean;
 }
 
 interface SlashCommandMenuProps {
@@ -13,6 +14,32 @@ interface SlashCommandMenuProps {
   selectedIndex: number;
   onSelect: (command: SlashCommand) => void;
   onClose: () => void;
+}
+
+function CommandItem({
+  cmd,
+  selected,
+  onSelect,
+}: {
+  cmd: SlashCommand;
+  selected: boolean;
+  onSelect: (cmd: SlashCommand) => void;
+}) {
+  return (
+    <button
+      role="option"
+      aria-selected={selected}
+      onClick={() => onSelect(cmd)}
+      className={`w-full text-left px-3 py-2.5 flex flex-col gap-0.5 transition-colors ${
+        selected ? 'bg-accent-soft text-accent' : 'hover:bg-bg-tertiary text-text-primary'
+      }`}
+    >
+      <span className="text-sm font-medium">/{cmd.name}</span>
+      {cmd.description && (
+        <span className="text-xs text-text-muted line-clamp-2">{cmd.description}</span>
+      )}
+    </button>
+  );
 }
 
 export function SlashCommandMenu({
@@ -30,7 +57,8 @@ export function SlashCommandMenu({
   );
 
   const builtinCommands = filtered.filter((c) => c.type === 'builtin');
-  const skillCommands = filtered.filter((c) => c.type === 'skill');
+  const systemSkills = filtered.filter((c) => c.type === 'skill' && c.builtin === true);
+  const userSkills = filtered.filter((c) => c.type === 'skill' && c.builtin !== true);
   const sdkCommands = filtered.filter((c) => c.type === 'sdk');
 
   // Click outside to close
@@ -56,7 +84,7 @@ export function SlashCommandMenu({
     return (
       <div
         ref={menuRef}
-        className="absolute bottom-full left-0 mb-1 w-72 bg-bg-elevated border border-border rounded-xl shadow-[var(--shadow-lg)] z-50 p-3"
+        className="absolute bottom-full left-0 mb-1 w-80 bg-bg-elevated border border-border rounded-xl shadow-[var(--shadow-lg)] z-50 p-3"
       >
         <p className="text-sm text-text-muted">
           {t('slashCommand.noResults', 'No matching commands')}
@@ -67,84 +95,41 @@ export function SlashCommandMenu({
 
   let flatIndex = 0;
 
+  const renderSection = (
+    items: SlashCommand[],
+    label: string,
+  ) => {
+    if (items.length === 0) return null;
+    return (
+      <div>
+        <div className="px-3 py-1.5 text-xs font-semibold text-text-muted border-b border-border">
+          {label}
+        </div>
+        {items.map((cmd) => {
+          const idx = flatIndex++;
+          return (
+            <CommandItem
+              key={cmd.name}
+              cmd={cmd}
+              selected={idx === selectedIndex}
+              onSelect={onSelect}
+            />
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div
       ref={menuRef}
       role="listbox"
-      className="absolute bottom-full left-0 mb-1 w-72 max-h-60 overflow-y-auto bg-bg-elevated border border-border rounded-xl shadow-[var(--shadow-lg)] z-50"
+      className="absolute bottom-full left-0 mb-1 w-80 max-h-72 overflow-y-auto bg-bg-elevated border border-border rounded-xl shadow-[var(--shadow-lg)] z-50"
     >
-      {builtinCommands.length > 0 && (
-        <div>
-          <div className="px-3 py-1.5 text-xs font-semibold text-text-muted border-b border-border">
-            {t('slashCommand.commands', 'Commands')}
-          </div>
-          {builtinCommands.map((cmd) => {
-            const idx = flatIndex++;
-            return (
-              <button
-                key={cmd.name}
-                role="option"
-                aria-selected={idx === selectedIndex}
-                onClick={() => onSelect(cmd)}
-                className={`w-full text-left px-3 py-2 flex items-center gap-2 transition-colors ${
-                  idx === selectedIndex ? 'bg-accent-soft text-accent' : 'hover:bg-bg-tertiary text-text-primary'
-                }`}
-              >
-                <span className="text-sm font-medium">/{cmd.name}</span>
-                <span className="text-xs text-text-muted truncate">{cmd.description}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-      {skillCommands.length > 0 && (
-        <div>
-          <div className="px-3 py-1.5 text-xs font-semibold text-text-muted border-b border-border">
-            {t('slashCommand.skills', 'Skills')}
-          </div>
-          {skillCommands.map((cmd) => {
-            const idx = flatIndex++;
-            return (
-              <button
-                key={cmd.name}
-                role="option"
-                aria-selected={idx === selectedIndex}
-                onClick={() => onSelect(cmd)}
-                className={`w-full text-left px-3 py-2 flex items-center gap-2 transition-colors ${
-                  idx === selectedIndex ? 'bg-accent-soft text-accent' : 'hover:bg-bg-tertiary text-text-primary'
-                }`}
-              >
-                <span className="text-sm font-medium">/{cmd.name}</span>
-                <span className="text-xs text-text-muted truncate">{cmd.description}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-      {sdkCommands.length > 0 && (
-        <div>
-          <div className="px-3 py-1.5 text-xs font-semibold text-text-muted border-b border-border">
-            {t('slashCommand.copilot', 'Copilot')}
-          </div>
-          {sdkCommands.map((cmd) => {
-            const idx = flatIndex++;
-            return (
-              <button
-                key={cmd.name}
-                role="option"
-                aria-selected={idx === selectedIndex}
-                onClick={() => onSelect(cmd)}
-                className={`w-full text-left px-3 py-2 flex items-center gap-2 transition-colors ${
-                  idx === selectedIndex ? 'bg-accent-soft text-accent' : 'hover:bg-bg-tertiary text-text-primary'
-                }`}
-              >
-                <span className="text-sm font-medium">/{cmd.name}</span>
-                <span className="text-xs text-text-muted truncate">{cmd.description}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {renderSection(builtinCommands, t('slashCommand.commands', 'Commands'))}
+      {renderSection(systemSkills, t('slashCommand.systemSkills', 'System Skills'))}
+      {renderSection(userSkills, t('slashCommand.userSkills', 'User Skills'))}
+      {renderSection(sdkCommands, t('slashCommand.copilot', 'Copilot'))}
     </div>
   );
 }

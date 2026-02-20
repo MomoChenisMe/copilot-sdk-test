@@ -50,6 +50,14 @@ interface ToolRecord {
   error?: string;
 }
 
+export interface QuotaCache {
+  used: number;
+  total: number;
+  resetDate: string | null;
+  unlimited: boolean;
+  updatedAt: string;
+}
+
 interface UsageAccumulation {
   inputTokens: number;
   outputTokens: number;
@@ -163,6 +171,7 @@ export class StreamManager extends EventEmitter {
   private skillStore?: { getSkillDirectories(): string[] };
   private selfControlTools?: any[];
   private getMcpTools?: () => Promise<any[]>;
+  private quotaCache: QuotaCache | null = null;
 
   private constructor(deps: StreamManagerDeps) {
     super();
@@ -190,6 +199,20 @@ export class StreamManager extends EventEmitter {
 
   updateSelfControlTools(tools: any[]): void {
     this.selfControlTools = tools;
+  }
+
+  updateQuotaCache(data: { used: number; total: number; resetDate: string | null; unlimited: boolean }): void {
+    this.quotaCache = {
+      used: data.used,
+      total: data.total,
+      resetDate: data.resetDate,
+      unlimited: data.unlimited,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  getQuota(): QuotaCache | null {
+    return this.quotaCache;
   }
 
   async startStream(conversationId: string, options: StartStreamOptions): Promise<void> {
@@ -664,6 +687,21 @@ export class StreamManager extends EventEmitter {
         }
         if (msgData.cacheWriteTokens != null) {
           stream.accumulation.usage.cacheWriteTokens += msgData.cacheWriteTokens as number;
+        }
+        break;
+      }
+      case 'copilot:quota': {
+        const snapshots = msgData.quotaSnapshots as any[] | undefined;
+        if (snapshots?.length) {
+          const pr = snapshots.find((s: any) => s.type === 'premiumRequests');
+          if (pr) {
+            this.updateQuotaCache({
+              used: pr.used ?? 0,
+              total: pr.limit ?? 0,
+              resetDate: pr.resetsAt ?? null,
+              unlimited: (pr.limit ?? 0) === 0,
+            });
+          }
         }
         break;
       }

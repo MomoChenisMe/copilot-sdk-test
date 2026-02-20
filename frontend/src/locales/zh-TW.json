@@ -81,7 +81,9 @@
     "settingsDesc": "開啟設定",
     "newDesc": "新對話",
     "contextDesc": "顯示系統上下文資訊",
-    "copilot": "Copilot"
+    "copilot": "Copilot",
+    "systemSkills": "系統技能",
+    "userSkills": "使用者技能"
   },
   "cwd": {
     "label": "工作目錄",
@@ -139,6 +141,11 @@
     "general": {
       "language": "語言",
       "logout": "登出"
+    },
+    "agent": {
+      "openspecSdd": "OpenSpec SDD 工作流程",
+      "openspecSddDesc": "將 OpenSpec 規格驅動開發工作流程規則注入每次 AI 對話中。",
+      "openspecSddEnabled": "啟用 OpenSpec SDD"
     },
     "toast": {
       "saved": "已儲存",
@@ -406,7 +413,11 @@
     "enabled": "已啟用",
     "disabled": "已停用",
     "none": "無",
-    "fetchError": "無法取得上下文資訊"
+    "fetchError": "無法取得上下文資訊",
+    "estimated": "估計",
+    "systemPromptLabel": "系統提示詞",
+    "skillsLabel": "技能",
+    "mcpLabel": "MCP 伺服器"
   },
   "sdk": {
     "analyzeChanges": "分析更新內容",

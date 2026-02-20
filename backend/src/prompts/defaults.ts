@@ -1,3 +1,107 @@
+export const DEFAULT_OPENSPEC_SDD = `# OpenSpec SDD Workflow
+
+A spec-driven collaborative development workflow framework. Align on requirements before writing code — plan the change, specify the delta, design the approach, break down tasks, implement, verify, and archive.
+
+## Core Philosophy
+
+- **Fluid over rigid** — Actions are available based on readiness, not locked behind phases. Skip what is unnecessary, revisit what needs refinement.
+- **Iterative over waterfall** — Requirements evolve as understanding deepens. Embrace refinement loops rather than demanding upfront perfection.
+- **Simple over complex** — Start lean. Add structure only when the situation demands it.
+- **Brownfield-friendly** — Designed for existing codebases. Document what exists, then propose what changes.
+- **Scalable** — Works the same way for a solo developer as for a team.
+
+## Project Structure
+
+\`\`\`
+openspec/
+├── specs/                    # Source of truth: current system behavior
+│   ├── authentication.md
+│   └── payments.md
+├── changes/                  # Active proposed modifications
+│   ├── <change-name>/
+│   │   ├── .openspec.yaml   # Change metadata and state
+│   │   ├── proposal.md      # Intent, scope, approach
+│   │   ├── specs/            # Delta specs (ADDED/MODIFIED/REMOVED)
+│   │   ├── design.md        # Technical implementation strategy
+│   │   └── tasks.md         # Implementation checklist
+│   └── archive/              # Completed changes (timestamped)
+└── config.yaml               # Optional project settings
+\`\`\`
+
+## Workflow Selection
+
+### Decision Tree
+
+\`\`\`
+Is the requirement clear and scope well-defined?
+├─ YES → Is the change small-to-medium and straightforward?
+│        ├─ YES → Quick Feature workflow
+│        └─ NO  → Quick Feature with step-by-step artifact generation
+└─ NO  → Do you need to investigate the problem space first?
+         ├─ YES → Exploratory workflow
+         └─ NO  → Start with a proposal draft, iterate from there
+\`\`\`
+
+### Quick Feature Workflow
+
+**When to use**: Requirements are clear, scope is bounded.
+**Flow**: Propose → Specify deltas → Design → Task breakdown → Implement → Verify → Archive
+
+### Exploratory Workflow
+
+**When to use**: Requirements are unclear, multiple approaches exist, investigation needed.
+**Flow**: Explore → (clarity emerges) → Propose → Specify → Design → Tasks → Implement → Verify → Archive
+
+### Parallel Changes
+
+Multiple independent modifications in progress simultaneously. Each change lives in its own directory under \`changes/\`.
+
+## Artifact Generation Strategy
+
+- **One-shot**: Generate all planning artifacts in a single pass (for straightforward work).
+- **Step-by-step**: Generate one artifact at a time, review, then proceed (for complex work).
+
+Default to one-shot. Switch to step-by-step when complexity or uncertainty increases.
+
+## Change Lifecycle
+
+1. **Proposal** — Capture intent, scope, approach → \`proposal.md\`
+2. **Delta Specifications** — Document what changes (ADDED/MODIFIED/REMOVED) → \`specs/\`
+3. **Design** — Technical implementation strategy → \`design.md\`
+4. **Task Breakdown** — Independently verifiable steps → \`tasks.md\`
+5. **Implementation** — Execute the tasks
+6. **Verification** — Validate against specs (Completeness, Correctness, Coherence)
+7. **Archive** — Sync delta specs to main specs, archive the change
+
+## Verification Dimensions
+
+- **Completeness**: All tasks done? All requirements implemented? All scenarios covered?
+- **Correctness**: Implementation matches spec intent? Edge cases handled?
+- **Coherence**: Design decisions consistent in code? Patterns consistent across codebase?
+
+## Guidance Rules
+
+1. Assess before recommending — evaluate requirement clarity before suggesting a workflow.
+2. Match workflow to situation — let the decision tree guide the choice.
+3. Keep changes focused — one logical unit of work per change.
+4. Verify before archiving — always run verification.
+5. Name changes descriptively — use names like \`add-dark-mode\`, not \`feature-1\`.
+
+## Available Slash Commands
+
+- \`/opsx:new\` — Start a new change
+- \`/opsx:continue\` — Continue creating the next artifact
+- \`/opsx:ff\` — Fast-forward: create all artifacts at once
+- \`/opsx:apply\` — Implement tasks from a change
+- \`/opsx:verify\` — Verify implementation matches specs
+- \`/opsx:archive\` — Archive a completed change
+- \`/opsx:explore\` — Enter explore mode (thinking partner)
+- \`/opsx:sync\` — Sync delta specs to main specs
+- \`/opsx:bulk-archive\` — Archive multiple changes at once
+
+When the user mentions feature development, new functionality, or structured changes, suggest using the OpenSpec SDD workflow with these commands.
+`;
+
 export const DEFAULT_SYSTEM_PROMPT = `# System Prompt
 
 ## Identity & Role

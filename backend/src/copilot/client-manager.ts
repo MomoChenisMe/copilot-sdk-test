@@ -86,6 +86,28 @@ export class ClientManager {
     }
   }
 
+  async getQuota(): Promise<{ used: number; total: number; resetDate: string | null; unlimited: boolean } | null> {
+    try {
+      const client = await this.getClient();
+      const result = await (client as any).rpc.account.getQuota();
+      const snapshots = result?.quotaSnapshots;
+      if (!snapshots) return null;
+      // Find premiumRequests snapshot (key may vary)
+      const prKey = Object.keys(snapshots).find((k) => k.toLowerCase().includes('premium'));
+      const pr = prKey ? snapshots[prKey] : Object.values(snapshots)[0];
+      if (!pr) return null;
+      const total = pr.entitlementRequests ?? 0;
+      return {
+        used: pr.usedRequests ?? 0,
+        total,
+        resetDate: pr.resetDate ?? null,
+        unlimited: total === 0 || pr.isUnlimitedEntitlement === true,
+      };
+    } catch {
+      return null;
+    }
+  }
+
   getGithubClientId(): string | undefined {
     return this.githubClientId;
   }

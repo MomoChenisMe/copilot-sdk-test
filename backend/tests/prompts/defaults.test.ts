@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_SYSTEM_PROMPT } from '../../src/prompts/defaults.js';
+import { DEFAULT_SYSTEM_PROMPT, DEFAULT_OPENSPEC_SDD } from '../../src/prompts/defaults.js';
 
 describe('DEFAULT_SYSTEM_PROMPT', () => {
   it('should be a non-empty string', () => {
@@ -113,5 +113,47 @@ describe('DEFAULT_SYSTEM_PROMPT', () => {
   it('should be between 5,000 and 8,000 characters', () => {
     expect(DEFAULT_SYSTEM_PROMPT.length).toBeGreaterThanOrEqual(5000);
     expect(DEFAULT_SYSTEM_PROMPT.length).toBeLessThanOrEqual(8000);
+  });
+});
+
+describe('DEFAULT_OPENSPEC_SDD', () => {
+  it('should be a non-empty string', () => {
+    expect(DEFAULT_OPENSPEC_SDD).toBeTruthy();
+    expect(typeof DEFAULT_OPENSPEC_SDD).toBe('string');
+    expect(DEFAULT_OPENSPEC_SDD.length).toBeGreaterThan(0);
+  });
+
+  it('should contain Core Philosophy section', () => {
+    expect(DEFAULT_OPENSPEC_SDD).toContain('Core Philosophy');
+  });
+
+  it('should contain Project Structure section', () => {
+    expect(DEFAULT_OPENSPEC_SDD).toContain('Project Structure');
+  });
+
+  it('should contain Workflow Selection section', () => {
+    expect(DEFAULT_OPENSPEC_SDD).toContain('Workflow Selection');
+  });
+
+  it('should contain Artifact Generation Strategy section', () => {
+    expect(DEFAULT_OPENSPEC_SDD).toContain('Artifact Generation');
+  });
+
+  it('should contain Change Lifecycle section', () => {
+    expect(DEFAULT_OPENSPEC_SDD).toContain('Change Lifecycle');
+  });
+
+  it('should contain Verification Dimensions section', () => {
+    expect(DEFAULT_OPENSPEC_SDD).toContain('Verification Dimensions');
+  });
+
+  it('should contain Guidance Rules section', () => {
+    expect(DEFAULT_OPENSPEC_SDD).toContain('Guidance Rules');
+  });
+
+  it('should reference OpenSpec slash commands', () => {
+    expect(DEFAULT_OPENSPEC_SDD).toContain('/opsx:new');
+    expect(DEFAULT_OPENSPEC_SDD).toContain('/opsx:apply');
+    expect(DEFAULT_OPENSPEC_SDD).toContain('/opsx:verify');
   });
 });
