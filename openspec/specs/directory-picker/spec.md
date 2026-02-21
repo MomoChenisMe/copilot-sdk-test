@@ -45,3 +45,40 @@ ModelSelector 的下拉選單 MUST 使用響應式最大寬度 `min(20rem, calc(
 
 - **WHEN** 螢幕寬度 >= 768px
 - **THEN** ModelSelector 下拉選單寬度最多 320px (20rem)
+
+### Requirement: 目錄 API 支援回傳檔案清單
+
+`GET /api/directories` 端點 SHALL 支援 `includeFiles` query parameter，啟用時在回應中額外回傳目錄下的檔案清單。
+
+#### Scenario: includeFiles=true 回傳檔案
+
+- **WHEN** 呼叫 `GET /api/directories?path=/some/dir&includeFiles=true`
+- **THEN** 回應 MUST 包含 `files` 陣列
+- **AND** 每個 file entry MUST 包含 `name`（檔名）、`path`（絕對路徑）、`size`（bytes）
+- **AND** 原有的 `directories` 陣列行為 MUST 不變
+
+#### Scenario: 預設不回傳檔案（向下相容）
+
+- **WHEN** 呼叫 `GET /api/directories?path=/some/dir`（不帶 `includeFiles`）
+- **THEN** 回應 MUST NOT 包含 `files` 欄位
+- **AND** 行為 MUST 與修改前完全一致
+
+#### Scenario: 過濾二進位檔案
+
+- **WHEN** `includeFiles=true` 且目錄下存在二進位副檔名的檔案（如 `.png`, `.jpg`, `.gif`, `.mp4`, `.zip`, `.tar`, `.gz`, `.exe`, `.bin`, `.woff`, `.ttf`, `.ico`, `.so`, `.dylib`）
+- **THEN** 回應的 `files` 陣列 MUST NOT 包含這些二進位檔案
+
+#### Scenario: 過濾超大檔案
+
+- **WHEN** `includeFiles=true` 且目錄下存在大小超過 1MB 的檔案
+- **THEN** 回應的 `files` 陣列 MUST NOT 包含這些超大檔案
+
+#### Scenario: showHidden 影響檔案
+
+- **WHEN** `includeFiles=true` 且 `showHidden=false`
+- **THEN** 以 `.` 開頭的隱藏檔案 MUST NOT 出現在 `files` 陣列中
+
+#### Scenario: 檔案按名稱排序
+
+- **WHEN** `includeFiles=true` 回傳檔案清單
+- **THEN** `files` 陣列 MUST 按 `name` 字母升序排列

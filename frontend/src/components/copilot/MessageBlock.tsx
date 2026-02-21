@@ -117,6 +117,23 @@ export function MessageBlock({ message }: MessageBlockProps) {
               })()}
             </div>
           )}
+          {userMeta?.contextFiles && userMeta.contextFiles.length > 0 && (
+            <div data-testid="context-files-chips" className="flex flex-wrap gap-1.5 mb-2">
+              {userMeta.contextFiles.map((fp: string) => {
+                const fileName = fp.split('/').pop() || fp;
+                return (
+                  <span
+                    key={fp}
+                    className="inline-flex items-center gap-1 text-xs bg-accent/10 text-accent px-1.5 py-0.5 rounded"
+                    title={fp}
+                  >
+                    <FileText size={12} className="shrink-0" />
+                    @{fileName}
+                  </span>
+                );
+              })}
+            </div>
+          )}
           {renderUserContent(message.content, skills)}
         </div>
       </div>

@@ -413,7 +413,7 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
 
   // sendMessage now takes tabId, resolves conversationId from tab state
   const sendMessage = useCallback(
-    (tabId: string, prompt: string, files?: Array<{ id: string; originalName: string; mimeType: string; size: number; path: string }>) => {
+    (tabId: string, prompt: string, files?: Array<{ id: string; originalName: string; mimeType: string; size: number; path: string }>, contextFiles?: string[]) => {
       const state = useAppStore.getState();
       const tab = state.tabs[tabId];
       if (!tab) return;
@@ -431,17 +431,21 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
       const dedup = getDedup(conversationId);
       dedup.receivedMessage = false;
 
-      // Build user message metadata (include attachments if files present)
+      // Build user message metadata (include attachments and contextFiles if present)
       let userMetadata: MessageMetadata | null = null;
-      if (files && files.length > 0) {
-        userMetadata = {
-          attachments: files.map((f) => ({
+      if ((files && files.length > 0) || (contextFiles && contextFiles.length > 0)) {
+        userMetadata = {};
+        if (files && files.length > 0) {
+          userMetadata.attachments = files.map((f) => ({
             id: f.id,
             originalName: f.originalName,
             mimeType: f.mimeType,
             size: f.size,
-          })),
-        };
+          }));
+        }
+        if (contextFiles && contextFiles.length > 0) {
+          userMetadata.contextFiles = contextFiles;
+        }
       }
 
       // Add user message to tab
@@ -458,6 +462,9 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
       const data: Record<string, unknown> = { conversationId, prompt, disabledSkills, locale: language };
       if (files && files.length > 0) {
         data.files = files;
+      }
+      if (contextFiles && contextFiles.length > 0) {
+        data.contextFiles = contextFiles;
       }
       if (tab.planMode) {
         data.mode = 'plan';

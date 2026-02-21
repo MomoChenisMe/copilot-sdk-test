@@ -116,4 +116,114 @@ describe('Directory routes', () => {
       expect(names2).not.toContain('.hidden');
     });
   });
+
+  describe('GET /api/directories?includeFiles=true', () => {
+    beforeEach(() => {
+      // Create additional files for testing
+      fs.writeFileSync(path.join(tmpDir, 'readme.md'), 'hello');
+      fs.writeFileSync(path.join(tmpDir, 'index.ts'), 'export {}');
+      fs.writeFileSync(path.join(tmpDir, 'style.css'), 'body {}');
+    });
+
+    it('should return files array when includeFiles=true', async () => {
+      const res = await request(app)
+        .get('/api/directories')
+        .query({ path: tmpDir, includeFiles: 'true' });
+      expect(res.status).toBe(200);
+      expect(res.body.files).toBeInstanceOf(Array);
+      const names = res.body.files.map((f: any) => f.name);
+      expect(names).toContain('readme.md');
+      expect(names).toContain('index.ts');
+      expect(names).toContain('file.txt');
+      // Each file entry must have name, path, size
+      for (const file of res.body.files) {
+        expect(file).toHaveProperty('name');
+        expect(file).toHaveProperty('path');
+        expect(file).toHaveProperty('size');
+        expect(typeof file.size).toBe('number');
+      }
+    });
+
+    it('should NOT return files when includeFiles is not set (backward compat)', async () => {
+      const res = await request(app)
+        .get('/api/directories')
+        .query({ path: tmpDir });
+      expect(res.status).toBe(200);
+      expect(res.body.files).toBeUndefined();
+    });
+
+    it('should filter out binary file extensions', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'image.png'), Buffer.alloc(10));
+      fs.writeFileSync(path.join(tmpDir, 'photo.jpg'), Buffer.alloc(10));
+      fs.writeFileSync(path.join(tmpDir, 'archive.zip'), Buffer.alloc(10));
+      fs.writeFileSync(path.join(tmpDir, 'binary.exe'), Buffer.alloc(10));
+      fs.writeFileSync(path.join(tmpDir, 'font.woff'), Buffer.alloc(10));
+      fs.writeFileSync(path.join(tmpDir, 'lib.so'), Buffer.alloc(10));
+
+      const res = await request(app)
+        .get('/api/directories')
+        .query({ path: tmpDir, includeFiles: 'true' });
+      const names = res.body.files.map((f: any) => f.name);
+      expect(names).not.toContain('image.png');
+      expect(names).not.toContain('photo.jpg');
+      expect(names).not.toContain('archive.zip');
+      expect(names).not.toContain('binary.exe');
+      expect(names).not.toContain('font.woff');
+      expect(names).not.toContain('lib.so');
+      // Text files should still be present
+      expect(names).toContain('readme.md');
+      expect(names).toContain('index.ts');
+    });
+
+    it('should filter out files larger than 1MB', async () => {
+      // Create a file just over 1MB
+      fs.writeFileSync(path.join(tmpDir, 'large.txt'), Buffer.alloc(1024 * 1024 + 1));
+      // Create a file under 1MB
+      fs.writeFileSync(path.join(tmpDir, 'small.txt'), 'small');
+
+      const res = await request(app)
+        .get('/api/directories')
+        .query({ path: tmpDir, includeFiles: 'true' });
+      const names = res.body.files.map((f: any) => f.name);
+      expect(names).not.toContain('large.txt');
+      expect(names).toContain('small.txt');
+    });
+
+    it('should respect showHidden for files', async () => {
+      fs.writeFileSync(path.join(tmpDir, '.env'), 'SECRET=123');
+
+      // Default: show hidden files
+      const res1 = await request(app)
+        .get('/api/directories')
+        .query({ path: tmpDir, includeFiles: 'true' });
+      const names1 = res1.body.files.map((f: any) => f.name);
+      expect(names1).toContain('.env');
+
+      // showHidden=false: exclude hidden files
+      const res2 = await request(app)
+        .get('/api/directories')
+        .query({ path: tmpDir, includeFiles: 'true', showHidden: 'false' });
+      const names2 = res2.body.files.map((f: any) => f.name);
+      expect(names2).not.toContain('.env');
+    });
+
+    it('should return files sorted by name', async () => {
+      const res = await request(app)
+        .get('/api/directories')
+        .query({ path: tmpDir, includeFiles: 'true' });
+      const names = res.body.files.map((f: any) => f.name);
+      const sorted = [...names].sort((a: string, b: string) => a.localeCompare(b));
+      expect(names).toEqual(sorted);
+    });
+
+    it('should still return directories alongside files', async () => {
+      const res = await request(app)
+        .get('/api/directories')
+        .query({ path: tmpDir, includeFiles: 'true' });
+      expect(res.body.directories).toBeInstanceOf(Array);
+      const dirNames = res.body.directories.map((d: any) => d.name);
+      expect(dirNames).toContain('alpha');
+      expect(dirNames).toContain('beta');
+    });
+  });
 });
