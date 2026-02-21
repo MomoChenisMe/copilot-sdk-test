@@ -36,16 +36,19 @@ export function createPromptsRoutes(store: PromptFileStore): Router {
     res.json({ ok: true });
   });
 
-  // --- Agent ---
+  // --- Agent (deprecated shim — merged into PROFILE.md) ---
 
   router.get('/agent', (_req, res) => {
-    const content = store.readFile('AGENT.md');
-    res.json({ content });
+    res.json({ content: '' });
   });
 
   router.put('/agent', (req, res) => {
     const { content } = req.body;
-    store.writeFile('AGENT.md', content ?? '');
+    if (content && content.trim()) {
+      const existing = store.readFile('PROFILE.md');
+      const separator = existing.trim() ? '\n\n## Agent Rules\n\n' : '## Agent Rules\n\n';
+      store.writeFile('PROFILE.md', existing + separator + content);
+    }
     res.json({ ok: true });
   });
 

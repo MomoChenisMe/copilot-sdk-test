@@ -114,27 +114,42 @@ describe('prompts routes', () => {
     });
   });
 
-  // --- Agent ---
+  // --- Agent (deprecated shim) ---
 
   describe('GET /api/prompts/agent', () => {
-    it('should return agent content', async () => {
+    it('should return empty string (deprecated shim)', async () => {
       fs.writeFileSync(path.join(tmpDir, 'AGENT.md'), 'Agent rules');
       const res = await fetch(`${baseUrl}/api/prompts/agent`);
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.content).toBe('Agent rules');
+      expect(body.content).toBe('');
     });
   });
 
   describe('PUT /api/prompts/agent', () => {
-    it('should update agent content', async () => {
+    it('should append content to PROFILE.md (deprecated shim)', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Existing profile');
       const res = await fetch(`${baseUrl}/api/prompts/agent`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: 'New agent rules' }),
       });
       expect(res.status).toBe(200);
-      expect(fs.readFileSync(path.join(tmpDir, 'AGENT.md'), 'utf-8')).toBe('New agent rules');
+      const profile = fs.readFileSync(path.join(tmpDir, 'PROFILE.md'), 'utf-8');
+      expect(profile).toContain('Existing profile');
+      expect(profile).toContain('## Agent Rules');
+      expect(profile).toContain('New agent rules');
+    });
+
+    it('should not modify PROFILE.md when content is empty', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Existing profile');
+      const res = await fetch(`${baseUrl}/api/prompts/agent`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: '' }),
+      });
+      expect(res.status).toBe(200);
+      expect(fs.readFileSync(path.join(tmpDir, 'PROFILE.md'), 'utf-8')).toBe('Existing profile');
     });
   });
 

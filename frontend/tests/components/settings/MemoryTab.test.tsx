@@ -1,27 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
-const { mockMemoryApi } = vi.hoisted(() => {
-  const _mockMemoryApi = {
-    getPreferences: vi.fn().mockResolvedValue({ content: '# My Preferences' }),
-    putPreferences: vi.fn().mockResolvedValue({ ok: true }),
-    listProjects: vi.fn().mockResolvedValue({
-      items: [
-        { name: 'proj-alpha', content: '# Alpha project notes' },
-        { name: 'proj-beta', content: '# Beta project notes' },
-      ],
+const { mockAutoMemoryApi } = vi.hoisted(() => {
+  const _mockAutoMemoryApi = {
+    getMain: vi.fn().mockResolvedValue({ content: '# Auto memory content' }),
+    putMain: vi.fn().mockResolvedValue({ ok: true }),
+    getConfig: vi.fn().mockResolvedValue({
+      enabled: true,
+      autoExtract: true,
+      flushThreshold: 0.75,
+      extractIntervalSeconds: 60,
+      minNewMessages: 4,
     }),
-    putProject: vi.fn().mockResolvedValue({ ok: true }),
-    deleteProject: vi.fn().mockResolvedValue({ ok: true }),
-    listSolutions: vi.fn().mockResolvedValue({
-      items: [
-        { name: 'fix-cache', content: '# Cache fix steps' },
-      ],
-    }),
-    putSolution: vi.fn().mockResolvedValue({ ok: true }),
-    deleteSolution: vi.fn().mockResolvedValue({ ok: true }),
+    putConfig: vi.fn().mockResolvedValue({ ok: true }),
+    getStats: vi.fn().mockResolvedValue({ totalFacts: 5, dailyLogCount: 2 }),
+    listDailyLogs: vi.fn().mockResolvedValue({ dates: [] }),
+    searchMemory: vi.fn().mockResolvedValue({ results: [] }),
+    compactMemory: vi.fn().mockResolvedValue({ ok: true }),
   };
-  return { mockMemoryApi: _mockMemoryApi };
+  return { mockAutoMemoryApi: _mockAutoMemoryApi };
 });
 
 vi.mock('../../../src/lib/prompts-api', () => ({
@@ -37,7 +34,10 @@ vi.mock('../../../src/lib/prompts-api', () => ({
     putPreset: vi.fn().mockResolvedValue({ ok: true }),
     deletePreset: vi.fn().mockResolvedValue({ ok: true }),
   },
-  memoryApi: mockMemoryApi,
+  memoryApi: {
+    getPreferences: vi.fn().mockResolvedValue({ content: '' }),
+    putPreferences: vi.fn().mockResolvedValue({ ok: true }),
+  },
   skillsApi: {
     list: vi.fn().mockResolvedValue({ skills: [] }),
     get: vi.fn().mockResolvedValue({ name: 'test', description: '', content: '', builtin: false }),
@@ -52,20 +52,12 @@ vi.mock('../../../src/lib/api', () => ({
     getBraveApiKey: vi.fn().mockResolvedValue({ hasKey: false, maskedKey: '' }),
     putBraveApiKey: vi.fn().mockResolvedValue({ ok: true }),
   },
-  memoryApi: {
-    getMain: vi.fn().mockResolvedValue({ content: '' }),
-    putMain: vi.fn().mockResolvedValue({ ok: true }),
-    listDailyLogs: vi.fn().mockResolvedValue({ dates: [] }),
-    searchMemory: vi.fn().mockResolvedValue({ results: [] }),
-    getConfig: vi.fn().mockResolvedValue({ enabled: true, autoExtract: true, flushThreshold: 0.75, extractIntervalSeconds: 60, minNewMessages: 4 }),
-    putConfig: vi.fn().mockResolvedValue({ ok: true }),
-    getStats: vi.fn().mockResolvedValue({ totalFacts: 0, dailyLogCount: 0 }),
-  },
+  memoryApi: mockAutoMemoryApi,
 }));
 
 import { SettingsPanel } from '../../../src/components/settings/SettingsPanel';
 
-describe('SettingsPanel - Memory Tab', () => {
+describe('SettingsPanel - Memory Tab (simplified)', () => {
   const defaultProps = {
     open: true,
     onClose: vi.fn(),
@@ -75,132 +67,75 @@ describe('SettingsPanel - Memory Tab', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockMemoryApi.getPreferences.mockResolvedValue({ content: '# My Preferences' });
-    mockMemoryApi.listProjects.mockResolvedValue({
-      items: [
-        { name: 'proj-alpha', content: '# Alpha project notes' },
-        { name: 'proj-beta', content: '# Beta project notes' },
-      ],
+    mockAutoMemoryApi.getMain.mockResolvedValue({ content: '# Auto memory content' });
+    mockAutoMemoryApi.getConfig.mockResolvedValue({
+      enabled: true,
+      autoExtract: true,
+      flushThreshold: 0.75,
+      extractIntervalSeconds: 60,
+      minNewMessages: 4,
     });
-    mockMemoryApi.listSolutions.mockResolvedValue({
-      items: [{ name: 'fix-cache', content: '# Cache fix steps' }],
-    });
+    mockAutoMemoryApi.getStats.mockResolvedValue({ totalFacts: 5, dailyLogCount: 2 });
   });
 
   async function openMemoryTab() {
     render(<SettingsPanel {...defaultProps} />);
     fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
     await waitFor(() => {
-      expect(screen.getByText('Preferences')).toBeTruthy();
+      expect(screen.getByTestId('auto-memory-section')).toBeTruthy();
     });
   }
 
-  // === Structure ===
-  it('should show Preferences, Projects, Solutions sections', async () => {
+  it('should show Auto Memory section', async () => {
     await openMemoryTab();
-    expect(screen.getByText('Preferences')).toBeTruthy();
-    expect(screen.getByText('Projects')).toBeTruthy();
-    expect(screen.getByText('Solutions')).toBeTruthy();
+    expect(screen.getByTestId('auto-memory-section')).toBeTruthy();
   });
 
-  // === Preferences ===
-  it('should load and display preferences content', async () => {
+  it('should show LLM Intelligence section', async () => {
     await openMemoryTab();
-    await waitFor(() => {
-      expect(screen.getByTestId('memory-preferences')).toBeTruthy();
-    });
+    expect(screen.getByTestId('llm-intelligence-section')).toBeTruthy();
   });
 
-  it('should save preferences on save button click', async () => {
+  it('should not show Preferences, Projects, or Solutions sections', async () => {
+    await openMemoryTab();
+    expect(screen.queryByText('Preferences')).toBeNull();
+    expect(screen.queryByText('Projects')).toBeNull();
+    expect(screen.queryByText('Solutions')).toBeNull();
+  });
+
+  it('should load and display auto memory editor', async () => {
     await openMemoryTab();
     await waitFor(() => {
-      expect(screen.getByTestId('save-preferences')).toBeTruthy();
-    });
-
-    const textarea = screen.getByTestId('memory-preferences');
-    fireEvent.change(textarea, { target: { value: 'Updated prefs' } });
-    fireEvent.click(screen.getByTestId('save-preferences'));
-
-    await waitFor(() => {
-      expect(mockMemoryApi.putPreferences).toHaveBeenCalledWith('Updated prefs');
+      expect(screen.getByTestId('auto-memory-editor')).toBeTruthy();
     });
   });
 
-  // === Projects ===
-  it('should list projects', async () => {
+  it('should show auto extract toggle', async () => {
     await openMemoryTab();
-    expect(screen.getByText('proj-alpha')).toBeTruthy();
-    expect(screen.getByText('proj-beta')).toBeTruthy();
-  });
-
-  it('should expand project for editing', async () => {
-    await openMemoryTab();
-    fireEvent.click(screen.getByTestId('project-expand-proj-alpha'));
     await waitFor(() => {
-      expect(screen.getByDisplayValue('# Alpha project notes')).toBeTruthy();
+      expect(screen.getByTestId('auto-extract-toggle')).toBeTruthy();
     });
   });
 
-  // === Solutions ===
-  it('should list solutions', async () => {
+  it('should save auto memory on save button click', async () => {
     await openMemoryTab();
-    expect(screen.getByText('fix-cache')).toBeTruthy();
-  });
-
-  // === Delete confirmation ===
-  it('should show delete confirmation dialog when clicking delete on a project', async () => {
-    await openMemoryTab();
-    fireEvent.click(screen.getByTestId('project-delete-proj-alpha'));
-
     await waitFor(() => {
-      expect(screen.getByTestId('delete-confirm-dialog')).toBeTruthy();
-      expect(screen.getByText('Are you sure you want to delete this item?')).toBeTruthy();
-    });
-  });
-
-  it('should call deleteProject after confirming deletion', async () => {
-    await openMemoryTab();
-    fireEvent.click(screen.getByTestId('project-delete-proj-alpha'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('delete-confirm')).toBeTruthy();
+      expect(screen.getByTestId('save-auto-memory')).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByTestId('delete-confirm'));
+    const textarea = screen.getByTestId('auto-memory-editor');
+    fireEvent.change(textarea, { target: { value: 'Updated auto memory' } });
+    fireEvent.click(screen.getByTestId('save-auto-memory'));
 
     await waitFor(() => {
-      expect(mockMemoryApi.deleteProject).toHaveBeenCalledWith('proj-alpha');
+      expect(mockAutoMemoryApi.putMain).toHaveBeenCalledWith('Updated auto memory');
     });
   });
 
-  it('should dismiss delete dialog on cancel', async () => {
+  it('should show total facts stats', async () => {
     await openMemoryTab();
-    fireEvent.click(screen.getByTestId('project-delete-proj-alpha'));
-
     await waitFor(() => {
-      expect(screen.getByTestId('delete-cancel')).toBeTruthy();
-    });
-
-    fireEvent.click(screen.getByTestId('delete-cancel'));
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('delete-confirm-dialog')).toBeNull();
-    });
-    expect(mockMemoryApi.deleteProject).not.toHaveBeenCalled();
-  });
-
-  it('should show delete confirmation for solutions', async () => {
-    await openMemoryTab();
-    fireEvent.click(screen.getByTestId('solution-delete-fix-cache'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('delete-confirm-dialog')).toBeTruthy();
-    });
-
-    fireEvent.click(screen.getByTestId('delete-confirm'));
-
-    await waitFor(() => {
-      expect(mockMemoryApi.deleteSolution).toHaveBeenCalledWith('fix-cache');
+      expect(screen.getByText(/5/)).toBeTruthy();
     });
   });
 });

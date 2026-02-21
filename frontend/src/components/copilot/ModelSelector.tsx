@@ -63,7 +63,7 @@ export function ModelSelector({ currentModel, onSelect }: ModelSelectorProps) {
     <div className="relative" ref={containerRef}>
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary bg-bg-tertiary rounded-lg hover:bg-bg-secondary transition-colors truncate max-w-52"
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary bg-bg-tertiary rounded-lg hover:bg-bg-secondary transition-colors truncate max-w-32 sm:max-w-52"
         title={currentModelName}
       >
         <span className="truncate">{currentModelName}</span>
@@ -78,7 +78,7 @@ export function ModelSelector({ currentModel, onSelect }: ModelSelectorProps) {
       {open && (
         <div
           data-testid="model-dropdown"
-          className="absolute bottom-full left-0 mb-1 min-w-64 max-w-80 max-h-60 overflow-y-auto bg-bg-elevated border border-border rounded-xl shadow-[var(--shadow-lg)] z-50"
+          className="absolute bottom-full left-0 mb-1 min-w-48 max-w-[min(20rem,calc(100vw-2rem))] max-h-60 overflow-y-auto bg-bg-elevated border border-border rounded-xl shadow-[var(--shadow-lg)] z-50"
         >
           <div className="px-3 py-2 text-xs font-semibold text-text-muted border-b border-border">
             {t('model.sourceTitle')}

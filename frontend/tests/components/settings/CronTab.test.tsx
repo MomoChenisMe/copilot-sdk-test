@@ -141,8 +141,8 @@ describe('CronTab', () => {
   it('should display type badge for each job', async () => {
     render(<CronTab />);
     await waitFor(() => {
-      expect(screen.getByTestId('job-type-job-1').textContent).toBe('AI Conversation');
-      expect(screen.getByTestId('job-type-job-2').textContent).toBe('Shell Command');
+      expect(screen.getByTestId('job-type-job-1').textContent).toBe('AI');
+      expect(screen.getByTestId('job-type-job-2').textContent).toBe('Shell');
     });
   });
 
@@ -180,7 +180,7 @@ describe('CronTab', () => {
     (cronApi.listJobs as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ jobs: [] });
     render(<CronTab />);
     await waitFor(() => {
-      expect(screen.getByText('No scheduled tasks')).toBeTruthy();
+      expect(screen.getByText(/No cron jobs configured/)).toBeTruthy();
     });
   });
 

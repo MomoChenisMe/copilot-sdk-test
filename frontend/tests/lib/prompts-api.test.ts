@@ -143,72 +143,7 @@ describe('memoryApi', () => {
     });
   });
 
-  describe('projects', () => {
-    it('listProjects calls GET /api/memory/projects', async () => {
-      const data = { items: [{ name: 'proj-1', content: 'Desc' }] };
-      mockFetch.mockResolvedValue(mockResponse(data));
-
-      const result = await memoryApi.listProjects();
-
-      expect(mockFetch).toHaveBeenCalledWith('/api/memory/projects', expect.objectContaining({
-        credentials: 'same-origin',
-      }));
-      expect(result).toEqual(data);
-    });
-
-    it('putProject calls PUT /api/memory/projects/:name', async () => {
-      mockFetch.mockResolvedValue(mockResponse({ ok: true }));
-
-      await memoryApi.putProject('my-project', 'Project notes');
-
-      expect(mockFetch).toHaveBeenCalledWith('/api/memory/projects/my-project', expect.objectContaining({
-        method: 'PUT',
-        body: JSON.stringify({ content: 'Project notes' }),
-      }));
-    });
-
-    it('deleteProject calls DELETE /api/memory/projects/:name', async () => {
-      mockFetch.mockResolvedValue(mockResponse({ ok: true }));
-
-      await memoryApi.deleteProject('old-proj');
-
-      expect(mockFetch).toHaveBeenCalledWith('/api/memory/projects/old-proj', expect.objectContaining({
-        method: 'DELETE',
-      }));
-    });
-  });
-
-  describe('solutions', () => {
-    it('listSolutions calls GET /api/memory/solutions', async () => {
-      const data = { items: [{ name: 'fix-1', content: 'Steps' }] };
-      mockFetch.mockResolvedValue(mockResponse(data));
-
-      const result = await memoryApi.listSolutions();
-
-      expect(result).toEqual(data);
-    });
-
-    it('putSolution calls PUT /api/memory/solutions/:name', async () => {
-      mockFetch.mockResolvedValue(mockResponse({ ok: true }));
-
-      await memoryApi.putSolution('cache-fix', 'Solution steps');
-
-      expect(mockFetch).toHaveBeenCalledWith('/api/memory/solutions/cache-fix', expect.objectContaining({
-        method: 'PUT',
-        body: JSON.stringify({ content: 'Solution steps' }),
-      }));
-    });
-
-    it('deleteSolution calls DELETE /api/memory/solutions/:name', async () => {
-      mockFetch.mockResolvedValue(mockResponse({ ok: true }));
-
-      await memoryApi.deleteSolution('old-fix');
-
-      expect(mockFetch).toHaveBeenCalledWith('/api/memory/solutions/old-fix', expect.objectContaining({
-        method: 'DELETE',
-      }));
-    });
-  });
+  // Projects and solutions APIs have been removed (Task 6/7 — memory simplification)
 });
 
 describe('skillsApi', () => {

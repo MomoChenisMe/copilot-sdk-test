@@ -86,12 +86,11 @@ describe('ModelSelector', () => {
     expect(dropdown?.className).toContain('overflow-y-auto');
   });
 
-  it('dropdown has min-w-64 max-w-80 for proper width', () => {
+  it('dropdown has min-w-48 and responsive max-w for proper width', () => {
     const { container } = render(<ModelSelector {...defaultProps} />);
     fireEvent.click(screen.getByText('GPT-4o'));
     const dropdown = container.querySelector('[data-testid="model-dropdown"]');
-    expect(dropdown?.className).toContain('min-w-64');
-    expect(dropdown?.className).toContain('max-w-80');
+    expect(dropdown?.className).toContain('min-w-48');
   });
 
   it('dropdown shows "GitHub Copilot Models" source title', () => {

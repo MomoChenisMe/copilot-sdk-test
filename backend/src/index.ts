@@ -42,6 +42,9 @@ import { createSelfControlTools } from './copilot/self-control-tools.js';
 import { TaskRepository } from './task/repository.js';
 import { createTaskTools } from './copilot/tools/task-tools.js';
 import { createConfigRoutes, readBraveApiKey } from './config-routes.js';
+import { SettingsStore } from './settings/settings-store.js';
+import { createSettingsRoutes } from './settings/routes.js';
+import { createCronTools } from './copilot/tools/cron-tools.js';
 import { createDirectoryRoutes } from './directory/routes.js';
 import { createGithubRoutes } from './github/routes.js';
 import { createWebSearchTool } from './copilot/tools/web-search.js';
@@ -65,6 +68,50 @@ import { createCronHandler } from './ws/handlers/cron.js';
 
 const log = createLogger('main');
 
+/** One-time migration: merge AGENT.md and memory/preferences.md content into PROFILE.md, then rename originals to .bak */
+export function migratePromptsToProfile(promptsPath: string, store: PromptFileStore): void {
+  const agentPath = path.join(promptsPath, 'AGENT.md');
+  const agentBakPath = path.join(promptsPath, 'AGENT.md.bak');
+  const prefsPath = path.join(promptsPath, 'memory', 'preferences.md');
+  const prefsBakPath = path.join(promptsPath, 'memory', 'preferences.md.bak');
+
+  let profileAppended = '';
+
+  // Migrate AGENT.md
+  if (fs.existsSync(agentPath) && !fs.existsSync(agentBakPath)) {
+    try {
+      const agentContent = fs.readFileSync(agentPath, 'utf-8');
+      if (agentContent.trim()) {
+        profileAppended += '\n\n## Agent Rules\n\n' + agentContent.trim();
+        log.info('Migrating AGENT.md content into PROFILE.md');
+      }
+      fs.renameSync(agentPath, agentBakPath);
+    } catch (err) {
+      log.warn({ err }, 'Failed to migrate AGENT.md');
+    }
+  }
+
+  // Migrate memory/preferences.md
+  if (fs.existsSync(prefsPath) && !fs.existsSync(prefsBakPath)) {
+    try {
+      const prefsContent = fs.readFileSync(prefsPath, 'utf-8');
+      if (prefsContent.trim()) {
+        profileAppended += '\n\n## Preferences\n\n' + prefsContent.trim();
+        log.info('Migrating memory/preferences.md content into PROFILE.md');
+      }
+      fs.renameSync(prefsPath, prefsBakPath);
+    } catch (err) {
+      log.warn({ err }, 'Failed to migrate memory/preferences.md');
+    }
+  }
+
+  // Append to PROFILE.md
+  if (profileAppended) {
+    const existing = store.readFile('PROFILE.md');
+    store.writeFile('PROFILE.md', existing + profileAppended);
+  }
+}
+
 export function createApp() {
   const config = loadConfig();
 
@@ -80,6 +127,9 @@ export function createApp() {
   // Prompts file store
   const promptStore = new PromptFileStore(config.promptsPath);
   promptStore.ensureDirectories();
+
+  // One-time migration: merge AGENT.md and memory/preferences.md into PROFILE.md
+  migratePromptsToProfile(config.promptsPath, promptStore);
 
   // Auto Memory system
   const memoryBasePath = path.resolve(config.promptsPath, 'auto-memory');
@@ -280,6 +330,12 @@ export function createApp() {
     executeShellTask: createShellTaskExecutor(),
   }, cronHandler.broadcast.bind(cronHandler));
   cronScheduler.loadAll();
+
+  // Add cron management tools to self-control tools (allows AI to manage cron jobs via chat)
+  const cronTools = createCronTools(cronStore, cronScheduler);
+  selfControlTools.push(...cronTools);
+  streamManager.updateSelfControlTools([...selfControlTools]);
+
   app.use('/api/cron', authMiddleware, createCronRoutes(cronStore, cronScheduler, repo));
 
   // Config routes (Brave API key etc.) — mounted after streamManager so callback can update tools
@@ -299,6 +355,10 @@ export function createApp() {
       streamManager.updateSelfControlTools([...selfControlTools]);
     },
   }));
+
+  // Settings API (persisted frontend settings)
+  const settingsStore = new SettingsStore(promptStore);
+  app.use('/api/settings', authMiddleware, createSettingsRoutes(settingsStore));
 
   // Register WS handlers
   const copilotHandler = createCopilotHandler(streamManager, repo);

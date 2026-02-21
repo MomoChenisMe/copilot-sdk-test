@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "highlight.js/styles/github-dark.css";
 @plugin "@tailwindcss/typography";
 
 /* ============================================
@@ -49,8 +48,8 @@
   --color-user-msg-border: #C7D2FE;
 
   /* Code */
-  --color-code-bg: #1E293B;
-  --color-code-header-bg: #0F172A;
+  --color-code-bg: #F1F5F9;
+  --color-code-header-bg: #E2E8F0;
 
   /* Tool card */
   --color-tool-card-bg: #F8FAFC;
@@ -113,6 +112,67 @@ html[data-theme="dark"] {
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
   --shadow-input: 0 1px 3px 0 rgba(0, 0, 0, 0.2), 0 1px 2px -1px rgba(0, 0, 0, 0.2);
 }
+
+/* ============================================
+   Syntax Highlighting (highlight.js)
+   Light theme: GitHub Light   Dark theme: GitHub Dark
+   ============================================ */
+
+/* Light theme syntax tokens (default) */
+.hljs {
+  color: #24292e;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-type { color: #d73a49; }
+.hljs-string,
+.hljs-addition { color: #032f62; }
+.hljs-comment,
+.hljs-quote,
+.hljs-meta { color: #6a737d; }
+.hljs-number,
+.hljs-literal,
+.hljs-regexp { color: #005cc5; }
+.hljs-attr,
+.hljs-variable,
+.hljs-template-variable { color: #e36209; }
+.hljs-title,
+.hljs-function,
+.hljs-section { color: #6f42c1; }
+.hljs-built_in,
+.hljs-name { color: #005cc5; }
+.hljs-symbol,
+.hljs-bullet { color: #e36209; }
+.hljs-deletion { color: #b31d28; background-color: #ffeef0; }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: bold; }
+
+/* Dark theme syntax tokens */
+html[data-theme="dark"] .hljs {
+  color: #c9d1d9;
+}
+html[data-theme="dark"] .hljs-keyword,
+html[data-theme="dark"] .hljs-selector-tag,
+html[data-theme="dark"] .hljs-type { color: #ff7b72; }
+html[data-theme="dark"] .hljs-string,
+html[data-theme="dark"] .hljs-addition { color: #a5d6ff; }
+html[data-theme="dark"] .hljs-comment,
+html[data-theme="dark"] .hljs-quote,
+html[data-theme="dark"] .hljs-meta { color: #8b949e; }
+html[data-theme="dark"] .hljs-number,
+html[data-theme="dark"] .hljs-literal,
+html[data-theme="dark"] .hljs-regexp { color: #79c0ff; }
+html[data-theme="dark"] .hljs-attr,
+html[data-theme="dark"] .hljs-variable,
+html[data-theme="dark"] .hljs-template-variable { color: #ffa657; }
+html[data-theme="dark"] .hljs-title,
+html[data-theme="dark"] .hljs-function,
+html[data-theme="dark"] .hljs-section { color: #d2a8ff; }
+html[data-theme="dark"] .hljs-built_in,
+html[data-theme="dark"] .hljs-name { color: #79c0ff; }
+html[data-theme="dark"] .hljs-symbol,
+html[data-theme="dark"] .hljs-bullet { color: #ffa657; }
+html[data-theme="dark"] .hljs-deletion { color: #ffdcd7; background-color: rgba(248, 81, 73, 0.15); }
 
 /* ============================================
    Animations

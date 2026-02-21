@@ -111,7 +111,9 @@ export function ConversationPopover({
       return;
     }
     const rect = anchorRef.current.getBoundingClientRect();
-    setPosition({ top: rect.bottom + 4, left: rect.left });
+    const popoverWidth = 288; // w-72 = 18rem = 288px
+    const maxLeft = window.innerWidth - popoverWidth - 16;
+    setPosition({ top: rect.bottom + 4, left: Math.min(rect.left, Math.max(0, maxLeft)) });
   }, [open, anchorRef]);
 
   if (!open) return null;
@@ -212,7 +214,7 @@ export function ConversationPopover({
       <div
         data-testid="conversation-popover"
         style={popoverStyle}
-        className="w-72 bg-bg-primary border border-border-subtle rounded-lg shadow-lg z-50 flex flex-col max-h-80"
+        className="w-72 max-w-[calc(100vw-2rem)] bg-bg-primary border border-border-subtle rounded-lg shadow-lg z-50 flex flex-col max-h-80"
         onKeyDown={handleKeyDown}
       >
         {/* Search input */}

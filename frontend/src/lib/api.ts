@@ -95,6 +95,7 @@ export interface MessageMetadata {
   turnSegments?: TurnSegment[];
   attachments?: AttachmentMeta[];
   usage?: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number };
+  contextFiles?: string[];
 }
 
 // --- Conversation API ---
@@ -218,17 +219,25 @@ export interface DirectoryEntry {
   path: string;
 }
 
+export interface FileEntry {
+  name: string;
+  path: string;
+  size: number;
+}
+
 export interface DirectoryListResult {
   currentPath: string;
   parentPath: string;
   directories: DirectoryEntry[];
+  files?: FileEntry[];
 }
 
 export const directoryApi = {
-  list: (dirPath?: string, showHidden?: boolean) => {
+  list: (dirPath?: string, showHidden?: boolean, includeFiles?: boolean) => {
     const params = new URLSearchParams();
     if (dirPath) params.set('path', dirPath);
     if (showHidden) params.set('showHidden', 'true');
+    if (includeFiles) params.set('includeFiles', 'true');
     const qs = params.toString();
     return apiGet<DirectoryListResult>(`/api/directories${qs ? `?${qs}` : ''}`);
   },

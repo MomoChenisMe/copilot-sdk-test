@@ -27,7 +27,7 @@ const INLINE_RESULT_TOOLS = ['bash', 'shell', 'execute', 'run'];
 interface ChatViewProps {
   tabId?: string | null;
   onNewConversation: () => void;
-  onSend: (text: string, files?: import('../shared/AttachmentPreview').AttachedFile[]) => void;
+  onSend: (text: string, files?: import('../shared/AttachmentPreview').AttachedFile[], contextFiles?: string[]) => void;
   onAbort: () => void;
   onBashSend?: (command: string) => void;
   isStreaming: boolean;
@@ -257,7 +257,19 @@ export function ChatView({
   const conversations = useAppStore((s) => s.conversations);
   const recentConversations = useMemo(() => conversations.slice(0, 10), [conversations]);
 
-  const showStreamingBlock = isStreaming || streamingText || toolRecords.length > 0 || turnSegments.length > 0 || copilotError;
+  const showStreamingBlock = isStreaming || streamingText || (toolRecords ?? []).length > 0 || (turnSegments ?? []).length > 0 || copilotError;
+
+  // Input history: extract previous user inputs (most recent first), filtered by mode
+  const inputHistory = useMemo(() => {
+    return messages
+      .filter((m) => {
+        if (m.role !== 'user') return false;
+        const isBash = (m.metadata as Record<string, unknown> | null)?.bash === true;
+        return isTerminalMode ? isBash : !isBash;
+      })
+      .map((m) => m.content)
+      .reverse();
+  }, [messages, isTerminalMode]);
 
   // Model-based attachment gating
   const canAttach = !isTerminalMode && modelSupportsAttachments(currentModel);
@@ -360,8 +372,11 @@ export function ChatView({
               onSlashCommand={isTerminalMode ? undefined : handleSlashCommand}
               enableAttachments={canAttach}
               attachmentsDisabledReason={attachmentsDisabledReason}
+              enableAtFiles={!isTerminalMode}
+              currentCwd={currentCwd}
               placeholder={isTerminalMode ? t('terminal.placeholder', '$ enter command...') : undefined}
               statusText={premiumQuota ? (premiumQuota.unlimited ? `${premiumQuota.used} PR` : `${premiumQuota.used}/${premiumQuota.total} PR`) : undefined}
+              inputHistory={inputHistory}
             />
           </div>
         </div>
@@ -453,13 +468,13 @@ export function ChatView({
                       {/* Fallback: old rendering order */}
                       <ReasoningBlock text={reasoningText} isStreaming={isStreaming} />
 
-                      {toolRecords.map((record) => (
+                      {(toolRecords ?? []).map((record) => (
                         <ToolRecordErrorBoundary key={record.toolCallId}>
                           <ToolRecord record={record} />
                         </ToolRecordErrorBoundary>
                       ))}
 
-                      {isStreaming && !streamingText && !reasoningText && toolRecords.length === 0 && (
+                      {isStreaming && !streamingText && !reasoningText && (toolRecords ?? []).length === 0 && (
                         <ThinkingIndicator />
                       )}
                       {streamingText && (
@@ -577,8 +592,11 @@ export function ChatView({
                 onSlashCommand={isTerminalMode ? undefined : handleSlashCommand}
                 enableAttachments={canAttach}
                 attachmentsDisabledReason={attachmentsDisabledReason}
+                enableAtFiles={!isTerminalMode}
+                currentCwd={currentCwd}
                 placeholder={isTerminalMode ? t('terminal.placeholder', '$ enter command...') : undefined}
                 statusText={premiumQuota ? (premiumQuota.unlimited ? `${premiumQuota.used} PR` : `${premiumQuota.used}/${premiumQuota.total} PR`) : undefined}
+                inputHistory={inputHistory}
               />
             </>
           )}

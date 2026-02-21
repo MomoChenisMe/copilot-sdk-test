@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, statSync } from 'node:fs';
 import type { StreamManager } from '../../copilot/stream-manager.js';
 import type { ConversationRepository } from '../../conversation/repository.js';
 import type { WsMessage, WsHandlerObject, SendFn } from '../types.js';
@@ -56,13 +56,18 @@ export function createCopilotHandler(
             return;
           }
 
-          // Save user message (with attachment metadata if files present)
+          // Save user message (with attachment and contextFiles metadata)
           const files = (payload.files as Array<{ id: string; originalName: string; mimeType: string; size: number; path: string }>) ?? undefined;
-          const userMsg: { role: string; content: string; metadata?: unknown } = { role: 'user', content: prompt };
-          if (files && files.length > 0) {
-            userMsg.metadata = {
-              attachments: files.map((f) => ({ id: f.id, originalName: f.originalName, mimeType: f.mimeType, size: f.size })),
-            };
+          const contextFiles = (payload.contextFiles as string[]) ?? [];
+          const userMsg: { role: string; content: string; metadata?: Record<string, unknown> } = { role: 'user', content: prompt };
+          if ((files && files.length > 0) || contextFiles.length > 0) {
+            userMsg.metadata = {};
+            if (files && files.length > 0) {
+              userMsg.metadata.attachments = files.map((f) => ({ id: f.id, originalName: f.originalName, mimeType: f.mimeType, size: f.size }));
+            }
+            if (contextFiles.length > 0) {
+              userMsg.metadata.contextFiles = contextFiles;
+            }
           }
           repo.addMessage(conversationId, userMsg);
           _lastConversationId = conversationId;
@@ -73,6 +78,29 @@ export function createCopilotHandler(
           if (bashContexts?.length) {
             finalPrompt = bashContexts.map(ctx => `[Bash executed by user]\n${ctx}`).join('\n\n') + '\n\n' + prompt;
             pendingBashContext.delete(conversationId);
+          }
+
+          // Read contextFiles and prepend to prompt
+          if (contextFiles.length > 0) {
+            const MAX_CONTEXT_FILE_SIZE = 500 * 1024; // 500KB
+            const contextParts: string[] = [];
+            for (const fp of contextFiles) {
+              try {
+                if (!existsSync(fp)) continue;
+                const stat = statSync(fp);
+                if (!stat.isFile()) continue;
+                if (stat.size > MAX_CONTEXT_FILE_SIZE) {
+                  contextParts.push(`[File: ${fp}] (File too large)`);
+                  continue;
+                }
+                contextParts.push(`[File: ${fp}]\n${readFileSync(fp, 'utf-8')}`);
+              } catch {
+                // skip unreadable files
+              }
+            }
+            if (contextParts.length > 0) {
+              finalPrompt = contextParts.join('\n\n') + '\n\n' + finalPrompt;
+            }
           }
 
           // Delegate to StreamManager

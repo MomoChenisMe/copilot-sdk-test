@@ -219,7 +219,7 @@ export function DirectoryPicker({ currentPath, onSelect, onClose, onFallback }: 
   const isAtRoot = browsePath === '/' || browsePath === parentPath;
 
   return (
-    <div className="absolute bottom-full left-0 mb-2 w-80 max-h-96 bg-bg-elevated border border-border rounded-xl shadow-[var(--shadow-lg)] flex flex-col overflow-hidden z-50">
+    <div className="absolute bottom-full left-0 mb-2 w-80 max-w-[calc(100vw-2rem)] max-h-96 bg-bg-elevated border border-border rounded-xl shadow-[var(--shadow-lg)] flex flex-col overflow-hidden z-50">
       {/* Tab switcher */}
       <div className="flex border-b border-border">
         <button

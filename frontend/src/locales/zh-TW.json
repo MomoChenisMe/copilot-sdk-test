@@ -130,7 +130,7 @@
       "general": "一般",
       "systemPrompt": "系統提示詞",
       "profile": "個人檔案",
-      "agent": "Agent 規則",
+      "openspec": "OpenSpec",
       "memory": "記憶",
       "skills": "技能",
       "apiKeys": "API 金鑰",
@@ -142,10 +142,10 @@
       "language": "語言",
       "logout": "登出"
     },
-    "agent": {
-      "openspecSdd": "OpenSpec SDD 工作流程",
-      "openspecSddDesc": "將 OpenSpec 規格驅動開發工作流程規則注入每次 AI 對話中。",
-      "openspecSddEnabled": "啟用 OpenSpec SDD"
+    "openspec": {
+      "title": "OpenSpec SDD 工作流程",
+      "desc": "將 OpenSpec 規格驅動開發工作流程規則注入每次 AI 對話中。",
+      "enabled": "啟用 OpenSpec SDD"
     },
     "toast": {
       "saved": "已儲存",

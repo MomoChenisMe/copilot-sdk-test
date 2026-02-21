@@ -13,6 +13,7 @@ import { useCronNotifications } from '../../hooks/useCronNotifications';
 import { useQuota } from '../../hooks/useQuota';
 import { conversationApi, configApi } from '../../lib/api';
 import { skillsApi } from '../../lib/prompts-api';
+import { settingsApi } from '../../lib/settings-api';
 import { sumUsageFromMessages } from '../../lib/usage-utils';
 import { uploadFiles } from '../../lib/upload-api';
 import type { AttachedFile } from '../shared/AttachmentPreview';
@@ -119,6 +120,48 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       // Fallback: keep '~'
     });
   }, []);
+
+  // Load persisted settings from backend on mount (overrides localStorage if present)
+  useEffect(() => {
+    settingsApi.get().then((settings) => {
+      const state = useAppStore.getState();
+      const hasBackendData = settings.theme || settings.language || settings.lastSelectedModel || settings.disabledSkills;
+
+      if (hasBackendData) {
+        // Apply backend settings to store
+        if (settings.theme && settings.theme !== state.theme) {
+          useAppStore.setState({ theme: settings.theme as 'light' | 'dark' });
+          document.documentElement.dataset.theme = settings.theme;
+          try { localStorage.setItem('theme', settings.theme); } catch { /* noop */ }
+        }
+        if (settings.language && settings.language !== state.language) {
+          useAppStore.setState({ language: settings.language });
+          i18n.changeLanguage(settings.language);
+          try { localStorage.setItem('i18nextLng', settings.language); } catch { /* noop */ }
+        }
+        if (settings.lastSelectedModel) {
+          useAppStore.setState({ lastSelectedModel: settings.lastSelectedModel });
+          try { localStorage.setItem('codeforge:lastSelectedModel', settings.lastSelectedModel); } catch { /* noop */ }
+        }
+        if (settings.disabledSkills) {
+          useAppStore.setState({ disabledSkills: settings.disabledSkills });
+          try { localStorage.setItem('codeforge:disabledSkills', JSON.stringify(settings.disabledSkills)); } catch { /* noop */ }
+        }
+      } else {
+        // One-time migration: push localStorage settings to backend
+        const migrationData: Record<string, unknown> = {};
+        if (state.theme) migrationData.theme = state.theme;
+        if (state.language) migrationData.language = state.language;
+        if (state.lastSelectedModel) migrationData.lastSelectedModel = state.lastSelectedModel;
+        if (state.disabledSkills.length > 0) migrationData.disabledSkills = state.disabledSkills;
+        if (Object.keys(migrationData).length > 0) {
+          settingsApi.patch(migrationData).catch(() => {});
+        }
+      }
+    }).catch(() => {
+      // Backend unreachable — fallback to localStorage (already initialized)
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Initialize language from i18n on mount
   const { i18n } = useTranslation();
@@ -317,7 +360,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   );
 
   const handleSend = useCallback(
-    async (text: string, attachments?: AttachedFile[]) => {
+    async (text: string, attachments?: AttachedFile[], contextFiles?: string[]) => {
       if (!activeTabId) return;
 
       // !command syntax: route to bash handler
@@ -363,7 +406,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         }
       }
 
-      sendMessage(activeTabId, text, fileRefs);
+      sendMessage(activeTabId, text, fileRefs, contextFiles);
     },
     [activeTabId, sendMessage, lastSelectedModel, models, createConversation, cwd, setActiveConversationId, sendBashCommand, conversations],
   );

@@ -51,7 +51,7 @@ export function CwdSelector({ currentCwd, onCwdChange, mode, onModeChange }: Cwd
         data-testid="cwd-selector"
         onClick={handleClick}
         title={currentCwd}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary bg-bg-tertiary rounded-lg hover:bg-bg-secondary transition-colors truncate max-w-56"
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary bg-bg-tertiary rounded-lg hover:bg-bg-secondary transition-colors truncate max-w-40 sm:max-w-56"
       >
         <FolderOpen size={12} className="shrink-0" />
         <span className="truncate">

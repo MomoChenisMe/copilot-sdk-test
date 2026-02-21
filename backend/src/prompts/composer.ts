@@ -23,15 +23,11 @@ export class PromptComposer {
     const systemPrompt = this.store.readFile('SYSTEM_PROMPT.md');
     if (systemPrompt.trim()) sections.push(systemPrompt);
 
-    // 2. PROFILE.md
+    // 2. PROFILE.md (includes merged agent rules + preferences)
     const profile = this.store.readFile('PROFILE.md');
     if (profile.trim()) sections.push(profile);
 
-    // 3. AGENT.md
-    const agent = this.store.readFile('AGENT.md');
-    if (agent.trim()) sections.push(agent);
-
-    // 3.5 OPENSPEC_SDD.md (conditionally injected based on CONFIG.json toggle)
+    // 3. OPENSPEC_SDD.md (conditionally injected based on CONFIG.json toggle)
     try {
       const rawConfig = this.store.readFile('CONFIG.json');
       const config = rawConfig ? JSON.parse(rawConfig) : {};
@@ -43,17 +39,13 @@ export class PromptComposer {
       // CONFIG.json missing or malformed — skip silently
     }
 
-    // 4. memory/preferences.md
-    const preferences = this.store.readFile('memory/preferences.md');
-    if (preferences.trim()) sections.push(preferences);
-
-    // 5. MEMORY.md from auto-memory system
+    // 4. Auto-memory MEMORY.md
     if (this.memoryStore) {
       const memory = this.memoryStore.readMemory();
       if (memory.trim()) sections.push(memory);
     }
 
-    // 6. .codeforge.md from cwd (falls back to .ai-terminal.md)
+    // 5. .codeforge.md from cwd (falls back to .ai-terminal.md)
     if (cwd) {
       try {
         const codeforgePromptPath = path.join(cwd, '.codeforge.md');
@@ -71,7 +63,7 @@ export class PromptComposer {
       }
     }
 
-    // 7. Locale / language instruction
+    // 6. Locale / language instruction
     if (locale && locale !== 'en') {
       const LOCALE_NAMES: Record<string, string> = {
         'zh-TW': '繁體中文（台灣）',

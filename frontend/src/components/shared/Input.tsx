@@ -5,9 +5,16 @@ import { SlashCommandMenu } from './SlashCommandMenu';
 import type { SlashCommand } from './SlashCommandMenu';
 import { AttachmentPreview } from './AttachmentPreview';
 import type { AttachedFile } from './AttachmentPreview';
+import { AtFileMenu } from './AtFileMenu';
+import type { AtFileMenuHandle } from './AtFileMenu';
+
+export interface ContextFileRef {
+  path: string;
+  displayName: string;
+}
 
 interface InputProps {
-  onSend: (text: string, attachments?: AttachedFile[]) => void;
+  onSend: (text: string, attachments?: AttachedFile[], contextFiles?: string[]) => void;
   onAbort: () => void;
   isStreaming: boolean;
   disabled?: boolean;
@@ -17,23 +24,37 @@ interface InputProps {
   attachmentsDisabledReason?: string;
   placeholder?: string;
   statusText?: string;
+  enableAtFiles?: boolean;
+  currentCwd?: string;
+  /** History of previous user inputs (most recent first) for ArrowUp/Down navigation */
+  inputHistory?: string[];
 }
 
 export interface InputHandle {
   focus: () => void;
 }
 
-export const Input = forwardRef<InputHandle, InputProps>(function Input({ onSend, onAbort, isStreaming, disabled, slashCommands, onSlashCommand, enableAttachments, attachmentsDisabledReason, placeholder, statusText }, ref) {
+export const Input = forwardRef<InputHandle, InputProps>(function Input({ onSend, onAbort, isStreaming, disabled, slashCommands, onSlashCommand, enableAttachments, attachmentsDisabledReason, placeholder, statusText, enableAtFiles, currentCwd, inputHistory }, ref) {
   const { t } = useTranslation();
   const [text, setText] = useState('');
+  // Input history navigation state
+  const [historyIndex, setHistoryIndex] = useState(-1); // -1 = current draft
+  const draftTextRef = useRef(''); // saves draft when browsing history
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [slashStart, setSlashStart] = useState(-1); // character index where the active "/" was typed
   const [attachments, setAttachments] = useState<AttachedFile[]>([]);
+  // @ file reference state
+  const [showAtMenu, setShowAtMenu] = useState(false);
+  const [atFilter, setAtFilter] = useState('');
+  const [atSelectedIndex, setAtSelectedIndex] = useState(0);
+  const [atStart, setAtStart] = useState(-1);
+  const [contextFiles, setContextFiles] = useState<ContextFileRef[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const atMenuRef = useRef<AtFileMenuHandle>(null);
   const pendingCursorRef = useRef<number | null>(null);
 
   useImperativeHandle(ref, () => ({
@@ -158,6 +179,19 @@ export const Input = forwardRef<InputHandle, InputProps>(function Input({ onSend
     [],
   );
 
+  // Find the last @ trigger relative to cursor position (same pattern as slash)
+  const findLastAtTrigger = useCallback(
+    (value: string, cursorPos: number): { start: number; filter: string } | null => {
+      const textBeforeCursor = value.slice(0, cursorPos);
+      const match = textBeforeCursor.match(/(?:^|[\s\n])(@[^\s]*)$/);
+      if (!match) return null;
+      const atIdx = textBeforeCursor.length - match[1].length;
+      const filter = match[1].slice(1); // remove leading "@"
+      return { start: atIdx, filter };
+    },
+    [],
+  );
+
   // Detect slash command trigger
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -172,13 +206,35 @@ export const Input = forwardRef<InputHandle, InputProps>(function Input({ onSend
           setSlashFilter(result.filter);
           setShowSlashMenu(true);
           setSelectedIndex(0);
+          setShowAtMenu(false);
           return;
         }
       }
       setSlashStart(-1);
       setShowSlashMenu(false);
+
+      // @ file trigger detection
+      if (enableAtFiles) {
+        const atResult = findLastAtTrigger(value, cursorPos);
+        if (atResult) {
+          setAtStart(atResult.start);
+          setAtFilter(atResult.filter);
+          setShowAtMenu(true);
+          setAtSelectedIndex(0);
+          return;
+        }
+      }
+      setAtStart(-1);
+      setShowAtMenu(false);
+
+      // Sync contextFiles: remove references whose @displayName no longer appears in text
+      if (contextFiles.length > 0) {
+        setContextFiles((prev) =>
+          prev.filter((cf) => value.includes(`@${cf.displayName}`)),
+        );
+      }
     },
-    [slashCommands, findLastSlashCommand],
+    [slashCommands, findLastSlashCommand, enableAtFiles, findLastAtTrigger, contextFiles.length],
   );
 
   const getFilteredCommands = useCallback(() => {
@@ -213,18 +269,61 @@ export const Input = forwardRef<InputHandle, InputProps>(function Input({ onSend
     [onSlashCommand, slashStart, text],
   );
 
+  // When AtFileMenu navigates into a directory, update the input text
+  const handleAtNavigate = useCallback(
+    (relativePath: string) => {
+      const before = text.slice(0, atStart);
+      const afterAt = text.slice(atStart);
+      // Find the end of the current @ token (next whitespace or end of string)
+      const spaceMatch = afterAt.match(/^@\S*/);
+      const tokenLen = spaceMatch ? spaceMatch[0].length : 1;
+      const after = text.slice(atStart + tokenLen);
+      const replacement = relativePath ? `@${relativePath}/` : '@';
+      const newText = `${before}${replacement}${after}`;
+      const cursorPos = before.length + replacement.length;
+      pendingCursorRef.current = cursorPos;
+      setText(newText);
+      setAtFilter(relativePath ? `${relativePath}/` : '');
+      setAtSelectedIndex(0);
+    },
+    [atStart, text],
+  );
+
+  const handleAtFileSelect = useCallback(
+    (filePath: string, displayName: string) => {
+      setShowAtMenu(false);
+      const before = text.slice(0, atStart);
+      const afterAt = text.slice(atStart);
+      const spaceIdx = afterAt.indexOf(' ', 1);
+      const after = spaceIdx >= 0 ? afterAt.slice(spaceIdx) : '';
+      const replacement = `@${displayName} `;
+      const newText = `${before}${replacement}${after.trimStart()}`;
+      const cursorPos = before.length + replacement.length;
+      pendingCursorRef.current = cursorPos;
+      setContextFiles((prev) => [...prev, { path: filePath, displayName }]);
+      setText(newText);
+      setAtStart(-1);
+    },
+    [atStart, text],
+  );
+
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed || isStreaming) return;
+    const ctxFiles = contextFiles.length > 0 ? contextFiles.map((cf) => cf.path) : undefined;
     if (enableAttachments) {
-      onSend(trimmed, [...attachments]);
+      onSend(trimmed, [...attachments], ctxFiles);
       setAttachments([]);
     } else {
-      onSend(trimmed);
+      onSend(trimmed, undefined, ctxFiles);
     }
     setText('');
     setShowSlashMenu(false);
-  }, [text, isStreaming, onSend, enableAttachments, attachments]);
+    setShowAtMenu(false);
+    setContextFiles([]);
+    setHistoryIndex(-1);
+    draftTextRef.current = '';
+  }, [text, isStreaming, onSend, enableAttachments, attachments, contextFiles]);
 
   // Sync highlight overlay scroll with textarea
   const handleTextareaScroll = useCallback(() => {
@@ -233,28 +332,55 @@ export const Input = forwardRef<InputHandle, InputProps>(function Input({ onSend
     }
   }, []);
 
-  // Detect slash command prefixes for highlight (supports multiple commands)
-  // Finds all slash commands preceded by start-of-string or whitespace that have trailing content
-  const slashHighlightParts: Array<{ type: 'text' | 'cmd'; value: string }> | null = (() => {
-    if (!slashCommands || !text) return null;
-    const regex = /(^|[\s\n])(\/\S+)/g;
-    const parts: Array<{ type: 'text' | 'cmd'; value: string }> = [];
-    let lastIndex = 0;
-    let hasCmd = false;
-    let match: RegExpExecArray | null;
-    while ((match = regex.exec(text)) !== null) {
-      const cmdStart = match.index + match[1].length;
-      // Only highlight if this command has trailing content (space after it)
-      const cmdEnd = cmdStart + match[2].length;
-      if (cmdEnd >= text.length || text[cmdEnd] !== ' ') continue;
-      if (cmdStart > lastIndex) {
-        parts.push({ type: 'text', value: text.slice(lastIndex, cmdStart) });
+  // Detect slash command and @file prefixes for highlight overlay
+  const highlightParts: Array<{ type: 'text' | 'cmd' | 'atfile'; value: string }> | null = (() => {
+    if (!text) return null;
+
+    // Build a set of display names for quick lookup
+    const atDisplayNames = new Set(contextFiles.map((cf) => cf.displayName));
+
+    // Collect highlight ranges: { start, end, type }
+    const ranges: Array<{ start: number; end: number; type: 'cmd' | 'atfile' }> = [];
+
+    // Slash commands
+    if (slashCommands) {
+      const slashRegex = /(^|[\s\n])(\/\S+)/g;
+      let m: RegExpExecArray | null;
+      while ((m = slashRegex.exec(text)) !== null) {
+        const cmdStart = m.index + m[1].length;
+        const cmdEnd = cmdStart + m[2].length;
+        if (cmdEnd >= text.length || text[cmdEnd] !== ' ') continue;
+        ranges.push({ start: cmdStart, end: cmdEnd, type: 'cmd' });
       }
-      parts.push({ type: 'cmd', value: match[2] });
-      lastIndex = cmdEnd;
-      hasCmd = true;
     }
-    if (!hasCmd) return null;
+
+    // @file references
+    if (atDisplayNames.size > 0) {
+      const atRegex = /(^|[\s\n])(@\S+)/g;
+      let m: RegExpExecArray | null;
+      while ((m = atRegex.exec(text)) !== null) {
+        const atStart = m.index + m[1].length;
+        const refText = m[2].slice(1); // remove leading @
+        if (atDisplayNames.has(refText)) {
+          ranges.push({ start: atStart, end: atStart + m[2].length, type: 'atfile' });
+        }
+      }
+    }
+
+    if (ranges.length === 0) return null;
+
+    // Sort ranges by start position
+    ranges.sort((a, b) => a.start - b.start);
+
+    const parts: Array<{ type: 'text' | 'cmd' | 'atfile'; value: string }> = [];
+    let lastIndex = 0;
+    for (const range of ranges) {
+      if (range.start > lastIndex) {
+        parts.push({ type: 'text', value: text.slice(lastIndex, range.start) });
+      }
+      parts.push({ type: range.type, value: text.slice(range.start, range.end) });
+      lastIndex = range.end;
+    }
     if (lastIndex < text.length) {
       parts.push({ type: 'text', value: text.slice(lastIndex) });
     }
@@ -291,6 +417,78 @@ export const Input = forwardRef<InputHandle, InputProps>(function Input({ onSend
       }
     }
 
+    if (showAtMenu) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowAtMenu(false);
+        return;
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setAtSelectedIndex((prev) => prev + 1);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setAtSelectedIndex((prev) => Math.max(prev - 1, 0));
+        return;
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        atMenuRef.current?.navigateInto(atSelectedIndex);
+        setAtSelectedIndex(0);
+        return;
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        atMenuRef.current?.navigateUp();
+        setAtSelectedIndex(0);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        atMenuRef.current?.activateSelected(atSelectedIndex);
+        return;
+      }
+    }
+
+    // Input history navigation (ArrowUp/Down when cursor is at first/last line)
+    if (inputHistory && inputHistory.length > 0 && !showSlashMenu && !showAtMenu) {
+      const ta = textareaRef.current;
+      if (e.key === 'ArrowUp' && ta) {
+        // Only navigate history when cursor is on the first line
+        const cursorPos = ta.selectionStart;
+        const textBeforeCursor = text.slice(0, cursorPos);
+        if (!textBeforeCursor.includes('\n')) {
+          e.preventDefault();
+          if (historyIndex === -1) {
+            draftTextRef.current = text; // save current draft
+          }
+          const nextIndex = Math.min(historyIndex + 1, inputHistory.length - 1);
+          setHistoryIndex(nextIndex);
+          setText(inputHistory[nextIndex]);
+          return;
+        }
+      }
+      if (e.key === 'ArrowDown' && ta) {
+        // Only navigate history when cursor is on the last line
+        const cursorPos = ta.selectionStart;
+        const textAfterCursor = text.slice(cursorPos);
+        if (!textAfterCursor.includes('\n') && historyIndex >= 0) {
+          e.preventDefault();
+          const nextIndex = historyIndex - 1;
+          if (nextIndex < 0) {
+            setHistoryIndex(-1);
+            setText(draftTextRef.current);
+          } else {
+            setHistoryIndex(nextIndex);
+            setText(inputHistory[nextIndex]);
+          }
+          return;
+        }
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -312,6 +510,17 @@ export const Input = forwardRef<InputHandle, InputProps>(function Input({ onSend
           onClose={() => setShowSlashMenu(false)}
         />
       )}
+      {showAtMenu && enableAtFiles && currentCwd && (
+        <AtFileMenu
+          ref={atMenuRef}
+          cwd={currentCwd}
+          filter={atFilter}
+          selectedIndex={atSelectedIndex}
+          onSelectFile={handleAtFileSelect}
+          onNavigate={handleAtNavigate}
+          onClose={() => setShowAtMenu(false)}
+        />
+      )}
       {enableAttachments && attachments.length > 0 && (
         <div className="px-3 pt-2">
           <AttachmentPreview files={attachments} onRemove={removeAttachment} />
@@ -319,7 +528,7 @@ export const Input = forwardRef<InputHandle, InputProps>(function Input({ onSend
       )}
       <div className="relative">
         {/* Highlight overlay for slash command coloring */}
-        {slashHighlightParts && (
+        {highlightParts && (
           <div
             ref={highlightRef}
             data-testid="input-highlight-overlay"
@@ -327,9 +536,11 @@ export const Input = forwardRef<InputHandle, InputProps>(function Input({ onSend
             style={{ maxHeight: '200px' }}
             aria-hidden="true"
           >
-            {slashHighlightParts.map((part, i) =>
+            {highlightParts.map((part, i) =>
               part.type === 'cmd' ? (
                 <span key={i} className="text-accent">{part.value}</span>
+              ) : part.type === 'atfile' ? (
+                <span key={i} className="bg-accent/15 text-accent rounded px-0.5">{part.value}</span>
               ) : (
                 <span key={i} className="text-text-primary">{part.value}</span>
               ),
@@ -347,9 +558,9 @@ export const Input = forwardRef<InputHandle, InputProps>(function Input({ onSend
           disabled={disabled}
           rows={1}
           className={`w-full resize-none bg-transparent px-4 pt-3 pb-10 text-sm placeholder:text-text-muted focus:outline-none overflow-y-auto ${
-            slashHighlightParts ? 'text-transparent selection:bg-accent/20' : 'text-text-primary'
+            highlightParts ? 'text-transparent selection:bg-accent/20' : 'text-text-primary'
           }`}
-          style={{ maxHeight: '200px', caretColor: slashHighlightParts ? 'var(--color-text-primary)' : undefined }}
+          style={{ maxHeight: '200px', caretColor: highlightParts ? 'var(--color-text-primary)' : undefined }}
         />
       </div>
       <div className="absolute bottom-2 right-2 flex items-center gap-1">

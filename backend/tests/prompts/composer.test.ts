@@ -22,9 +22,10 @@ describe('PromptComposer', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('should compose in order: SYSTEM_PROMPT → PROFILE → AGENT → preferences', () => {
+  it('should compose in order: SYSTEM_PROMPT → PROFILE (no AGENT or preferences)', () => {
     fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), 'System prompt content');
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile content');
+    // AGENT.md and memory/preferences.md should be ignored
     fs.writeFileSync(path.join(tmpDir, 'AGENT.md'), 'Agent content');
     fs.writeFileSync(path.join(tmpDir, 'memory', 'preferences.md'), 'Preferences content');
 
@@ -32,8 +33,9 @@ describe('PromptComposer', () => {
     const sections = result.split('\n\n---\n\n');
     expect(sections[0]).toBe('System prompt content');
     expect(sections[1]).toBe('Profile content');
-    expect(sections[2]).toBe('Agent content');
-    expect(sections[3]).toBe('Preferences content');
+    // Should NOT include AGENT or preferences as separate sections
+    expect(result).not.toContain('Agent content');
+    expect(result).not.toContain('Preferences content');
   });
 
   it('should skip SYSTEM_PROMPT when empty', () => {
@@ -48,7 +50,6 @@ describe('PromptComposer', () => {
     // Clear SYSTEM_PROMPT so we only test non-system sections
     fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile only');
-    // AGENT.md is empty (created by ensureDirectories)
 
     const result = composer.compose();
     expect(result).toBe('Profile only');
@@ -64,10 +65,9 @@ describe('PromptComposer', () => {
   it('should skip whitespace-only sections', () => {
     fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), '   \n  ');
-    fs.writeFileSync(path.join(tmpDir, 'AGENT.md'), 'Agent rules');
 
     const result = composer.compose();
-    expect(result).toBe('Agent rules');
+    expect(result).toBe('');
   });
 
   it('should truncate when exceeding maxPromptLength', () => {
@@ -139,7 +139,7 @@ describe('PromptComposer', () => {
   describe('OPENSPEC_SDD.md injection', () => {
     it('should inject OPENSPEC_SDD.md when toggle is enabled in CONFIG.json', () => {
       fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
-      fs.writeFileSync(path.join(tmpDir, 'AGENT.md'), 'Agent rules');
+      fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile rules');
       fs.writeFileSync(path.join(tmpDir, 'OPENSPEC_SDD.md'), 'OpenSpec content');
       fs.writeFileSync(path.join(tmpDir, 'CONFIG.json'), JSON.stringify({ openspecSddEnabled: true }));
 
@@ -147,20 +147,27 @@ describe('PromptComposer', () => {
       expect(result).toContain('OpenSpec content');
     });
 
-    it('should place OPENSPEC_SDD.md after AGENT.md and before preferences', () => {
+    it('should place OPENSPEC_SDD.md after PROFILE and before auto-memory', () => {
+      const memDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mem-'));
+      const memStore = new MemoryStore(memDir);
+      memStore.ensureDirectories();
+      memStore.writeMemory('Memory facts');
+
+      const composerWithMem = new PromptComposer(store, 50_000, memStore);
       fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
-      fs.writeFileSync(path.join(tmpDir, 'AGENT.md'), 'Agent rules');
+      fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile rules');
       fs.writeFileSync(path.join(tmpDir, 'OPENSPEC_SDD.md'), 'OpenSpec content');
-      fs.writeFileSync(path.join(tmpDir, 'memory', 'preferences.md'), 'Preferences');
       fs.writeFileSync(path.join(tmpDir, 'CONFIG.json'), JSON.stringify({ openspecSddEnabled: true }));
 
-      const result = composer.compose();
+      const result = composerWithMem.compose();
       const sections = result.split('\n\n---\n\n');
-      const agentIdx = sections.indexOf('Agent rules');
+      const profileIdx = sections.indexOf('Profile rules');
       const sddIdx = sections.indexOf('OpenSpec content');
-      const prefIdx = sections.indexOf('Preferences');
-      expect(agentIdx).toBeLessThan(sddIdx);
-      expect(sddIdx).toBeLessThan(prefIdx);
+      const memIdx = sections.indexOf('Memory facts');
+      expect(profileIdx).toBeLessThan(sddIdx);
+      expect(sddIdx).toBeLessThan(memIdx);
+
+      fs.rmSync(memDir, { recursive: true, force: true });
     });
 
     it('should NOT inject OPENSPEC_SDD.md when toggle is disabled', () => {
@@ -232,7 +239,7 @@ describe('PromptComposer', () => {
       fs.rmSync(memDir, { recursive: true, force: true });
     });
 
-    it('should place MEMORY.md after preferences section', () => {
+    it('should place MEMORY.md after PROFILE section', () => {
       const memDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mem-'));
       const memStore = new MemoryStore(memDir);
       memStore.ensureDirectories();
@@ -241,10 +248,9 @@ describe('PromptComposer', () => {
       const composerWithMem = new PromptComposer(store, 50_000, memStore);
       fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
       fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
-      fs.writeFileSync(path.join(tmpDir, 'memory', 'preferences.md'), 'Preferences');
 
       const result = composerWithMem.compose();
-      expect(result.indexOf('Preferences')).toBeLessThan(result.indexOf('Memory facts here'));
+      expect(result.indexOf('Profile')).toBeLessThan(result.indexOf('Memory facts here'));
 
       fs.rmSync(memDir, { recursive: true, force: true });
     });

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Conversation, Message, ToolRecord, TurnSegment } from '../lib/api';
 import type { SkillItem } from '../lib/prompts-api';
 import type { ParsedArtifact } from '../lib/artifact-parser';
+import { settingsApi } from '../lib/settings-api';
 
 export type { ToolRecord, TurnSegment };
 
@@ -311,6 +312,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const next = get().theme === 'light' ? 'dark' : 'light';
     try { localStorage.setItem('theme', next); } catch { /* noop */ }
     set({ theme: next });
+    settingsApi.patch({ theme: next }).catch(() => {});
   },
   getInitialTheme: () => readThemeFromStorage(),
 
@@ -319,6 +321,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setLanguage: (lang) => {
     try { localStorage.setItem('i18nextLng', lang); } catch { /* noop */ }
     set({ language: lang });
+    settingsApi.patch({ language: lang }).catch(() => {});
   },
 
   // Models state
@@ -414,7 +417,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   updateToolRecord: (toolCallId, updates) =>
     set((state) => ({
-      toolRecords: state.toolRecords.map((r) =>
+      toolRecords: (state.toolRecords ?? []).map((r) =>
         r.toolCallId === toolCallId ? { ...r, ...updates } : r,
       ),
     })),
@@ -472,6 +475,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       : [...current, name];
     try { localStorage.setItem('codeforge:disabledSkills', JSON.stringify(next)); } catch { /* noop */ }
     set({ disabledSkills: next });
+    settingsApi.patch({ disabledSkills: next }).catch(() => {});
   },
 
   batchSetSkillsDisabled: (names, disabled) => {
@@ -485,6 +489,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     try { localStorage.setItem('codeforge:disabledSkills', JSON.stringify(next)); } catch { /* noop */ }
     set({ disabledSkills: next });
+    settingsApi.patch({ disabledSkills: next }).catch(() => {});
   },
 
   setSettingsOpen: (open) => set({ settingsOpen: open }),
@@ -493,6 +498,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setLastSelectedModel: (modelId) => {
     try { localStorage.setItem('codeforge:lastSelectedModel', modelId); } catch { /* noop */ }
     set({ lastSelectedModel: modelId });
+    settingsApi.patch({ lastSelectedModel: modelId }).catch(() => {});
   },
 
   // Error actions
@@ -733,7 +739,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => {
       const tab = state.tabs[tabId];
       if (!tab) return state;
-      return { tabs: { ...state.tabs, [tabId]: { ...tab, toolRecords: [...tab.toolRecords, record] } } };
+      return { tabs: { ...state.tabs, [tabId]: { ...tab, toolRecords: [...(tab.toolRecords ?? []), record] } } };
     }),
 
   updateTabToolRecord: (tabId, toolCallId, updates) =>
@@ -745,7 +751,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           ...state.tabs,
           [tabId]: {
             ...tab,
-            toolRecords: tab.toolRecords.map((r) =>
+            toolRecords: (tab.toolRecords ?? []).map((r) =>
               r.toolCallId === toolCallId ? { ...r, ...updates } : r,
             ),
           },
@@ -1028,5 +1034,6 @@ function persistOpenTabs(tabs: Record<string, TabState>, tabOrder: string[]) {
       .filter((id) => tabs[id]?.conversationId !== null)
       .map((id) => ({ id: tabs[id].id, title: tabs[id].title, conversationId: tabs[id].conversationId }));
     localStorage.setItem('codeforge:openTabs', JSON.stringify(data));
+    settingsApi.patch({ openTabs: data }).catch(() => {});
   } catch { /* noop */ }
 }

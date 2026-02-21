@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Globe, LogOut, X, Upload, Link, Sparkles } from 'lucide-react';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
-import { promptsApi, memoryApi, skillsApi } from '../../lib/prompts-api';
-import type { MemoryItem, SkillItem } from '../../lib/prompts-api';
+import { promptsApi, skillsApi } from '../../lib/prompts-api';
+import type { SkillItem } from '../../lib/prompts-api';
 import { memoryApi as autoMemoryApi } from '../../lib/api';
 import type { MemoryConfig, MemoryStats } from '../../lib/api';
 import { useAppStore } from '../../store';
@@ -13,7 +13,7 @@ import { ApiKeysTab } from './ApiKeysTab';
 import { McpTab } from './McpTab';
 const INVALID_NAME_RE = /[.]{2}|[/\\]|\0/;
 
-type TabId = 'general' | 'system-prompt' | 'profile' | 'agent' | 'memory' | 'skills' | 'api-keys' | 'mcp';
+type TabId = 'general' | 'system-prompt' | 'profile' | 'openspec' | 'memory' | 'skills' | 'api-keys' | 'mcp';
 
 interface SettingsPanelProps {
   open: boolean;
@@ -27,7 +27,7 @@ const TABS: { id: TabId; labelKey: string }[] = [
   { id: 'general', labelKey: 'settings.tabs.general' },
   { id: 'system-prompt', labelKey: 'settings.tabs.systemPrompt' },
   { id: 'profile', labelKey: 'settings.tabs.profile' },
-  { id: 'agent', labelKey: 'settings.tabs.agent' },
+  { id: 'openspec', labelKey: 'settings.tabs.openspec' },
   { id: 'memory', labelKey: 'settings.tabs.memory' },
   { id: 'skills', labelKey: 'settings.tabs.skills' },
   { id: 'api-keys', labelKey: 'settings.tabs.apiKeys' },
@@ -119,7 +119,7 @@ export function SettingsPanel({ open, onClose, onLanguageToggle, language, onLog
             )}
             {activeTab === 'system-prompt' && <SystemPromptTab />}
             {activeTab === 'profile' && <ProfileTab />}
-            {activeTab === 'agent' && <AgentTab />}
+            {activeTab === 'openspec' && <OpenSpecTab />}
             {activeTab === 'memory' && <MemoryTab />}
             {activeTab === 'skills' && <SkillsTab onClose={onClose} />}
             {activeTab === 'api-keys' && <ApiKeysTab />}
@@ -353,25 +353,21 @@ function ProfileTab() {
   );
 }
 
-// === Agent Tab ===
-function AgentTab() {
+// === OpenSpec Tab ===
+function OpenSpecTab() {
   const { t } = useTranslation();
-  const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
 
-  // OpenSpec SDD state
   const [openspecEnabled, setOpenspecEnabled] = useState(false);
   const [openspecContent, setOpenspecContent] = useState('');
   const [openspecSkillNames, setOpenspecSkillNames] = useState<string[]>([]);
 
   useEffect(() => {
     Promise.all([
-      promptsApi.getAgent(),
       import('../../lib/api').then(({ configApi }) => configApi.getOpenspecSdd()),
       skillsApi.list(),
-    ]).then(([agentRes, openspecRes, skillsRes]) => {
-      setContent(agentRes.content);
+    ]).then(([openspecRes, skillsRes]) => {
       setOpenspecEnabled(openspecRes.enabled);
       if (openspecRes.enabled) {
         promptsApi.getOpenspecSdd().then((r) => setOpenspecContent(r.content)).catch(() => {});
@@ -382,17 +378,6 @@ function AgentTab() {
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
-
-  const handleSave = useCallback(async () => {
-    try {
-      await promptsApi.putAgent(content);
-      setToast(t('settings.toast.saved'));
-      setTimeout(() => setToast(null), 2000);
-    } catch {
-      setToast(t('settings.toast.saveFailed'));
-      setTimeout(() => setToast(null), 2000);
-    }
-  }, [content, t]);
 
   const handleToggleOpenspec = useCallback(async () => {
     const newEnabled = !openspecEnabled;
@@ -424,74 +409,49 @@ function AgentTab() {
   if (loading) return <div className="text-text-secondary text-sm">{t('settings.loading')}</div>;
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* AGENT.md section */}
-      <div className="flex flex-col gap-3">
-        <textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          className="w-full h-48 p-2 text-sm bg-bg-secondary border border-border rounded-lg resize-y font-mono text-text-primary"
-        />
+    <div className="flex flex-col gap-3">
+      <div>
+        <h3 className="text-xs font-semibold text-text-secondary uppercase mb-1">{t('settings.openspec.title', 'OpenSpec SDD')}</h3>
+        <p className="text-[11px] text-text-secondary/70 mb-2">{t('settings.openspec.desc', 'Enable spec-driven development workflow')}</p>
         <div className="flex items-center gap-2">
-          <button
-            data-testid="save-agent"
-            onClick={handleSave}
-            className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
-          >
-            {t('settings.save')}
-          </button>
-          {toast && <span className="text-xs text-text-secondary">{toast}</span>}
+          <ToggleSwitch
+            data-testid="openspec-sdd-toggle"
+            checked={openspecEnabled}
+            onChange={handleToggleOpenspec}
+          />
+          <span className="text-xs text-text-secondary">{t('settings.openspec.enabled', 'Enabled')}</span>
         </div>
       </div>
 
-      {/* OpenSpec SDD section */}
-      <div className="border-t border-border-subtle pt-4 flex flex-col gap-3">
-        <div>
-          <h3 className="text-xs font-semibold text-text-secondary uppercase mb-1">{t('settings.agent.openspecSdd')}</h3>
-          <p className="text-[11px] text-text-secondary/70 mb-2">{t('settings.agent.openspecSddDesc')}</p>
+      {openspecEnabled && (
+        <div className="flex flex-col gap-2">
+          <textarea
+            data-testid="openspec-sdd-textarea"
+            value={openspecContent}
+            onChange={(e) => setOpenspecContent(e.target.value)}
+            className="w-full h-48 p-2 text-sm bg-bg-secondary border border-border rounded-lg resize-y font-mono text-text-primary"
+          />
           <div className="flex items-center gap-2">
-            <ToggleSwitch
-              data-testid="openspec-sdd-toggle"
-              checked={openspecEnabled}
-              onChange={handleToggleOpenspec}
-            />
-            <span className="text-xs text-text-secondary">{t('settings.agent.openspecSddEnabled')}</span>
-          </div>
-        </div>
-
-        {openspecEnabled && (
-          <div className="flex flex-col gap-2">
-            <textarea
-              data-testid="openspec-sdd-textarea"
-              value={openspecContent}
-              onChange={(e) => setOpenspecContent(e.target.value)}
-              className="w-full h-48 p-2 text-sm bg-bg-secondary border border-border rounded-lg resize-y font-mono text-text-primary"
-            />
             <button
               data-testid="save-openspec-sdd"
               onClick={handleSaveOpenspec}
-              className="self-start px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
+              className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
             >
               {t('settings.save')}
             </button>
+            {toast && <span className="text-xs text-text-secondary">{toast}</span>}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// === Memory Tab ===
+// === Memory Tab (Auto Memory only) ===
 function MemoryTab() {
   const { t } = useTranslation();
-  const [prefsContent, setPrefsContent] = useState('');
-  const [projects, setProjects] = useState<MemoryItem[]>([]);
-  const [solutions, setSolutions] = useState<MemoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
-  const [expandedItem, setExpandedItem] = useState<string | null>(null);
-  const [editContent, setEditContent] = useState('');
-  const [confirmDelete, setConfirmDelete] = useState<{ type: string; name: string } | null>(null);
 
   // Auto-memory state
   const [autoMemContent, setAutoMemContent] = useState('');
@@ -500,16 +460,10 @@ function MemoryTab() {
 
   useEffect(() => {
     Promise.all([
-      memoryApi.getPreferences(),
-      memoryApi.listProjects(),
-      memoryApi.listSolutions(),
       autoMemoryApi.getMain(),
       autoMemoryApi.getConfig(),
       autoMemoryApi.getStats(),
-    ]).then(([prefs, projs, sols, mainMem, memCfg, memStats]) => {
-      setPrefsContent(prefs.content);
-      setProjects(projs.items);
-      setSolutions(sols.items);
+    ]).then(([mainMem, memCfg, memStats]) => {
       setAutoMemContent(mainMem.content);
       setAutoMemConfig(memCfg);
       setAutoMemStats(memStats);
@@ -574,7 +528,6 @@ function MemoryTab() {
       } else {
         setToast(result.message ?? 'Compaction skipped');
       }
-      // Refresh stats
       const stats = await autoMemoryApi.getStats();
       setAutoMemStats(stats);
       setTimeout(() => setToast(null), 3000);
@@ -584,164 +537,10 @@ function MemoryTab() {
     }
   }, [t]);
 
-  const handleSavePrefs = useCallback(async () => {
-    try {
-      await memoryApi.putPreferences(prefsContent);
-      setToast(t('settings.toast.saved'));
-      setTimeout(() => setToast(null), 2000);
-    } catch {
-      setToast(t('settings.toast.saveFailed'));
-      setTimeout(() => setToast(null), 2000);
-    }
-  }, [prefsContent, t]);
-
-  const handleDeleteConfirm = useCallback(async () => {
-    if (!confirmDelete) return;
-    try {
-      if (confirmDelete.type === 'project') {
-        await memoryApi.deleteProject(confirmDelete.name);
-        setProjects((prev) => prev.filter((p) => p.name !== confirmDelete.name));
-      } else {
-        await memoryApi.deleteSolution(confirmDelete.name);
-        setSolutions((prev) => prev.filter((s) => s.name !== confirmDelete.name));
-      }
-      setToast(t('settings.toast.deleted'));
-      setTimeout(() => setToast(null), 2000);
-    } catch {
-      setToast(t('settings.toast.deleteFailed'));
-      setTimeout(() => setToast(null), 2000);
-    }
-    setConfirmDelete(null);
-  }, [confirmDelete, t]);
-
-  const handleExpand = useCallback((key: string, content: string) => {
-    if (expandedItem === key) {
-      setExpandedItem(null);
-    } else {
-      setExpandedItem(key);
-      setEditContent(content);
-    }
-  }, [expandedItem]);
-
-  const handleSaveItem = useCallback(async (type: string, name: string) => {
-    try {
-      if (type === 'project') {
-        await memoryApi.putProject(name, editContent);
-        setProjects((prev) => prev.map((p) => (p.name === name ? { ...p, content: editContent } : p)));
-      } else {
-        await memoryApi.putSolution(name, editContent);
-        setSolutions((prev) => prev.map((s) => (s.name === name ? { ...s, content: editContent } : s)));
-      }
-      setToast(t('settings.toast.saved'));
-      setTimeout(() => setToast(null), 2000);
-    } catch {
-      setToast(t('settings.toast.saveFailed'));
-      setTimeout(() => setToast(null), 2000);
-    }
-  }, [editContent, t]);
-
   if (loading) return <div className="text-text-secondary text-sm">{t('settings.loading')}</div>;
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Preferences */}
-      <section>
-        <h3 className="text-xs font-semibold text-text-secondary uppercase mb-2">{t('settings.memory.preferences')}</h3>
-        <textarea
-          data-testid="memory-preferences"
-          value={prefsContent}
-          onChange={(e) => setPrefsContent(e.target.value)}
-          className="w-full h-32 p-2 text-sm bg-bg-secondary border border-border rounded-lg resize-y font-mono text-text-primary"
-        />
-        <button
-          data-testid="save-preferences"
-          onClick={handleSavePrefs}
-          className="mt-2 px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
-        >
-          {t('settings.save')}
-        </button>
-      </section>
-
-      {/* Projects */}
-      <section>
-        <h3 className="text-xs font-semibold text-text-secondary uppercase mb-2">{t('settings.memory.projects')}</h3>
-        {projects.map((item) => (
-          <div key={item.name} className="border border-border rounded-lg mb-2 overflow-hidden">
-            <div className="flex items-center gap-2 px-3 py-2">
-              <button
-                data-testid={`project-expand-${item.name}`}
-                onClick={() => handleExpand(`project:${item.name}`, item.content)}
-                className="flex-1 text-left text-sm text-text-primary hover:text-accent"
-              >
-                {item.name}
-              </button>
-              <button
-                data-testid={`project-delete-${item.name}`}
-                onClick={() => setConfirmDelete({ type: 'project', name: item.name })}
-                className="p-1 text-text-secondary hover:text-error"
-              >
-                <X size={14} />
-              </button>
-            </div>
-            {expandedItem === `project:${item.name}` && (
-              <div className="px-3 pb-3 flex flex-col gap-2 border-t border-border-subtle">
-                <textarea
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  className="w-full h-32 p-2 text-sm bg-bg-secondary border border-border rounded-lg resize-y font-mono text-text-primary mt-2"
-                />
-                <button
-                  onClick={() => handleSaveItem('project', item.name)}
-                  className="self-start px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
-                >
-                  {t('settings.save')}
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
-      </section>
-
-      {/* Solutions */}
-      <section>
-        <h3 className="text-xs font-semibold text-text-secondary uppercase mb-2">{t('settings.memory.solutions')}</h3>
-        {solutions.map((item) => (
-          <div key={item.name} className="border border-border rounded-lg mb-2 overflow-hidden">
-            <div className="flex items-center gap-2 px-3 py-2">
-              <button
-                data-testid={`solution-expand-${item.name}`}
-                onClick={() => handleExpand(`solution:${item.name}`, item.content)}
-                className="flex-1 text-left text-sm text-text-primary hover:text-accent"
-              >
-                {item.name}
-              </button>
-              <button
-                data-testid={`solution-delete-${item.name}`}
-                onClick={() => setConfirmDelete({ type: 'solution', name: item.name })}
-                className="p-1 text-text-secondary hover:text-error"
-              >
-                <X size={14} />
-              </button>
-            </div>
-            {expandedItem === `solution:${item.name}` && (
-              <div className="px-3 pb-3 flex flex-col gap-2 border-t border-border-subtle">
-                <textarea
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  className="w-full h-32 p-2 text-sm bg-bg-secondary border border-border rounded-lg resize-y font-mono text-text-primary mt-2"
-                />
-                <button
-                  onClick={() => handleSaveItem('solution', item.name)}
-                  className="self-start px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
-                >
-                  {t('settings.save')}
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
-      </section>
-
       {/* Auto Memory */}
       <section data-testid="auto-memory-section">
         <h3 className="text-xs font-semibold text-text-secondary uppercase mb-2">{t('settings.memory.autoMemory', 'Auto Memory')}</h3>
@@ -888,31 +687,6 @@ function MemoryTab() {
           </button>
         </div>
       </section>
-
-      {/* Delete Confirmation Dialog */}
-      {confirmDelete && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" data-testid="delete-confirm-dialog">
-          <div className="bg-bg-primary rounded-xl border border-border p-6 shadow-lg max-w-sm mx-4">
-            <p className="text-sm text-text-primary mb-4">{t('settings.deleteDialog.message')}</p>
-            <div className="flex gap-2 justify-end">
-              <button
-                data-testid="delete-cancel"
-                onClick={() => setConfirmDelete(null)}
-                className="px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-bg-tertiary"
-              >
-                {t('settings.deleteDialog.cancel')}
-              </button>
-              <button
-                data-testid="delete-confirm"
-                onClick={handleDeleteConfirm}
-                className="px-3 py-1.5 text-xs font-medium bg-error text-white rounded-lg hover:bg-error/90"
-              >
-                {t('settings.deleteDialog.confirm')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {toast && <span className="text-xs text-text-secondary">{toast}</span>}
     </div>

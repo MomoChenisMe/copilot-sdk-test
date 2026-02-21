@@ -34,156 +34,83 @@ describe('memory routes', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  // --- Preferences ---
+  // --- Preferences (deprecated shim — returns empty, appends to PROFILE.md) ---
 
   describe('GET /api/memory/preferences', () => {
-    it('should return preferences content', async () => {
-      fs.writeFileSync(path.join(tmpDir, 'memory', 'preferences.md'), 'My preferences');
+    it('should return empty content (deprecated shim)', async () => {
       const res = await fetch(`${baseUrl}/api/memory/preferences`);
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.content).toBe('My preferences');
+      expect(body.content).toBe('');
     });
   });
 
   describe('PUT /api/memory/preferences', () => {
-    it('should update preferences content', async () => {
+    it('should append content to PROFILE.md (deprecated shim)', async () => {
       const res = await fetch(`${baseUrl}/api/memory/preferences`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: 'Updated prefs' }),
       });
       expect(res.status).toBe(200);
-      expect(fs.readFileSync(path.join(tmpDir, 'memory', 'preferences.md'), 'utf-8')).toBe('Updated prefs');
+      const profile = fs.readFileSync(path.join(tmpDir, 'PROFILE.md'), 'utf-8');
+      expect(profile).toContain('Updated prefs');
     });
   });
 
-  // --- Projects ---
+  // --- Projects (removed — should return 404) ---
 
-  describe('GET /api/memory/projects', () => {
-    it('should list all projects', async () => {
-      fs.writeFileSync(path.join(tmpDir, 'memory', 'projects', 'my-app.md'), 'App notes');
-      fs.writeFileSync(path.join(tmpDir, 'memory', 'projects', 'infra.md'), 'Infra notes');
-
+  describe('projects routes (removed)', () => {
+    it('GET /api/memory/projects should return 404', async () => {
       const res = await fetch(`${baseUrl}/api/memory/projects`);
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.items).toHaveLength(2);
-      const names = body.items.map((i: { name: string }) => i.name);
-      expect(names).toContain('my-app');
-      expect(names).toContain('infra');
-    });
-  });
-
-  describe('GET /api/memory/projects/:name', () => {
-    it('should return project content', async () => {
-      fs.writeFileSync(path.join(tmpDir, 'memory', 'projects', 'my-app.md'), 'App notes');
-      const res = await fetch(`${baseUrl}/api/memory/projects/my-app`);
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.name).toBe('my-app');
-      expect(body.content).toBe('App notes');
-    });
-
-    it('should return 404 for non-existent project', async () => {
-      const res = await fetch(`${baseUrl}/api/memory/projects/nonexistent`);
       expect(res.status).toBe(404);
-      const body = await res.json();
-      expect(body.error).toBe('Not found');
     });
-  });
 
-  describe('PUT /api/memory/projects/:name', () => {
-    it('should create or update a project', async () => {
+    it('GET /api/memory/projects/:name should return 404', async () => {
+      const res = await fetch(`${baseUrl}/api/memory/projects/my-app`);
+      expect(res.status).toBe(404);
+    });
+
+    it('PUT /api/memory/projects/:name should return 404', async () => {
       const res = await fetch(`${baseUrl}/api/memory/projects/my-app`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: 'New app notes' }),
       });
-      expect(res.status).toBe(200);
-      expect(fs.readFileSync(path.join(tmpDir, 'memory', 'projects', 'my-app.md'), 'utf-8')).toBe('New app notes');
+      expect(res.status).toBe(404);
     });
-  });
 
-  describe('DELETE /api/memory/projects/:name', () => {
-    it('should delete a project', async () => {
-      fs.writeFileSync(path.join(tmpDir, 'memory', 'projects', 'to-delete.md'), 'content');
+    it('DELETE /api/memory/projects/:name should return 404', async () => {
       const res = await fetch(`${baseUrl}/api/memory/projects/to-delete`, { method: 'DELETE' });
-      expect(res.status).toBe(200);
-      expect(fs.existsSync(path.join(tmpDir, 'memory', 'projects', 'to-delete.md'))).toBe(false);
-    });
-  });
-
-  // --- Solutions ---
-
-  describe('GET /api/memory/solutions', () => {
-    it('should list all solutions', async () => {
-      fs.writeFileSync(path.join(tmpDir, 'memory', 'solutions', 'fix-deploy.md'), 'Fix steps');
-      const res = await fetch(`${baseUrl}/api/memory/solutions`);
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.items).toHaveLength(1);
-      expect(body.items[0].name).toBe('fix-deploy');
-    });
-  });
-
-  describe('GET /api/memory/solutions/:name', () => {
-    it('should return solution content', async () => {
-      fs.writeFileSync(path.join(tmpDir, 'memory', 'solutions', 'fix-deploy.md'), 'Fix steps');
-      const res = await fetch(`${baseUrl}/api/memory/solutions/fix-deploy`);
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.name).toBe('fix-deploy');
-      expect(body.content).toBe('Fix steps');
-    });
-
-    it('should return 404 for non-existent solution', async () => {
-      const res = await fetch(`${baseUrl}/api/memory/solutions/nonexistent`);
       expect(res.status).toBe(404);
     });
   });
 
-  describe('PUT /api/memory/solutions/:name', () => {
-    it('should create or update a solution', async () => {
+  // --- Solutions (removed — should return 404) ---
+
+  describe('solutions routes (removed)', () => {
+    it('GET /api/memory/solutions should return 404', async () => {
+      const res = await fetch(`${baseUrl}/api/memory/solutions`);
+      expect(res.status).toBe(404);
+    });
+
+    it('GET /api/memory/solutions/:name should return 404', async () => {
+      const res = await fetch(`${baseUrl}/api/memory/solutions/fix-deploy`);
+      expect(res.status).toBe(404);
+    });
+
+    it('PUT /api/memory/solutions/:name should return 404', async () => {
       const res = await fetch(`${baseUrl}/api/memory/solutions/fix-deploy`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: 'New fix steps' }),
       });
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(404);
     });
-  });
 
-  describe('DELETE /api/memory/solutions/:name', () => {
-    it('should delete a solution', async () => {
-      fs.writeFileSync(path.join(tmpDir, 'memory', 'solutions', 'to-delete.md'), 'content');
+    it('DELETE /api/memory/solutions/:name should return 404', async () => {
       const res = await fetch(`${baseUrl}/api/memory/solutions/to-delete`, { method: 'DELETE' });
-      expect(res.status).toBe(200);
-      expect(fs.existsSync(path.join(tmpDir, 'memory', 'solutions', 'to-delete.md'))).toBe(false);
-    });
-  });
-
-  // --- Name validation ---
-
-  describe('name validation', () => {
-    it('should return 400 for path traversal in project name', async () => {
-      const res = await fetch(`${baseUrl}/api/memory/projects/%2E%2Eetc`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: 'hack' }),
-      });
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toBe('Invalid name');
-    });
-
-    it('should return 400 for empty solution name', async () => {
-      const res = await fetch(`${baseUrl}/api/memory/solutions/%20`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: 'hack' }),
-      });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(404);
     });
   });
 

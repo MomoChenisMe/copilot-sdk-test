@@ -906,4 +906,183 @@ describe('ChatView', () => {
       expect(items).toHaveLength(10);
     });
   });
+
+  // === Input history integration ===
+  describe('input history', () => {
+    it('passes inputHistory derived from user messages to Input', () => {
+      const tabId = 'tab-history';
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: {
+          [tabId]: {
+            id: tabId,
+            conversationId: 'conv-1',
+            title: 'History Tab',
+            mode: 'copilot' as const,
+            messages: [
+              { id: 'msg-1', conversationId: 'conv-1', role: 'user' as const, content: 'first question', metadata: null, createdAt: '' },
+              { id: 'msg-2', conversationId: 'conv-1', role: 'assistant' as const, content: 'first answer', metadata: null, createdAt: '' },
+              { id: 'msg-3', conversationId: 'conv-1', role: 'user' as const, content: 'second question', metadata: null, createdAt: '' },
+              { id: 'msg-4', conversationId: 'conv-1', role: 'assistant' as const, content: 'second answer', metadata: null, createdAt: '' },
+            ],
+            streamingText: '',
+            isStreaming: false,
+            toolRecords: [] as any[],
+            reasoningText: '',
+            turnContentSegments: [] as string[],
+            turnSegments: [] as any[],
+            copilotError: null,
+            messagesLoaded: true,
+            createdAt: Date.now(),
+          },
+        },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} />);
+
+      // The Input component should be rendered (verify it exists via textarea)
+      const textarea = screen.getByRole('textbox');
+      expect(textarea).toBeTruthy();
+
+      // ArrowUp should navigate to most recent user message (reversed order)
+      fireEvent.keyDown(textarea, { key: 'ArrowUp' });
+      expect(textarea).toHaveValue('second question');
+
+      fireEvent.keyDown(textarea, { key: 'ArrowUp' });
+      expect(textarea).toHaveValue('first question');
+    });
+
+    it('filters inputHistory by mode — copilot excludes bash messages', () => {
+      const tabId = 'tab-hist-copilot';
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: {
+          [tabId]: {
+            id: tabId,
+            conversationId: 'conv-1',
+            title: 'Mixed Tab',
+            mode: 'copilot' as const,
+            messages: [
+              { id: 'm1', conversationId: 'conv-1', role: 'user' as const, content: 'ai question', metadata: null, createdAt: '' },
+              { id: 'm2', conversationId: 'conv-1', role: 'user' as const, content: 'ls -la', metadata: { bash: true }, createdAt: '' },
+              { id: 'm3', conversationId: 'conv-1', role: 'user' as const, content: 'another ai question', metadata: null, createdAt: '' },
+            ],
+            streamingText: '',
+            isStreaming: false,
+            toolRecords: [] as any[],
+            reasoningText: '',
+            turnContentSegments: [] as string[],
+            turnSegments: [] as any[],
+            copilotError: null,
+            messagesLoaded: true,
+            createdAt: Date.now(),
+          },
+        },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} />);
+      const textarea = screen.getByRole('textbox');
+
+      // ArrowUp should show copilot messages only (not 'ls -la')
+      fireEvent.keyDown(textarea, { key: 'ArrowUp' });
+      expect(textarea).toHaveValue('another ai question');
+
+      fireEvent.keyDown(textarea, { key: 'ArrowUp' });
+      expect(textarea).toHaveValue('ai question');
+
+      // No more history — should stay at oldest
+      fireEvent.keyDown(textarea, { key: 'ArrowUp' });
+      expect(textarea).toHaveValue('ai question');
+    });
+
+    it('filters inputHistory by mode — terminal shows only bash messages', () => {
+      const tabId = 'tab-hist-terminal';
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: {
+          [tabId]: {
+            id: tabId,
+            conversationId: 'conv-1',
+            title: 'Terminal Tab',
+            mode: 'terminal' as const,
+            messages: [
+              { id: 'm1', conversationId: 'conv-1', role: 'user' as const, content: 'ai question', metadata: null, createdAt: '' },
+              { id: 'm2', conversationId: 'conv-1', role: 'user' as const, content: 'ls -la', metadata: { bash: true }, createdAt: '' },
+              { id: 'm3', conversationId: 'conv-1', role: 'user' as const, content: 'pwd', metadata: { bash: true }, createdAt: '' },
+            ],
+            streamingText: '',
+            isStreaming: false,
+            toolRecords: [] as any[],
+            reasoningText: '',
+            turnContentSegments: [] as string[],
+            turnSegments: [] as any[],
+            copilotError: null,
+            messagesLoaded: true,
+            createdAt: Date.now(),
+          },
+        },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} />);
+      const textarea = screen.getByRole('textbox');
+
+      // ArrowUp should show bash messages only (not 'ai question')
+      fireEvent.keyDown(textarea, { key: 'ArrowUp' });
+      expect(textarea).toHaveValue('pwd');
+
+      fireEvent.keyDown(textarea, { key: 'ArrowUp' });
+      expect(textarea).toHaveValue('ls -la');
+
+      // No more history
+      fireEvent.keyDown(textarea, { key: 'ArrowUp' });
+      expect(textarea).toHaveValue('ls -la');
+    });
+  });
+
+  // === toolRecords null safety (Point 8 bug fix) ===
+  describe('toolRecords null safety', () => {
+    it('does not crash when toolRecords is undefined in fallback rendering path', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        isStreaming: true,
+        toolRecords: undefined as any,
+        reasoningText: '',
+        turnSegments: [],
+        streamingText: '',
+      });
+      // Should render without throwing "Cannot read properties of undefined (reading 'map')"
+      expect(() => render(<ChatView {...defaultProps} />)).not.toThrow();
+    });
+
+    it('renders correctly when tab toolRecords is undefined', () => {
+      const tabId = 'tab-undefined-tr';
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: {
+          [tabId]: {
+            id: tabId,
+            conversationId: 'conv-1',
+            title: 'Test Tab',
+            mode: 'copilot' as const,
+            messages: [],
+            streamingText: '',
+            isStreaming: true,
+            toolRecords: undefined as any,
+            reasoningText: '',
+            turnContentSegments: [],
+            turnSegments: [],
+            copilotError: null,
+            messagesLoaded: true,
+            createdAt: Date.now(),
+          },
+        },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      expect(() => render(<ChatView {...defaultProps} tabId={tabId} />)).not.toThrow();
+    });
+  });
 });

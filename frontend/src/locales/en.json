@@ -130,7 +130,7 @@
       "general": "General",
       "systemPrompt": "System Prompt",
       "profile": "Profile",
-      "agent": "Agent",
+      "openspec": "OpenSpec",
       "memory": "Memory",
       "skills": "Skills",
       "apiKeys": "API Keys",
@@ -142,10 +142,10 @@
       "language": "Language",
       "logout": "Logout"
     },
-    "agent": {
-      "openspecSdd": "OpenSpec SDD Workflow",
-      "openspecSddDesc": "Inject the OpenSpec specification-driven development workflow rules into every AI conversation.",
-      "openspecSddEnabled": "Enable OpenSpec SDD"
+    "openspec": {
+      "title": "OpenSpec SDD Workflow",
+      "desc": "Inject the OpenSpec specification-driven development workflow rules into every AI conversation.",
+      "enabled": "Enable OpenSpec SDD"
     },
     "toast": {
       "saved": "Saved",

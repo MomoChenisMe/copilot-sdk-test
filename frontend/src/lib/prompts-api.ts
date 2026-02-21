@@ -1,16 +1,7 @@
-import { apiGet, apiPut, apiDelete, apiPost } from './api';
+import { apiGet, apiPut, apiPost, apiDelete } from './api';
 
 export interface PromptContent {
   content: string;
-}
-
-export interface MemoryItem {
-  name: string;
-  content: string;
-}
-
-export interface MemoryItemList {
-  items: MemoryItem[];
 }
 
 export const promptsApi = {
@@ -21,7 +12,9 @@ export const promptsApi = {
   getProfile: () => apiGet<PromptContent>('/api/prompts/profile'),
   putProfile: (content: string) => apiPut<{ ok: true }>('/api/prompts/profile', { content }),
 
+  /** @deprecated Agent rules merged into PROFILE.md */
   getAgent: () => apiGet<PromptContent>('/api/prompts/agent'),
+  /** @deprecated Agent rules merged into PROFILE.md */
   putAgent: (content: string) => apiPut<{ ok: true }>('/api/prompts/agent', { content }),
 
   getOpenspecSdd: () => apiGet<PromptContent>('/api/prompts/openspec-sdd'),
@@ -72,17 +65,8 @@ export const skillsApi = {
   installFromUrl: (url: string) => apiPost<SkillInstallResult>('/api/skills/install-url', { url }),
 };
 
+/** @deprecated Memory preferences merged into PROFILE.md. Projects/solutions removed. */
 export const memoryApi = {
   getPreferences: () => apiGet<PromptContent>('/api/memory/preferences'),
   putPreferences: (content: string) => apiPut<{ ok: true }>('/api/memory/preferences', { content }),
-
-  listProjects: () => apiGet<MemoryItemList>('/api/memory/projects'),
-  getProject: (name: string) => apiGet<PromptContent>(`/api/memory/projects/${name}`),
-  putProject: (name: string, content: string) => apiPut<{ ok: true }>(`/api/memory/projects/${name}`, { content }),
-  deleteProject: (name: string) => apiDelete<{ ok: true }>(`/api/memory/projects/${name}`),
-
-  listSolutions: () => apiGet<MemoryItemList>('/api/memory/solutions'),
-  getSolution: (name: string) => apiGet<PromptContent>(`/api/memory/solutions/${name}`),
-  putSolution: (name: string, content: string) => apiPut<{ ok: true }>(`/api/memory/solutions/${name}`, { content }),
-  deleteSolution: (name: string) => apiDelete<{ ok: true }>(`/api/memory/solutions/${name}`),
 };

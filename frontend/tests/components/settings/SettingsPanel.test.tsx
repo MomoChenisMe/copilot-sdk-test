@@ -21,14 +21,8 @@ vi.mock('../../../src/lib/prompts-api', () => ({
     resetSystemPrompt: vi.fn().mockResolvedValue({ content: '# Default System Prompt' }),
   },
   memoryApi: {
-    getPreferences: vi.fn().mockResolvedValue({ content: '# Prefs' }),
+    getPreferences: vi.fn().mockResolvedValue({ content: '' }),
     putPreferences: vi.fn().mockResolvedValue({ ok: true }),
-    listProjects: vi.fn().mockResolvedValue({ items: [{ name: 'proj-1', content: '# Proj' }] }),
-    putProject: vi.fn().mockResolvedValue({ ok: true }),
-    deleteProject: vi.fn().mockResolvedValue({ ok: true }),
-    listSolutions: vi.fn().mockResolvedValue({ items: [{ name: 'sol-1', content: '# Sol' }] }),
-    putSolution: vi.fn().mockResolvedValue({ ok: true }),
-    deleteSolution: vi.fn().mockResolvedValue({ ok: true }),
   },
   skillsApi: {
     list: vi.fn().mockResolvedValue({
@@ -105,12 +99,12 @@ describe('SettingsPanel', () => {
       expect(screen.getByRole('tab', { name: /general/i })).toBeTruthy();
       expect(screen.getByRole('tab', { name: /system prompt/i })).toBeTruthy();
       expect(screen.getByRole('tab', { name: /profile/i })).toBeTruthy();
-      expect(screen.getByRole('tab', { name: /agent/i })).toBeTruthy();
+      expect(screen.getByRole('tab', { name: /openspec/i })).toBeTruthy();
       expect(screen.queryByRole('tab', { name: /presets/i })).toBeNull();
       expect(screen.getByRole('tab', { name: /memory/i })).toBeTruthy();
       expect(screen.getByRole('tab', { name: /skills/i })).toBeTruthy();
       expect(screen.getByRole('tab', { name: /api keys/i })).toBeTruthy();
-      expect(screen.getByRole('tab', { name: /cron jobs/i })).toBeTruthy();
+      expect(screen.getByRole('tab', { name: /mcp/i })).toBeTruthy();
     });
 
     it('should default to System Prompt tab', () => {
@@ -207,32 +201,15 @@ describe('SettingsPanel', () => {
       expect(screen.getByText('Loading...')).toBeTruthy();
     });
 
-    it('should show translated Memory section headers', async () => {
+    it('should show translated Memory section with Auto Memory', async () => {
       render(<SettingsPanel {...defaultProps} />);
       fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
 
       await waitFor(() => {
-        // Section headers from t('settings.memory.*')
-        expect(screen.getByText('Preferences')).toBeTruthy();
-        expect(screen.getByText('Projects')).toBeTruthy();
-        expect(screen.getByText('Solutions')).toBeTruthy();
+        // Only auto-memory and LLM intelligence remain
+        expect(screen.getByTestId('auto-memory-section')).toBeTruthy();
+        expect(screen.getByTestId('llm-gating-toggle')).toBeTruthy();
       });
-    });
-
-    it('should show translated delete confirmation dialog', async () => {
-      render(<SettingsPanel {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
-
-      await waitFor(() => {
-        expect(screen.getByTestId('project-delete-proj-1')).toBeTruthy();
-      });
-
-      fireEvent.click(screen.getByTestId('project-delete-proj-1'));
-
-      // Delete dialog texts from t('settings.deleteDialog.*')
-      expect(screen.getByText('Are you sure you want to delete this item?')).toBeTruthy();
-      expect(screen.getByText('Cancel')).toBeTruthy();
-      expect(screen.getByText('Delete')).toBeTruthy();
     });
   });
 
@@ -423,20 +400,11 @@ describe('SettingsPanel', () => {
     });
   });
 
-  // === Agent Tab ===
-  describe('Agent tab', () => {
-    it('should load and display agent content when tab is clicked', async () => {
+  // === OpenSpec Tab ===
+  describe('OpenSpec tab', () => {
+    it('should render OpenSpec SDD toggle when tab is clicked', async () => {
       render(<SettingsPanel {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: /agent/i }));
-
-      await waitFor(() => {
-        expect(screen.getByDisplayValue('# Agent content')).toBeTruthy();
-      });
-    });
-
-    it('should render OpenSpec SDD toggle in Agent tab', async () => {
-      render(<SettingsPanel {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: /agent/i }));
+      fireEvent.click(screen.getByRole('tab', { name: /openspec/i }));
 
       await waitFor(() => {
         expect(screen.getByTestId('openspec-sdd-toggle')).toBeTruthy();
@@ -445,7 +413,7 @@ describe('SettingsPanel', () => {
 
     it('should show OpenSpec SDD toggle as OFF by default', async () => {
       render(<SettingsPanel {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: /agent/i }));
+      fireEvent.click(screen.getByRole('tab', { name: /openspec/i }));
 
       await waitFor(() => {
         const toggle = screen.getByTestId('openspec-sdd-toggle');
@@ -455,7 +423,7 @@ describe('SettingsPanel', () => {
 
     it('should call configApi.putOpenspecSdd when toggle is clicked', async () => {
       render(<SettingsPanel {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: /agent/i }));
+      fireEvent.click(screen.getByRole('tab', { name: /openspec/i }));
 
       await waitFor(() => {
         expect(screen.getByTestId('openspec-sdd-toggle')).toBeTruthy();
@@ -472,7 +440,7 @@ describe('SettingsPanel', () => {
       (configApi.getOpenspecSdd as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ enabled: true });
 
       render(<SettingsPanel {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: /agent/i }));
+      fireEvent.click(screen.getByRole('tab', { name: /openspec/i }));
 
       await waitFor(() => {
         expect(screen.getByTestId('openspec-sdd-textarea')).toBeTruthy();
@@ -481,7 +449,7 @@ describe('SettingsPanel', () => {
 
     it('should NOT show OpenSpec SDD textarea when toggle is disabled', async () => {
       render(<SettingsPanel {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: /agent/i }));
+      fireEvent.click(screen.getByRole('tab', { name: /openspec/i }));
 
       await waitFor(() => {
         expect(screen.getByTestId('openspec-sdd-toggle')).toBeTruthy();
@@ -505,7 +473,7 @@ describe('SettingsPanel', () => {
       const batchSpy = vi.spyOn(useAppStore.getState(), 'batchSetSkillsDisabled');
 
       render(<SettingsPanel {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: /agent/i }));
+      fireEvent.click(screen.getByRole('tab', { name: /openspec/i }));
 
       await waitFor(() => {
         expect(screen.getByTestId('openspec-sdd-toggle')).toBeTruthy();
@@ -547,7 +515,7 @@ describe('SettingsPanel', () => {
       const batchSpy = vi.spyOn(useAppStore.getState(), 'batchSetSkillsDisabled');
 
       render(<SettingsPanel {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: /agent/i }));
+      fireEvent.click(screen.getByRole('tab', { name: /openspec/i }));
 
       await waitFor(() => {
         expect(screen.getByTestId('openspec-sdd-toggle')).toBeTruthy();
@@ -574,7 +542,7 @@ describe('SettingsPanel', () => {
       (configApi.getOpenspecSdd as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ enabled: true });
 
       render(<SettingsPanel {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: /agent/i }));
+      fireEvent.click(screen.getByRole('tab', { name: /openspec/i }));
 
       await waitFor(() => {
         expect(screen.getByTestId('openspec-sdd-textarea')).toBeTruthy();
