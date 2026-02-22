@@ -80,6 +80,12 @@ export function createCopilotHandler(
             pendingBashContext.delete(conversationId);
           }
 
+          // Prepend web search instruction if forced
+          const webSearchForced = payload.webSearchForced as boolean | undefined;
+          if (webSearchForced) {
+            finalPrompt = '[IMPORTANT: You MUST use the web_search tool to search the web BEFORE responding to this message. Always perform at least one web search.]\n\n' + finalPrompt;
+          }
+
           // Read contextFiles and prepend to prompt
           if (contextFiles.length > 0) {
             const MAX_CONTEXT_FILE_SIZE = 500 * 1024; // 500KB

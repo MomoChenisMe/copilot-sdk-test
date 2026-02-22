@@ -17,6 +17,7 @@ import type { InputHandle } from '../shared/Input';
 import { UsageBar } from './UsageBar';
 import { ScrollToBottom } from './ScrollToBottom';
 import PlanActToggle from './PlanActToggle';
+import WebSearchToggle from './WebSearchToggle';
 import { InlineUserInput } from './InlineUserInput';
 import { TaskPanel } from './TaskPanel';
 import { ThinkingIndicator } from './ThinkingIndicator';
@@ -90,7 +91,10 @@ export function ChatView({
   const setTabPlanMode = useAppStore((s) => s.setTabPlanMode);
   const setTabUserInputRequest = useAppStore((s) => s.setTabUserInputRequest);
   const setTabCronConfigOpen = useAppStore((s) => s.setTabCronConfigOpen);
+  const setTabWebSearchForced = useAppStore((s) => s.setTabWebSearchForced);
   const cronConfigOpen = tab?.cronConfigOpen ?? false;
+  const webSearchForced = tab?.webSearchForced ?? false;
+  const webSearchAvailable = useAppStore((s) => s.webSearchAvailable);
   const userInputRequest = tab?.userInputRequest ?? null;
   const tabMode = tab?.mode ?? 'copilot';
   const isTerminalMode = tabMode === 'terminal';
@@ -378,6 +382,9 @@ export function ChatView({
                   <Clock size={14} />
                 </button>
               )}
+              {tabId && webSearchAvailable && (
+                <WebSearchToggle forced={webSearchForced} onToggle={(f) => setTabWebSearchForced(tabId, f)} disabled={isStreaming} />
+              )}
             </div>
             {cronConfigOpen && tabId && activeConversationId && (
               <CronConfigPanel
@@ -415,6 +422,9 @@ export function ChatView({
                     planMode={planMode}
                     onPlanModeToggle={handlePlanModeToggle}
                     isStreaming={isStreaming}
+                    webSearchForced={webSearchForced}
+                    onWebSearchToggle={(f) => tabId && setTabWebSearchForced(tabId, f)}
+                    webSearchAvailable={webSearchAvailable}
                   />
                   {tabId && (
                     <button
@@ -642,6 +652,9 @@ export function ChatView({
                     <Clock size={14} />
                   </button>
                 )}
+                {tabId && webSearchAvailable && (
+                  <WebSearchToggle forced={webSearchForced} onToggle={(f) => setTabWebSearchForced(tabId, f)} disabled={isStreaming} />
+                )}
               </div>
               {cronConfigOpen && tabId && activeConversationId && (
                 <CronConfigPanel
@@ -679,6 +692,9 @@ export function ChatView({
                       planMode={planMode}
                       onPlanModeToggle={handlePlanModeToggle}
                       isStreaming={isStreaming}
+                      webSearchForced={webSearchForced}
+                      onWebSearchToggle={(forced) => tabId && setTabWebSearchForced(tabId, forced)}
+                      webSearchAvailable={webSearchAvailable}
                     />
                     {tabId && (
                       <button

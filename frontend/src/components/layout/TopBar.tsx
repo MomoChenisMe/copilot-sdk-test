@@ -33,15 +33,15 @@ export function TopBar({ title, status, theme, onThemeToggle, onHomeClick, onSet
       {/* Center: Title (clickable → home) */}
       <button
         onClick={onHomeClick}
-        className="flex-1 min-w-0 text-center"
+        className="flex-1 min-w-0 text-center overflow-hidden"
       >
-        <span className="text-sm font-medium text-text-primary truncate">
+        <span className="text-sm font-medium text-text-primary truncate block">
           {title}
         </span>
       </button>
 
       {/* Right: Settings + Theme + Connection */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 shrink-0">
         {onShortcutsClick && (
           <button
             onClick={onShortcutsClick}

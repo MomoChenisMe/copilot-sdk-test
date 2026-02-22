@@ -6,6 +6,11 @@ export interface AppSettings {
   lastSelectedModel?: string;
   disabledSkills?: string[];
   openTabs?: unknown[];
+  pushNotifications?: {
+    enabled?: boolean;
+    cronEnabled?: boolean;
+    streamEnabled?: boolean;
+  };
 }
 
 export const settingsApi = {

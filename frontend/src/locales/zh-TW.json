@@ -435,7 +435,14 @@
   },
   "sdk": {
     "analyzeChanges": "分析更新內容",
-    "changelogUnavailable": "更新日誌不可用"
+    "changelogUnavailable": "更新日誌不可用",
+    "versionUnknown": "未知"
+  },
+  "webSearch": {
+    "toggleTitle": "強制網路搜尋",
+    "label": "網路搜尋",
+    "auto": "自動",
+    "forced": "始終"
   },
   "mcp": {
     "title": "MCP 伺服器",

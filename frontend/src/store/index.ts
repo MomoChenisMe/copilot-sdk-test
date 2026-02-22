@@ -81,6 +81,7 @@ export interface TabState {
   artifactsPanelOpen: boolean;
   tasks: TaskItem[];
   cronConfigOpen: boolean;
+  webSearchForced: boolean;
 }
 
 export interface AppState {
@@ -140,6 +141,8 @@ export interface AppState {
   // Settings
   disabledSkills: string[];
   settingsOpen: boolean;
+  webSearchAvailable: boolean;
+  setWebSearchAvailable: (available: boolean) => void;
 
   // Error
   copilotError: string | null;
@@ -243,6 +246,7 @@ export interface AppState {
   setTabPlanFilePath: (tabId: string, path: string | null) => void;
   setTabUserInputRequest: (tabId: string, request: UserInputRequest | null) => void;
   setTabCronConfigOpen: (tabId: string, open: boolean) => void;
+  setTabWebSearchForced: (tabId: string, forced: boolean) => void;
 
   // Actions — Per-tab tasks
   setTabTasks: (tabId: string, tasks: TaskItem[]) => void;
@@ -346,6 +350,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   sdkCommandsLoaded: false,
   disabledSkills: [],
   settingsOpen: false,
+  webSearchAvailable: false,
+  setWebSearchAvailable: (available) => set({ webSearchAvailable: available }),
   lastSelectedModel: (() => {
     try { return localStorage.getItem('codeforge:lastSelectedModel'); }
     catch { return null; }
@@ -544,6 +550,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       artifactsPanelOpen: false,
       tasks: [],
       cronConfigOpen: false,
+      webSearchForced: false,
     };
     const newTabs = { ...state.tabs, [tabId]: tab };
     const newOrder = [...state.tabOrder, tabId];
@@ -615,6 +622,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       artifactsPanelOpen: false,
       tasks: [],
       cronConfigOpen: false,
+      webSearchForced: false,
     };
     const newTabs = { ...state.tabs, [tabId]: updatedTab };
     set({ tabs: newTabs });
@@ -663,6 +671,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           activeArtifactId: null,
           artifactsPanelOpen: false,
           cronConfigOpen: false,
+          webSearchForced: false,
           tasks: [],
         };
         tabOrder.push(tabId);
@@ -944,6 +953,18 @@ export const useAppStore = create<AppState>((set, get) => ({
         tabs: {
           ...state.tabs,
           [tabId]: { ...tab, cronConfigOpen: open },
+        },
+      };
+    }),
+
+  setTabWebSearchForced: (tabId, forced) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return {
+        tabs: {
+          ...state.tabs,
+          [tabId]: { ...tab, webSearchForced: forced },
         },
       };
     }),

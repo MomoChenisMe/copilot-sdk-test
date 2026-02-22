@@ -469,6 +469,9 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
       if (tab.planMode) {
         data.mode = 'plan';
       }
+      if (tab.webSearchForced) {
+        data.webSearchForced = true;
+      }
       send({
         type: 'copilot:send',
         data,

@@ -1,8 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Globe, LogOut, X, Upload, Link, Sparkles } from 'lucide-react';
+import { ArrowLeft, Bell, Globe, LogOut, X, Upload, Link, Sparkles } from 'lucide-react';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { promptsApi, skillsApi } from '../../lib/prompts-api';
+import { settingsApi } from '../../lib/settings-api';
+import { usePushNotifications } from '../../hooks/usePushNotifications';
+import { pushApi } from '../../lib/push-api';
 import type { SkillItem } from '../../lib/prompts-api';
 import { memoryApi as autoMemoryApi } from '../../lib/api';
 import type { MemoryConfig, MemoryStats } from '../../lib/api';
@@ -191,7 +194,7 @@ function GeneralTab({
           setSdkLatestVersion(r.latestVersion);
           setSdkUpdateAvailable(r.updateAvailable);
         })
-        .catch(() => {});
+        .catch((err) => { console.warn('Failed to fetch SDK version:', err); });
     });
   }, []);
 
@@ -224,24 +227,24 @@ function GeneralTab({
   return (
     <div className="flex flex-col gap-4">
       {/* SDK Version */}
-      {sdkVersion && (
-        <section>
-          <h3 className="text-xs font-semibold text-text-secondary uppercase mb-2">Copilot SDK</h3>
-          <div className="flex items-center gap-3">
-            <span data-testid="sdk-version" className="text-sm text-text-primary font-mono">v{sdkVersion}</span>
-            {sdkUpdateAvailable && sdkLatestVersion && (
-              <button
-                data-testid="analyze-changes-button"
-                onClick={handleAnalyzeChanges}
-                disabled={analyzingChanges}
-                className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {analyzingChanges ? '...' : t('sdk.analyzeChanges')}
-              </button>
-            )}
-          </div>
-        </section>
-      )}
+      <section>
+        <h3 className="text-xs font-semibold text-text-secondary uppercase mb-2">Copilot SDK</h3>
+        <div className="flex items-center gap-3">
+          <span data-testid="sdk-version" className="text-sm text-text-primary font-mono">
+            {sdkVersion ? `v${sdkVersion}` : t('sdk.versionUnknown')}
+          </span>
+          {sdkUpdateAvailable && sdkLatestVersion && (
+            <button
+              data-testid="analyze-changes-button"
+              onClick={handleAnalyzeChanges}
+              disabled={analyzingChanges}
+              className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {analyzingChanges ? '...' : t('sdk.analyzeChanges')}
+            </button>
+          )}
+        </div>
+      </section>
 
       {/* Language */}
       <section>
@@ -256,6 +259,9 @@ function GeneralTab({
         </button>
       </section>
 
+      {/* Notifications */}
+      <NotificationsSection />
+
       {/* Logout */}
       <section>
         <button
@@ -268,6 +274,112 @@ function GeneralTab({
         </button>
       </section>
     </div>
+  );
+}
+
+function NotificationsSection() {
+  const { t } = useTranslation();
+  const { isSupported, isSubscribed, permission, requestSubscription, cancelSubscription } = usePushNotifications();
+  const [cronEnabled, setCronEnabled] = useState(true);
+  const [streamEnabled, setStreamEnabled] = useState(true);
+  const [testing, setTesting] = useState(false);
+
+  // Load settings on mount
+  useEffect(() => {
+    settingsApi.get().then((s) => {
+      const push = s.pushNotifications;
+      if (push) {
+        setCronEnabled(push.cronEnabled ?? true);
+        setStreamEnabled(push.streamEnabled ?? true);
+      }
+    }).catch(() => {});
+  }, []);
+
+  if (!isSupported) return null;
+
+  const handleToggle = async () => {
+    if (isSubscribed) {
+      await cancelSubscription();
+      settingsApi.patch({ pushNotifications: { enabled: false, cronEnabled, streamEnabled } }).catch(() => {});
+    } else {
+      await requestSubscription();
+      settingsApi.patch({ pushNotifications: { enabled: true, cronEnabled, streamEnabled } }).catch(() => {});
+    }
+  };
+
+  const handleCronToggle = () => {
+    const next = !cronEnabled;
+    setCronEnabled(next);
+    settingsApi.patch({ pushNotifications: { enabled: isSubscribed, cronEnabled: next, streamEnabled } }).catch(() => {});
+  };
+
+  const handleStreamToggle = () => {
+    const next = !streamEnabled;
+    setStreamEnabled(next);
+    settingsApi.patch({ pushNotifications: { enabled: isSubscribed, cronEnabled, streamEnabled: next } }).catch(() => {});
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    try {
+      await pushApi.test();
+    } catch { /* ignore */ }
+    setTesting(false);
+  };
+
+  return (
+    <section>
+      <h3 className="text-xs font-semibold text-text-secondary uppercase mb-2">
+        {t('settings.general.notifications', 'Notifications')}
+      </h3>
+
+      {/* Main toggle */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2 text-sm text-text-primary">
+          <Bell size={16} />
+          {t('settings.notifications.pushEnabled', 'Push Notifications')}
+        </div>
+        <ToggleSwitch checked={isSubscribed} onChange={handleToggle} />
+      </div>
+
+      {permission === 'denied' && (
+        <p className="text-xs text-error mb-3">
+          {t('settings.notifications.denied', 'Notifications blocked. Please enable in browser settings.')}
+        </p>
+      )}
+
+      {/* Type toggles (only when subscribed) */}
+      {isSubscribed && (
+        <div className="ml-6 space-y-2 mb-3">
+          <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
+            <input
+              type="checkbox"
+              checked={cronEnabled}
+              onChange={handleCronToggle}
+              className="rounded border-border"
+            />
+            {t('settings.notifications.cron', 'Cron job completion')}
+          </label>
+          <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
+            <input
+              type="checkbox"
+              checked={streamEnabled}
+              onChange={handleStreamToggle}
+              className="rounded border-border"
+            />
+            {t('settings.notifications.stream', 'AI reply completion')}
+          </label>
+
+          <button
+            onClick={handleTest}
+            disabled={testing}
+            className="mt-2 px-3 py-1.5 text-xs font-medium bg-bg-tertiary text-text-primary rounded-lg hover:bg-bg-secondary border border-border transition-colors disabled:opacity-50"
+          >
+            {testing ? '...' : t('settings.notifications.test', 'Send test notification')}
+          </button>
+        </div>
+      )}
+    </section>
   );
 }
 

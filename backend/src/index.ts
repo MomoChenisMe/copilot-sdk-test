@@ -60,6 +60,11 @@ import { LlmMemoryExtractor } from './memory/llm-extractor.js';
 import { MemoryCompactor } from './memory/memory-compaction.js';
 import { ConversationCronScheduler } from './cron/conversation-cron-scheduler.js';
 import { createCronConfigTools } from './copilot/tools/cron-config-tools.js';
+import webpush from 'web-push';
+import { loadOrGenerateVapidKeys } from './push/vapid-keys.js';
+import { PushStore } from './push/push-store.js';
+import { PushService } from './push/push-service.js';
+import { createPushRoutes } from './push/routes.js';
 
 const log = createLogger('main');
 
@@ -386,6 +391,18 @@ export function createApp() {
   const settingsStore = new SettingsStore(promptStore);
   app.use('/api/settings', authMiddleware, createSettingsRoutes(settingsStore));
 
+  // Push notifications (VAPID + PushStore + PushService)
+  const vapidKeys = loadOrGenerateVapidKeys(config.promptsPath);
+  webpush.setVapidDetails(
+    'mailto:admin@codeforge.local',
+    vapidKeys.publicKey,
+    vapidKeys.privateKey,
+  );
+  const pushStore = new PushStore(db);
+  const pushService = new PushService(pushStore, settingsStore);
+  app.use('/api/push', authMiddleware, createPushRoutes(pushStore, pushService, vapidKeys.publicKey));
+  log.info('Push notifications initialized');
+
   // Register WS handlers
   const copilotHandler = createCopilotHandler(streamManager, repo);
   registerHandler('copilot', copilotHandler);
@@ -439,6 +456,34 @@ export function createApp() {
       }
     });
   }
+
+  // Push notification on stream:idle (AI reply or cron job completed)
+  streamManager.on('stream:idle', async (conversationId: string) => {
+    try {
+      const conv = repo.getById(conversationId);
+      const isCron = !!conv?.cronEnabled;
+      const notifyType = isCron ? 'cron' : 'stream';
+      if (!pushService.shouldNotify(notifyType)) return;
+
+      if (isCron) {
+        await pushService.sendToAll({
+          title: 'Cron Job Completed',
+          body: conv?.title || 'Scheduled task finished',
+          tag: `cron-${conversationId}`,
+          data: { url: '/', type: 'cron', conversationId },
+        });
+      } else {
+        await pushService.sendToAll({
+          title: 'CodeForge',
+          body: `${conv?.title || 'Conversation'} — response ready`,
+          tag: `stream-${conversationId}`,
+          data: { url: '/', type: 'stream', conversationId },
+        });
+      }
+    } catch (err) {
+      log.error({ err, conversationId }, 'Push notification failed (stream:idle)');
+    }
+  });
 
   // Graceful shutdown
   setupGracefulShutdown([

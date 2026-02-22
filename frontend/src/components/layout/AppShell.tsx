@@ -120,6 +120,15 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     });
   }, []);
 
+  // Detect Brave API key availability on mount
+  useEffect(() => {
+    configApi.getBraveApiKey().then((res) => {
+      useAppStore.getState().setWebSearchAvailable(res.hasKey);
+    }).catch(() => {
+      // No Brave API key available
+    });
+  }, []);
+
   // Load persisted settings from backend on mount (overrides localStorage if present)
   useEffect(() => {
     settingsApi.get().then((settings) => {
@@ -204,6 +213,27 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       }
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Listen for SW notification-click messages to navigate
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type !== 'notification-click') return;
+      const data = event.data.data;
+      if (!data) return;
+      // For cron type: open settings or navigate to cron tab (handled by existing tab system)
+      // For stream type: switch to the conversation
+      if (data.type === 'stream' && data.conversationId) {
+        const tabs = useAppStore.getState().tabs;
+        const existing = Object.entries(tabs).find(([, t]) => t.conversationId === data.conversationId);
+        if (existing) {
+          useAppStore.getState().setActiveTab(existing[0]);
+        }
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', handler);
+    return () => navigator.serviceWorker.removeEventListener('message', handler);
+  }, []);
 
   const handleLanguageToggle = useCallback(() => {
     const next = language === 'zh-TW' ? 'en' : 'zh-TW';

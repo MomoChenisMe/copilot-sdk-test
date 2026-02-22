@@ -89,4 +89,25 @@ describe('TopBar', () => {
     fireEvent.click(settingsBtn);
     expect(onSettingsClick).toHaveBeenCalledOnce();
   });
+
+  // === Title overflow protection ===
+  it('title button has overflow-hidden to prevent text overflow', () => {
+    const { container } = render(<TopBar {...defaultProps} title="A very long conversation title that should be truncated on mobile screens" />);
+    const titleBtn = container.querySelector('button.flex-1');
+    expect(titleBtn?.className).toContain('overflow-hidden');
+  });
+
+  it('title span has block class for truncate to work', () => {
+    const { container } = render(<TopBar {...defaultProps} />);
+    const titleSpan = container.querySelector('span.truncate');
+    expect(titleSpan?.className).toContain('block');
+  });
+
+  it('right-side buttons container has shrink-0 to prevent compression', () => {
+    const { container } = render(<TopBar {...defaultProps} onSettingsClick={vi.fn()} />);
+    // The right-side div is the last div child of header
+    const header = container.querySelector('header');
+    const rightDiv = header?.querySelector('div.flex.items-center');
+    expect(rightDiv?.className).toContain('shrink-0');
+  });
 });

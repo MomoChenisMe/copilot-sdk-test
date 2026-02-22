@@ -435,7 +435,14 @@
   },
   "sdk": {
     "analyzeChanges": "Analyze Changes",
-    "changelogUnavailable": "Changelog unavailable"
+    "changelogUnavailable": "Changelog unavailable",
+    "versionUnknown": "Unknown"
+  },
+  "webSearch": {
+    "toggleTitle": "Force web search",
+    "label": "Web Search",
+    "auto": "Auto",
+    "forced": "Always"
   },
   "mcp": {
     "title": "MCP Servers",

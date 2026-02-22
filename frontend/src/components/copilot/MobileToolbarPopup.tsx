@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { SlidersHorizontal, X, ChevronDown, FolderOpen, Sparkles, TerminalSquare, Lightbulb, Zap } from 'lucide-react';
+import { SlidersHorizontal, X, ChevronDown, FolderOpen, Sparkles, TerminalSquare, Lightbulb, Zap, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { DirectoryPicker } from './DirectoryPicker';
@@ -15,6 +15,9 @@ interface MobileToolbarPopupProps {
   planMode: boolean;
   onPlanModeToggle: (newPlanMode: boolean) => void;
   isStreaming: boolean;
+  webSearchForced: boolean;
+  onWebSearchToggle: (forced: boolean) => void;
+  webSearchAvailable: boolean;
 }
 
 function getMultiplierStyle(multiplier: number | null | undefined) {
@@ -37,6 +40,9 @@ export function MobileToolbarPopup({
   planMode,
   onPlanModeToggle,
   isStreaming,
+  webSearchForced,
+  onWebSearchToggle,
+  webSearchAvailable,
 }: MobileToolbarPopupProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -215,6 +221,36 @@ export function MobileToolbarPopup({
                 >
                   <Zap size={12} />
                   {t('planMode.act')}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Web Search toggle */}
+          {webSearchAvailable && (
+            <div className="mt-4">
+              <label className="text-[10px] uppercase tracking-wider text-text-muted font-semibold mb-1.5 block">
+                {t('webSearch.label', 'Web Search')}
+              </label>
+              <div className="inline-flex rounded-xl border border-border overflow-hidden">
+                <button
+                  disabled={isStreaming}
+                  onClick={() => onWebSearchToggle(false)}
+                  className={`flex items-center gap-1 px-3 py-2 text-xs font-medium transition-colors ${
+                    !webSearchForced ? 'text-accent bg-accent/10' : 'bg-bg-tertiary text-text-secondary hover:bg-bg-secondary'
+                  } disabled:opacity-50`}
+                >
+                  {t('webSearch.auto', 'Auto')}
+                </button>
+                <button
+                  disabled={isStreaming}
+                  onClick={() => onWebSearchToggle(true)}
+                  className={`flex items-center gap-1 px-3 py-2 text-xs font-medium transition-colors ${
+                    webSearchForced ? 'text-accent bg-accent/10' : 'bg-bg-tertiary text-text-secondary hover:bg-bg-secondary'
+                  } disabled:opacity-50`}
+                >
+                  <Search size={12} />
+                  {t('webSearch.forced', 'Always')}
                 </button>
               </div>
             </div>
