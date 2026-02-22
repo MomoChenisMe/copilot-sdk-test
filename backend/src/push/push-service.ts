@@ -1,6 +1,9 @@
 import webpush from 'web-push';
 import type { PushStore } from './push-store.js';
 import type { SettingsStore } from '../settings/settings-store.js';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('push');
 
 export interface PushPayload {
   title: string;
@@ -31,10 +34,10 @@ export class PushService {
           );
         } catch (err: any) {
           if (err.statusCode === 410 || err.statusCode === 404) {
-            // Subscription expired or invalid — remove
             this.pushStore.deleteByEndpoint(sub.endpoint);
+          } else {
+            log.error(`Push failed: ${err.message || err}`);
           }
-          // Other errors: silently ignore (push is best-effort)
         }
       }),
     );

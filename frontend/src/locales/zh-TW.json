@@ -147,7 +147,15 @@
     "back": "返回",
     "general": {
       "language": "語言",
+      "notifications": "通知",
       "logout": "登出"
+    },
+    "notifications": {
+      "pushEnabled": "推播通知",
+      "denied": "通知已被封鎖，請在瀏覽器設定中啟用。",
+      "cron": "定時任務完成",
+      "stream": "AI 回覆完成",
+      "test": "發送測試通知"
     },
     "openspec": {
       "title": "OpenSpec SDD 工作流程",

@@ -147,7 +147,15 @@
     "back": "Back",
     "general": {
       "language": "Language",
+      "notifications": "Notifications",
       "logout": "Logout"
+    },
+    "notifications": {
+      "pushEnabled": "Push Notifications",
+      "denied": "Notifications blocked. Please enable in browser settings.",
+      "cron": "Cron job completion",
+      "stream": "AI reply completion",
+      "test": "Send test notification"
     },
     "openspec": {
       "title": "OpenSpec SDD Workflow",
