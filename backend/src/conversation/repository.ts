@@ -40,7 +40,19 @@ export class ConversationRepository {
 
   update(
     id: string,
-    updates: { title?: string; pinned?: boolean; sdkSessionId?: string; model?: string; cwd?: string; planFilePath?: string },
+    updates: {
+      title?: string;
+      pinned?: boolean;
+      sdkSessionId?: string;
+      model?: string;
+      cwd?: string;
+      planFilePath?: string;
+      cronEnabled?: boolean;
+      cronScheduleType?: string | null;
+      cronScheduleValue?: string | null;
+      cronPrompt?: string | null;
+      cronModel?: string | null;
+    },
   ): Conversation | null {
     const existing = this.getById(id);
     if (!existing) return null;
@@ -72,6 +84,26 @@ export class ConversationRepository {
       setClauses.push('plan_file_path = ?');
       params.push(updates.planFilePath);
     }
+    if (updates.cronEnabled !== undefined) {
+      setClauses.push('cron_enabled = ?');
+      params.push(updates.cronEnabled ? 1 : 0);
+    }
+    if (updates.cronScheduleType !== undefined) {
+      setClauses.push('cron_schedule_type = ?');
+      params.push(updates.cronScheduleType);
+    }
+    if (updates.cronScheduleValue !== undefined) {
+      setClauses.push('cron_schedule_value = ?');
+      params.push(updates.cronScheduleValue);
+    }
+    if (updates.cronPrompt !== undefined) {
+      setClauses.push('cron_prompt = ?');
+      params.push(updates.cronPrompt);
+    }
+    if (updates.cronModel !== undefined) {
+      setClauses.push('cron_model = ?');
+      params.push(updates.cronModel);
+    }
 
     params.push(id);
 
@@ -80,6 +112,14 @@ export class ConversationRepository {
       .run(...params);
 
     return this.getById(id);
+  }
+
+  listCronEnabled(): Conversation[] {
+    const rows = this.db
+      .prepare('SELECT * FROM conversations WHERE cron_enabled = 1 ORDER BY updated_at DESC')
+      .all() as RawConversation[];
+
+    return rows.map(mapConversation);
   }
 
   delete(id: string): boolean {
@@ -157,6 +197,11 @@ interface RawConversation {
   cwd: string;
   pinned: number;
   plan_file_path: string | null;
+  cron_enabled: number;
+  cron_schedule_type: string | null;
+  cron_schedule_value: string | null;
+  cron_prompt: string | null;
+  cron_model: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -179,6 +224,11 @@ function mapConversation(row: RawConversation): Conversation {
     cwd: row.cwd,
     pinned: row.pinned === 1,
     planFilePath: row.plan_file_path ?? null,
+    cronEnabled: row.cron_enabled === 1,
+    cronScheduleType: (row.cron_schedule_type as Conversation['cronScheduleType']) ?? null,
+    cronScheduleValue: row.cron_schedule_value ?? null,
+    cronPrompt: row.cron_prompt ?? null,
+    cronModel: row.cron_model ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

@@ -28,13 +28,15 @@ interface InputProps {
   currentCwd?: string;
   /** History of previous user inputs (most recent first) for ArrowUp/Down navigation */
   inputHistory?: string[];
+  /** Content rendered at the bottom-left of the input (e.g. mobile toolbar buttons) */
+  leftActions?: React.ReactNode;
 }
 
 export interface InputHandle {
   focus: () => void;
 }
 
-export const Input = forwardRef<InputHandle, InputProps>(function Input({ onSend, onAbort, isStreaming, disabled, slashCommands, onSlashCommand, enableAttachments, attachmentsDisabledReason, placeholder, statusText, enableAtFiles, currentCwd, inputHistory }, ref) {
+export const Input = forwardRef<InputHandle, InputProps>(function Input({ onSend, onAbort, isStreaming, disabled, slashCommands, onSlashCommand, enableAttachments, attachmentsDisabledReason, placeholder, statusText, enableAtFiles, currentCwd, inputHistory, leftActions }, ref) {
   const { t } = useTranslation();
   const [text, setText] = useState('');
   // Input history navigation state
@@ -563,6 +565,11 @@ export const Input = forwardRef<InputHandle, InputProps>(function Input({ onSend
           style={{ maxHeight: '200px', caretColor: highlightParts ? 'var(--color-text-primary)' : undefined }}
         />
       </div>
+      {leftActions && (
+        <div className="absolute bottom-2 left-2 flex items-center gap-1">
+          {leftActions}
+        </div>
+      )}
       <div className="absolute bottom-2 right-2 flex items-center gap-1">
         {statusText && (
           <span className="text-[10px] text-text-muted tabular-nums mr-1">{statusText}</span>

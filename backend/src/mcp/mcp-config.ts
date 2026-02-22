@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('mcp-config');
@@ -51,4 +51,40 @@ export function parseMcpConfig(filePath: string): McpServerConfig[] {
     }
     return [];
   }
+}
+
+function readConfigFile(filePath: string): McpConfigFile {
+  if (!existsSync(filePath)) {
+    return { mcpServers: {} };
+  }
+  try {
+    const raw = readFileSync(filePath, 'utf-8');
+    const config = JSON.parse(raw);
+    if (!config.mcpServers || typeof config.mcpServers !== 'object') {
+      return { mcpServers: {} };
+    }
+    return config as McpConfigFile;
+  } catch {
+    return { mcpServers: {} };
+  }
+}
+
+export function addToMcpConfig(filePath: string, server: McpServerConfig): void {
+  const config = readConfigFile(filePath);
+  const entry: Record<string, unknown> = { transport: server.transport };
+  if (server.command) entry.command = server.command;
+  if (server.args?.length) entry.args = server.args;
+  if (server.url) entry.url = server.url;
+  if (server.env && Object.keys(server.env).length > 0) entry.env = server.env;
+  config.mcpServers[server.name] = entry as McpConfigFile['mcpServers'][string];
+  writeFileSync(filePath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+  log.info({ name: server.name }, 'Saved MCP server to config');
+}
+
+export function removeFromMcpConfig(filePath: string, name: string): void {
+  const config = readConfigFile(filePath);
+  if (!(name in config.mcpServers)) return;
+  delete config.mcpServers[name];
+  writeFileSync(filePath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+  log.info({ name }, 'Removed MCP server from config');
 }

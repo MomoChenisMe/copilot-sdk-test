@@ -148,6 +148,18 @@ function migrate(db: Database.Database) {
     `);
   }
 
+  // Migration: add cron fields to conversations
+  const cronMigrations = [
+    'ALTER TABLE conversations ADD COLUMN cron_enabled INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE conversations ADD COLUMN cron_schedule_type TEXT',
+    'ALTER TABLE conversations ADD COLUMN cron_schedule_value TEXT',
+    'ALTER TABLE conversations ADD COLUMN cron_prompt TEXT',
+    'ALTER TABLE conversations ADD COLUMN cron_model TEXT',
+  ];
+  for (const sql of cronMigrations) {
+    try { db.exec(sql); } catch { /* column already exists */ }
+  }
+
   // Migration: add rich execution data columns to cron_history
   const cronHistoryMigrations = [
     'ALTER TABLE cron_history ADD COLUMN prompt TEXT',

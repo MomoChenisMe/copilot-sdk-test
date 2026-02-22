@@ -68,7 +68,7 @@ export class McpClient {
       throw new Error(`Not connected to MCP server: ${this.config.name}`);
     }
     const result = await this.client.listTools();
-    return result.tools.map((t) => ({
+    return (result?.tools ?? []).map((t) => ({
       name: t.name,
       description: t.description ?? '',
       inputSchema: t.inputSchema as Record<string, unknown>,

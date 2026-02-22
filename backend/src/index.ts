@@ -44,7 +44,6 @@ import { createTaskTools } from './copilot/tools/task-tools.js';
 import { createConfigRoutes, readBraveApiKey } from './config-routes.js';
 import { SettingsStore } from './settings/settings-store.js';
 import { createSettingsRoutes } from './settings/routes.js';
-import { createCronTools } from './copilot/tools/cron-tools.js';
 import { createDirectoryRoutes } from './directory/routes.js';
 import { createGithubRoutes } from './github/routes.js';
 import { createWebSearchTool } from './copilot/tools/web-search.js';
@@ -59,12 +58,8 @@ import { MemoryLlmCaller } from './memory/llm-caller.js';
 import { MemoryQualityGate } from './memory/memory-gating.js';
 import { LlmMemoryExtractor } from './memory/llm-extractor.js';
 import { MemoryCompactor } from './memory/memory-compaction.js';
-import { CronStore } from './cron/cron-store.js';
-import { CronScheduler } from './cron/cron-scheduler.js';
-import { createCronRoutes } from './cron/cron-routes.js';
-import { createAiTaskExecutor, createShellTaskExecutor } from './cron/cron-executors.js';
-import { BackgroundSessionRunner } from './cron/background-session-runner.js';
-import { createCronHandler } from './ws/handlers/cron.js';
+import { ConversationCronScheduler } from './cron/conversation-cron-scheduler.js';
+import { createCronConfigTools } from './copilot/tools/cron-config-tools.js';
 
 const log = createLogger('main');
 
@@ -209,7 +204,7 @@ export function createApp() {
   app.use('/api/conversations', authMiddleware, createConversationRoutes(repo));
   app.use('/api/copilot', authMiddleware, createModelsRoute(clientManager));
   app.use('/api/copilot', authMiddleware, createSdkUpdateRoute());
-  app.use('/api/mcp', authMiddleware, createMcpRoutes(mcpManager));
+  app.use('/api/mcp', authMiddleware, createMcpRoutes(mcpManager, mcpConfigPath));
   app.use('/api/copilot', authMiddleware, createCommandsRoute());
   app.use('/api/copilot', authMiddleware, createContextRoute({
     promptStore,
@@ -313,30 +308,61 @@ export function createApp() {
     res.json({ quota });
   });
 
-  // Cron scheduler with BackgroundSessionRunner (independent of StreamManager)
-  const cronStore = new CronStore(db);
-  const backgroundRunner = new BackgroundSessionRunner(sessionManager);
-  const cronHandler = createCronHandler();
-  const cronToolDeps = {
-    selfControlTools: [...selfControlTools],
-    getMcpTools: () => adaptMcpTools(mcpManager),
-    memoryTools: memoryConfig.enabled ? createMemoryTools(memoryStore, memoryIndex) : [],
-    webSearchTool,
-    taskTools,
-    skillStore: mergedSkillStore,
-  };
-  const cronScheduler = new CronScheduler(cronStore, {
-    executeAiTask: createAiTaskExecutor(backgroundRunner, cronToolDeps),
-    executeShellTask: createShellTaskExecutor(),
-  }, cronHandler.broadcast.bind(cronHandler));
-  cronScheduler.loadAll();
+  // Conversation-level cron scheduler
+  const convCronScheduler = new ConversationCronScheduler({
+    repo,
+    onTrigger: async (conversationId, prompt) => {
+      const conv = repo.getById(conversationId);
+      if (!conv) return;
+      await streamManager.startStream(conversationId, {
+        prompt,
+        sdkSessionId: conv.sdkSessionId,
+        model: conv.cronModel || conv.model,
+        cwd: conv.cwd,
+      });
+    },
+  });
+  convCronScheduler.loadAll();
 
-  // Add cron management tools to self-control tools (allows AI to manage cron jobs via chat)
-  const cronTools = createCronTools(cronStore, cronScheduler);
-  selfControlTools.push(...cronTools);
-  streamManager.updateSelfControlTools([...selfControlTools]);
+  // Add cron config tools (needs convCronScheduler so added after creation)
+  const cronConfigTools = createCronConfigTools({
+    repo,
+    sessionConversationMap: StreamManager.sessionConversationMap,
+    onCronUpdated: (conversationId, enabled) => {
+      const conv = repo.getById(conversationId);
+      if (!conv) return;
+      if (enabled) {
+        convCronScheduler.register(conv);
+      } else {
+        convCronScheduler.unregister(conversationId);
+      }
+    },
+  });
+  selfControlTools.push(...cronConfigTools);
+  log.info('Cron config tools enabled (configure_cron, get_cron_config)');
 
-  app.use('/api/cron', authMiddleware, createCronRoutes(cronStore, cronScheduler, repo));
+  // Mount conversation cron route (needs convCronScheduler so mounted after creation)
+  app.put('/api/conversations/:id/cron', authMiddleware, (req, res) => {
+    const { cronEnabled, cronScheduleType, cronScheduleValue, cronPrompt, cronModel } = req.body;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const updated = repo.update(id, {
+      cronEnabled,
+      cronScheduleType: cronScheduleType ?? null,
+      cronScheduleValue: cronScheduleValue ?? null,
+      cronPrompt: cronPrompt ?? null,
+      cronModel: cronModel ?? null,
+    });
+    if (!updated) {
+      res.status(404).json({ error: 'Conversation not found' });
+      return;
+    }
+    if (updated.cronEnabled) {
+      convCronScheduler.register(updated);
+    } else {
+      convCronScheduler.unregister(updated.id);
+    }
+    res.json(updated);
+  });
 
   // Config routes (Brave API key etc.) — mounted after streamManager so callback can update tools
   app.use('/api/config', authMiddleware, createConfigRoutes(promptStore, {
@@ -363,7 +389,6 @@ export function createApp() {
   // Register WS handlers
   const copilotHandler = createCopilotHandler(streamManager, repo);
   registerHandler('copilot', copilotHandler);
-  registerHandler('cron', cronHandler);
   registerHandler('terminal', createTerminalHandler(config.defaultCwd));
   registerHandler('cwd', createCwdHandler((newCwd) => {
     log.info({ cwd: newCwd }, 'Working directory changed');
@@ -418,7 +443,7 @@ export function createApp() {
   // Graceful shutdown
   setupGracefulShutdown([
     async () => {
-      await cronScheduler.shutdown();
+      await convCronScheduler.shutdown();
     },
     async () => {
       await streamManager.shutdownAll();

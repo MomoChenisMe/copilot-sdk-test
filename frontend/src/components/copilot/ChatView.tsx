@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Sparkles, Plus, X, MessageSquare } from 'lucide-react';
+import { Sparkles, Plus, X, MessageSquare, Clock } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { apiGet } from '../../lib/api';
 import { modelSupportsAttachments } from '../../lib/model-capabilities';
@@ -20,6 +20,8 @@ import PlanActToggle from './PlanActToggle';
 import { InlineUserInput } from './InlineUserInput';
 import { TaskPanel } from './TaskPanel';
 import { ThinkingIndicator } from './ThinkingIndicator';
+import { CronConfigPanel } from './CronConfigPanel';
+import { MobileToolbarPopup } from './MobileToolbarPopup';
 import type { SlashCommand } from '../shared/SlashCommandMenu';
 
 const INLINE_RESULT_TOOLS = ['bash', 'shell', 'execute', 'run'];
@@ -41,6 +43,7 @@ interface ChatViewProps {
   onUserInputResponse?: (requestId: string, answer: string, wasFreeform: boolean) => void;
   onOpenConversation?: (conversationId: string) => void;
   onExecutePlan?: (conversationId: string, planFilePath: string) => void;
+  onCronSaved?: () => void;
 }
 
 export function ChatView({
@@ -60,6 +63,7 @@ export function ChatView({
   onUserInputResponse,
   onOpenConversation,
   onExecutePlan,
+  onCronSaved,
 }: ChatViewProps) {
   const { t } = useTranslation();
   const activeConversationId = useAppStore((s) => s.activeConversationId);
@@ -85,6 +89,8 @@ export function ChatView({
   const setTabMode = useAppStore((s) => s.setTabMode);
   const setTabPlanMode = useAppStore((s) => s.setTabPlanMode);
   const setTabUserInputRequest = useAppStore((s) => s.setTabUserInputRequest);
+  const setTabCronConfigOpen = useAppStore((s) => s.setTabCronConfigOpen);
+  const cronConfigOpen = tab?.cronConfigOpen ?? false;
   const userInputRequest = tab?.userInputRequest ?? null;
   const tabMode = tab?.mode ?? 'copilot';
   const isTerminalMode = tabMode === 'terminal';
@@ -161,16 +167,16 @@ export function ChatView({
     }
   }, [messages, streamingText, toolRecords]);
 
-  // Auto-focus input on new tab (tabId changed + empty messages)
+  // Auto-focus input on tab switch, conversation switch, or after messages finish loading
+  const messagesLoaded = tab?.messagesLoaded ?? false;
   useEffect(() => {
-    if (tabId && messages.length === 0) {
-      // Delay to ensure Input component is fully mounted after tab switch
+    if (tabId) {
       const raf = requestAnimationFrame(() => {
         inputRef.current?.focus();
       });
       return () => cancelAnimationFrame(raf);
     }
-  }, [tabId, messages.length]);
+  }, [tabId, activeConversationId, messagesLoaded]);
 
   const scrollToBottom = useCallback(() => {
     scrollRef.current?.scrollTo({
@@ -356,14 +362,33 @@ export function ChatView({
         {/* Input area */}
         <div className="shrink-0 pb-4 pt-2 px-2 md:px-4">
           <div className="max-w-3xl mx-auto">
-            <div data-testid="bottom-toolbar-row" className="mb-2 flex flex-wrap items-center gap-2">
+            <div data-testid="bottom-toolbar-row" className="mb-2 hidden md:flex flex-wrap items-center gap-2">
               <ModelSelector currentModel={currentModel} onSelect={onModelChange} />
               {currentCwd && onCwdChange && (
                 <CwdSelector currentCwd={currentCwd} onCwdChange={onCwdChange} mode={tabMode} onModeChange={handleModeChange} />
               )}
               {tabId && <PlanActToggle planMode={planMode} onToggle={handlePlanModeToggle} disabled={isStreaming} />}
+              {tabId && (
+                <button
+                  onClick={() => activeConversationId && setTabCronConfigOpen(tabId, !cronConfigOpen)}
+                  disabled={!activeConversationId}
+                  className={`p-1.5 rounded-lg border transition-colors ${cronConfigOpen ? 'border-accent bg-accent-soft text-accent' : 'border-border text-text-muted hover:bg-bg-tertiary'} disabled:opacity-40 disabled:cursor-not-allowed`}
+                  title={t('cron.configTitle', 'Scheduled Task')}
+                >
+                  <Clock size={14} />
+                </button>
+              )}
             </div>
+            {cronConfigOpen && tabId && activeConversationId && (
+              <CronConfigPanel
+                conversationId={activeConversationId}
+                tabId={tabId}
+                onClose={() => setTabCronConfigOpen(tabId, false)}
+                onSaved={onCronSaved}
+              />
+            )}
             <Input
+              ref={inputRef}
               onSend={isTerminalMode ? handleTerminalSend : onSend}
               onAbort={onAbort}
               isStreaming={isStreaming}
@@ -377,6 +402,32 @@ export function ChatView({
               placeholder={isTerminalMode ? t('terminal.placeholder', '$ enter command...') : undefined}
               statusText={premiumQuota ? (premiumQuota.unlimited ? `${premiumQuota.used} PR` : `${premiumQuota.used}/${premiumQuota.total} PR`) : undefined}
               inputHistory={inputHistory}
+              leftActions={
+                <div className="flex md:hidden items-center gap-1">
+                  <MobileToolbarPopup
+                    currentModel={currentModel}
+                    onModelChange={onModelChange}
+                    currentCwd={currentCwd}
+                    onCwdChange={onCwdChange}
+                    tabMode={tabMode}
+                    onModeChange={handleModeChange}
+                    tabId={tabId}
+                    planMode={planMode}
+                    onPlanModeToggle={handlePlanModeToggle}
+                    isStreaming={isStreaming}
+                  />
+                  {tabId && (
+                    <button
+                      onClick={() => activeConversationId && setTabCronConfigOpen(tabId, !cronConfigOpen)}
+                      disabled={!activeConversationId}
+                      className={`p-1.5 rounded-lg transition-colors ${cronConfigOpen ? 'text-accent' : 'text-text-muted hover:text-text-primary'} disabled:opacity-40 disabled:cursor-not-allowed`}
+                      title={t('cron.configTitle', 'Scheduled Task')}
+                    >
+                      <Clock size={14} />
+                    </button>
+                  )}
+                </div>
+              }
             />
           </div>
         </div>
@@ -575,13 +626,31 @@ export function ChatView({
             />
           ) : (
             <>
-              <div data-testid="bottom-toolbar-row" className="mb-2 flex flex-wrap items-center gap-2">
+              <div data-testid="bottom-toolbar-row" className="mb-2 hidden md:flex flex-wrap items-center gap-2">
                 <ModelSelector currentModel={currentModel} onSelect={onModelChange} />
                 {currentCwd && onCwdChange && (
                   <CwdSelector currentCwd={currentCwd} onCwdChange={onCwdChange} mode={tabMode} onModeChange={handleModeChange} />
                 )}
                 {tabId && <PlanActToggle planMode={planMode} onToggle={handlePlanModeToggle} disabled={isStreaming} />}
+                {tabId && (
+                  <button
+                    onClick={() => activeConversationId && setTabCronConfigOpen(tabId, !cronConfigOpen)}
+                    disabled={!activeConversationId}
+                    className={`p-1.5 rounded-lg border transition-colors ${cronConfigOpen ? 'border-accent bg-accent-soft text-accent' : 'border-border text-text-muted hover:bg-bg-tertiary'} disabled:opacity-40 disabled:cursor-not-allowed`}
+                    title={t('cron.configTitle', 'Scheduled Task')}
+                  >
+                    <Clock size={14} />
+                  </button>
+                )}
               </div>
+              {cronConfigOpen && tabId && activeConversationId && (
+                <CronConfigPanel
+                  conversationId={activeConversationId}
+                  tabId={tabId}
+                  onClose={() => setTabCronConfigOpen(tabId, false)}
+                  onSaved={onCronSaved}
+                />
+              )}
               <Input
                 ref={inputRef}
                 onSend={isTerminalMode ? handleTerminalSend : onSend}
@@ -597,6 +666,32 @@ export function ChatView({
                 placeholder={isTerminalMode ? t('terminal.placeholder', '$ enter command...') : undefined}
                 statusText={premiumQuota ? (premiumQuota.unlimited ? `${premiumQuota.used} PR` : `${premiumQuota.used}/${premiumQuota.total} PR`) : undefined}
                 inputHistory={inputHistory}
+                leftActions={
+                  <div className="flex md:hidden items-center gap-1">
+                    <MobileToolbarPopup
+                      currentModel={currentModel}
+                      onModelChange={onModelChange}
+                      currentCwd={currentCwd}
+                      onCwdChange={onCwdChange}
+                      tabMode={tabMode}
+                      onModeChange={handleModeChange}
+                      tabId={tabId}
+                      planMode={planMode}
+                      onPlanModeToggle={handlePlanModeToggle}
+                      isStreaming={isStreaming}
+                    />
+                    {tabId && (
+                      <button
+                        onClick={() => activeConversationId && setTabCronConfigOpen(tabId, !cronConfigOpen)}
+                        disabled={!activeConversationId}
+                        className={`p-1.5 rounded-lg transition-colors ${cronConfigOpen ? 'text-accent' : 'text-text-muted hover:text-text-primary'} disabled:opacity-40 disabled:cursor-not-allowed`}
+                        title={t('cron.configTitle', 'Scheduled Task')}
+                      >
+                        <Clock size={14} />
+                      </button>
+                    )}
+                  </div>
+                }
               />
             </>
           )}

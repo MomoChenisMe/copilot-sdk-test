@@ -107,6 +107,11 @@ export interface Conversation {
   model: string;
   cwd: string;
   pinned: boolean;
+  cronEnabled: boolean;
+  cronScheduleType: 'cron' | 'interval' | null;
+  cronScheduleValue: string | null;
+  cronPrompt: string | null;
+  cronModel: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -143,6 +148,12 @@ export const conversationApi = {
 
   search: (query: string) =>
     apiGet<SearchResult[]>(`/api/conversations/search?q=${encodeURIComponent(query)}`),
+
+  updateCron: (id: string, cron: { cronEnabled: boolean; cronScheduleType?: string | null; cronScheduleValue?: string | null; cronPrompt?: string | null; cronModel?: string | null }) =>
+    apiPut<Conversation>(`/api/conversations/${id}/cron`, cron),
+
+  listCronEnabled: () =>
+    apiGet<Conversation[]>('/api/conversations?cronEnabled=true'),
 };
 
 // --- Copilot API ---
@@ -232,6 +243,14 @@ export interface DirectoryListResult {
   files?: FileEntry[];
 }
 
+export interface DirectorySearchEntry {
+  name: string;
+  path: string;
+  relativePath: string;
+  isDirectory: boolean;
+  score: number;
+}
+
 export const directoryApi = {
   list: (dirPath?: string, showHidden?: boolean, includeFiles?: boolean) => {
     const params = new URLSearchParams();
@@ -240,6 +259,12 @@ export const directoryApi = {
     if (includeFiles) params.set('includeFiles', 'true');
     const qs = params.toString();
     return apiGet<DirectoryListResult>(`/api/directories${qs ? `?${qs}` : ''}`);
+  },
+
+  search: (root: string, query: string, limit?: number) => {
+    const params = new URLSearchParams({ root, q: query });
+    if (limit) params.set('limit', String(limit));
+    return apiGet<{ results: DirectorySearchEntry[] }>(`/api/directories/search?${params.toString()}`);
   },
 };
 
@@ -264,73 +289,6 @@ export interface McpToolInfo {
   description: string;
   serverName: string;
 }
-
-// --- Cron API ---
-
-export interface CronJob {
-  id: string;
-  name: string;
-  type: 'ai' | 'shell';
-  scheduleType: 'cron' | 'interval' | 'once';
-  scheduleValue: string;
-  config: Record<string, unknown>;
-  enabled: boolean;
-  lastRun: string | null;
-  nextRun: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CronHistory {
-  id: string;
-  jobId: string;
-  startedAt: string;
-  finishedAt: string | null;
-  status: 'success' | 'error' | 'timeout' | 'running';
-  output: string | null;
-  prompt: string | null;
-  configSnapshot: Record<string, unknown> | null;
-  turnSegments: unknown[] | null;
-  toolRecords: unknown[] | null;
-  reasoning: string | null;
-  usage: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number } | null;
-  content: string | null;
-  createdAt: string;
-}
-
-export interface CronHistoryWithJob extends CronHistory {
-  jobName: string;
-}
-
-export type CronJobInput = Pick<CronJob, 'name' | 'type' | 'scheduleType' | 'scheduleValue' | 'config' | 'enabled'>;
-
-export const cronApi = {
-  listJobs: () => apiGet<{ jobs: CronJob[] }>('/api/cron/jobs'),
-  createJob: (input: CronJobInput) => apiPost<{ job: CronJob }>('/api/cron/jobs', input),
-  updateJob: (id: string, updates: Partial<CronJobInput>) => apiPut<{ job: CronJob }>(`/api/cron/jobs/${id}`, updates),
-  deleteJob: (id: string) => apiDelete<void>(`/api/cron/jobs/${id}`),
-  triggerJob: (id: string) => apiPost<void>(`/api/cron/jobs/${id}/trigger`),
-  getHistory: (id: string, limit?: number) => {
-    const params = limit ? `?limit=${limit}` : '';
-    return apiGet<{ history: CronHistory[] }>(`/api/cron/jobs/${id}/history${params}`);
-  },
-  getRecentHistory: (limit?: number) => {
-    const params = limit ? `?limit=${limit}` : '';
-    return apiGet<{ history: CronHistoryWithJob[] }>(`/api/cron/history/recent${params}`);
-  },
-  getUnreadCount: (since?: string) => {
-    const params = since ? `?since=${encodeURIComponent(since)}` : '';
-    return apiGet<{ unread: number; failed: number }>(`/api/cron/history/unread-count${params}`);
-  },
-  openAsConversation: (historyId: string) =>
-    apiPost<{ conversation: Conversation }>(`/api/cron/history/${historyId}/open-conversation`),
-  deleteHistoryEntry: (historyId: string) =>
-    apiDelete<void>(`/api/cron/history/${historyId}`),
-  clearHistory: (keep?: number) => {
-    const params = keep != null ? `?keep=${keep}` : '';
-    return apiDelete<{ deleted: number }>(`/api/cron/history${params}`);
-  },
-};
 
 // --- MCP API ---
 

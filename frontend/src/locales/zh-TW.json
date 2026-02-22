@@ -81,6 +81,7 @@
     "settingsDesc": "開啟設定",
     "newDesc": "新對話",
     "contextDesc": "顯示系統上下文資訊",
+    "cronDesc": "設定排程提示詞",
     "copilot": "Copilot",
     "systemSkills": "系統技能",
     "userSkills": "使用者技能"
@@ -133,9 +134,15 @@
       "openspec": "OpenSpec",
       "memory": "記憶",
       "skills": "技能",
-      "apiKeys": "API 金鑰",
+      "webSearch": "WebSearch",
       "mcp": "MCP",
       "cron": "定時任務"
+    },
+    "groups": {
+      "general": "一般",
+      "prompts": "提示詞",
+      "memory": "記憶",
+      "tools": "工具"
     },
     "back": "返回",
     "general": {
@@ -314,6 +321,13 @@
   },
   "cron": {
     "title": "定時任務",
+    "configTitle": "排程任務",
+    "enable": "啟用",
+    "disable": "停用",
+    "cronExpression": "Cron 表達式",
+    "interval": "間隔",
+    "saved": "排程已儲存",
+    "noActiveConversations": "沒有啟用排程的對話",
     "newJob": "+ 新增任務",
     "addJob": "新增任務",
     "noJobs": "尚無定時任務。點擊「+ 新增任務」來建立。",

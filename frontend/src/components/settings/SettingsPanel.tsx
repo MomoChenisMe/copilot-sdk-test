@@ -23,16 +23,39 @@ interface SettingsPanelProps {
   onLogout?: () => void;
 }
 
-const TABS: { id: TabId; labelKey: string }[] = [
-  { id: 'general', labelKey: 'settings.tabs.general' },
-  { id: 'system-prompt', labelKey: 'settings.tabs.systemPrompt' },
-  { id: 'profile', labelKey: 'settings.tabs.profile' },
-  { id: 'openspec', labelKey: 'settings.tabs.openspec' },
-  { id: 'memory', labelKey: 'settings.tabs.memory' },
-  { id: 'skills', labelKey: 'settings.tabs.skills' },
-  { id: 'api-keys', labelKey: 'settings.tabs.apiKeys' },
-  { id: 'mcp', labelKey: 'settings.tabs.mcp' },
+interface TabGroup {
+  groupKey: string;
+  tabs: { id: TabId; labelKey: string }[];
+}
+
+const TAB_GROUPS: TabGroup[] = [
+  {
+    groupKey: 'settings.groups.general',
+    tabs: [{ id: 'general', labelKey: 'settings.tabs.general' }],
+  },
+  {
+    groupKey: 'settings.groups.prompts',
+    tabs: [
+      { id: 'system-prompt', labelKey: 'settings.tabs.systemPrompt' },
+      { id: 'profile', labelKey: 'settings.tabs.profile' },
+      { id: 'openspec', labelKey: 'settings.tabs.openspec' },
+    ],
+  },
+  {
+    groupKey: 'settings.groups.memory',
+    tabs: [{ id: 'memory', labelKey: 'settings.tabs.memory' }],
+  },
+  {
+    groupKey: 'settings.groups.tools',
+    tabs: [
+      { id: 'skills', labelKey: 'settings.tabs.skills' },
+      { id: 'api-keys', labelKey: 'settings.tabs.webSearch' },
+      { id: 'mcp', labelKey: 'settings.tabs.mcp' },
+    ],
+  },
 ];
+
+const ALL_TABS = TAB_GROUPS.flatMap((g) => g.tabs);
 
 export function SettingsPanel({ open, onClose, onLanguageToggle, language, onLogout }: SettingsPanelProps) {
   const { t } = useTranslation();
@@ -68,46 +91,58 @@ export function SettingsPanel({ open, onClose, onLanguageToggle, language, onLog
         <h2 className="text-sm font-semibold text-text-primary">{t('settings.title')}</h2>
       </div>
 
-      {/* Mobile: horizontal tabs */}
+      {/* Mobile: horizontal tabs with group separators */}
       <div className="flex overflow-x-auto border-b border-border-subtle md:hidden">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            aria-selected={activeTab === tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`shrink-0 px-3 py-2 text-xs font-medium transition-colors ${
-              activeTab === tab.id
-                ? 'text-accent border-b-2 border-accent'
-                : 'text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            {t(tab.labelKey)}
-          </button>
+        {TAB_GROUPS.map((group, gi) => (
+          <div key={group.groupKey} className="flex items-center">
+            {gi > 0 && <span className="text-text-muted text-xs px-1">|</span>}
+            {group.tabs.map((tab) => (
+              <button
+                key={tab.id}
+                aria-selected={activeTab === tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`shrink-0 px-3 py-2 text-xs font-medium transition-colors ${
+                  activeTab === tab.id
+                    ? 'text-accent border-b-2 border-accent'
+                    : 'text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                {t(tab.labelKey)}
+              </button>
+            ))}
+          </div>
         ))}
       </div>
 
       {/* Desktop: sidebar + content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left sidebar navigation (desktop) */}
+        {/* Left sidebar navigation (desktop) — grouped */}
         <nav
           data-testid="settings-sidebar"
           className="hidden md:flex w-56 shrink-0 flex-col border-r border-border-subtle py-2 overflow-y-auto"
           role="tablist"
         >
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              role="tab"
-              aria-selected={activeTab === tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`text-left px-4 py-2 text-sm transition-colors ${
-                activeTab === tab.id
-                  ? 'text-accent bg-accent-soft font-medium'
-                  : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
-              }`}
-            >
-              {t(tab.labelKey)}
-            </button>
+          {TAB_GROUPS.map((group) => (
+            <div key={group.groupKey} className="mb-2">
+              <p className="px-4 py-1 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                {t(group.groupKey)}
+              </p>
+              {group.tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  role="tab"
+                  aria-selected={activeTab === tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`text-left w-full px-6 py-2 text-sm transition-colors ${
+                    activeTab === tab.id
+                      ? 'text-accent bg-accent-soft font-medium'
+                      : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+                  }`}
+                >
+                  {t(tab.labelKey)}
+                </button>
+              ))}
+            </div>
           ))}
         </nav>
 

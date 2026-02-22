@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { Plus, X, Clock as ClockIcon, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { useWebSocket } from '../../hooks/useWebSocket';
@@ -9,7 +10,6 @@ import { useBashMode } from '../../hooks/useBashMode';
 import { useModels } from '../../hooks/useModels';
 import { useSkills } from '../../hooks/useSkills';
 import { useGlobalShortcuts } from '../../hooks/useGlobalShortcuts';
-import { useCronNotifications } from '../../hooks/useCronNotifications';
 import { useQuota } from '../../hooks/useQuota';
 import { conversationApi, configApi } from '../../lib/api';
 import { skillsApi } from '../../lib/prompts-api';
@@ -21,10 +21,10 @@ import { TopBar } from './TopBar';
 import { TabBar } from './TabBar';
 import { ChatView } from '../copilot/ChatView';
 import { ArtifactsPanel } from '../copilot/ArtifactsPanel';
-import { CronPage } from '../cron/CronPage';
 import { SettingsPanel } from '../settings/SettingsPanel';
 import { ShortcutsPanel } from '../shared/ShortcutsPanel';
 import { SdkUpdateBanner } from '../copilot/SdkUpdateBanner';
+import { MobileDrawer } from './MobileDrawer';
 import { ToastContainer } from '../shared/ToastContainer';
 
 export function AppShell({ onLogout }: { onLogout: () => void }) {
@@ -34,6 +34,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   const { status, send, subscribe } = useWebSocket(onLogout);
   const {
     conversations,
+    refresh: refreshConversations,
     create: createConversation,
     update: updateConversation,
     remove: removeConversation,
@@ -45,9 +46,6 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   useSkills();
   useQuota();
 
-  // Subscribe to cron job notifications
-  useCronNotifications({ subscribe, send });
-
   const activeConversationId = useAppStore((s) => s.activeConversationId);
   const setActiveConversationId = useAppStore((s) => s.setActiveConversationId);
   const models = useAppStore((s) => s.models);
@@ -55,6 +53,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   // Tab state
   const activeTabId = useAppStore((s) => s.activeTabId);
   const tabs = useAppStore((s) => s.tabs);
+  const tabOrder = useAppStore((s) => s.tabOrder);
   const openTab = useAppStore((s) => s.openTab);
   const closeTab = useAppStore((s) => s.closeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
@@ -488,38 +487,6 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     [getActiveConversationId, updateConversation],
   );
 
-  // --- Cron tab management ---
-  const handleOpenCronTab = useCallback(() => {
-    const state = useAppStore.getState();
-    // Find existing cron tab
-    const existingCronTabId = state.tabOrder.find(
-      (tid) => state.tabs[tid]?.mode === 'cron',
-    );
-    if (existingCronTabId) {
-      setActiveTab(existingCronTabId);
-      setActiveConversationId(null);
-    } else {
-      openTab(null, 'Cron Jobs');
-      const newTabId = useAppStore.getState().activeTabId;
-      if (newTabId) {
-        useAppStore.getState().setTabMode(newTabId, 'cron');
-      }
-      setActiveConversationId(null);
-    }
-  }, [openTab, setActiveTab, setActiveConversationId]);
-
-  const handleOpenCronAsConversation = useCallback(
-    (conversationId: string) => {
-      openTab(conversationId, 'Cron Result');
-      const newTabId = useAppStore.getState().activeTabId;
-      if (newTabId) {
-        setActiveConversationId(conversationId);
-        handleSelectTab(newTabId);
-      }
-    },
-    [openTab, setActiveConversationId, handleSelectTab],
-  );
-
   // WebSocket reconnect: re-subscribe to all active streams
   useEffect(() => {
     if (status === 'connected') {
@@ -544,6 +511,10 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     document.addEventListener('settings:analyzeChanges', handler);
     return () => document.removeEventListener('settings:analyzeChanges', handler);
   }, [handleSend]);
+
+  // Mobile drawer state
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerConfirmDeleteId, setDrawerConfirmDeleteId] = useState<string | null>(null);
 
   // Shortcuts panel state
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -605,17 +576,18 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         onHomeClick={handleHomeClick}
         onSettingsClick={() => setSettingsOpen(!settingsOpen)}
         onShortcutsClick={() => setShortcutsOpen(true)}
+        onMenuClick={() => setDrawerOpen(true)}
       />
 
       <SdkUpdateBanner />
 
+      <div className="hidden md:block">
       <TabBar
         onNewTab={handleNewTab}
         onSelectTab={handleSelectTab}
         onCloseTab={handleCloseTab}
         onSwitchConversation={handleSwitchConversation}
         onDeleteConversation={handleDeleteConversation}
-        onOpenCronTab={handleOpenCronTab}
         onOpenConversation={(conversationId) => {
           const conv = conversations.find((c) => c.id === conversationId);
           openTab(conversationId, conv?.title || 'Chat');
@@ -630,68 +602,199 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
           title: c.title,
           pinned: c.pinned,
           updatedAt: c.updatedAt,
+          cronEnabled: (c as any).cronEnabled,
         }))}
       />
+      </div>
+
+      <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)}>
+        <div className="flex flex-col h-full">
+          {/* Header: New Tab + actions */}
+          <div className="p-3 border-b border-border flex items-center gap-2">
+            <button
+              onClick={() => { handleNewTab(); setDrawerOpen(false); }}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-sm font-medium rounded-lg bg-accent text-white hover:bg-accent/90 transition-colors"
+            >
+              <Plus size={14} />
+              {t('tabBar.newTab', 'New Tab')}
+            </button>
+          </div>
+
+          {/* Open tabs */}
+          <div className="px-3 pt-3 pb-1">
+            <span className="text-[10px] uppercase tracking-wider text-text-muted font-semibold">
+              {t('tabBar.copilot', 'Tabs')} ({tabOrder.length})
+            </span>
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {tabOrder.map((tid) => {
+              const tab = tabs[tid];
+              if (!tab) return null;
+              const isActive = tid === activeTabId;
+              return (
+                <div
+                  key={tid}
+                  className={`flex items-center gap-2 px-3 py-2.5 border-b border-border-subtle transition-colors ${
+                    isActive ? 'bg-accent/8 border-l-2 border-l-accent' : 'hover:bg-bg-tertiary'
+                  }`}
+                >
+                  <button
+                    onClick={() => { handleSelectTab(tid); setDrawerOpen(false); }}
+                    className={`flex-1 text-left text-sm truncate flex items-center gap-1.5 ${
+                      isActive ? 'text-text-primary font-medium' : 'text-text-secondary'
+                    }`}
+                  >
+                    {tab.conversationId && conversations.find((c) => c.id === tab.conversationId)?.cronEnabled && (
+                      <ClockIcon size={10} className="shrink-0 text-accent" />
+                    )}
+                    <span className="truncate">{tab.title || t('tabBar.newTab', 'New Tab')}</span>
+                  </button>
+                  {tabOrder.length > 1 && (
+                    <button
+                      onClick={() => handleCloseTab(tid)}
+                      className="shrink-0 p-1 rounded text-text-muted hover:text-error hover:bg-error/10 transition-colors"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* History section */}
+          <div className="border-t border-border">
+            <div className="px-3 pt-3 pb-1">
+              <span className="text-[10px] uppercase tracking-wider text-text-muted font-semibold">
+                {t('chat.recentConversations', 'Recent Conversations')}
+              </span>
+            </div>
+            <div className="max-h-48 overflow-y-auto">
+              {conversations.slice(0, 15).map((conv) => {
+                if (drawerConfirmDeleteId === conv.id) {
+                  return (
+                    <div
+                      key={conv.id}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm bg-error/10"
+                    >
+                      <span className="flex-1 truncate text-text-secondary">{t('sidebar.deleteConfirm', 'Delete?')}</span>
+                      <button
+                        onClick={() => {
+                          handleDeleteConversation(conv.id);
+                          setDrawerConfirmDeleteId(null);
+                        }}
+                        className="px-2 py-0.5 text-xs rounded bg-error text-white hover:bg-error/80 transition-colors"
+                      >
+                        {t('common.delete', 'Delete')}
+                      </button>
+                      <button
+                        onClick={() => setDrawerConfirmDeleteId(null)}
+                        className="px-2 py-0.5 text-xs rounded bg-bg-tertiary text-text-secondary hover:bg-bg-secondary transition-colors"
+                      >
+                        {t('common.cancel', 'Cancel')}
+                      </button>
+                    </div>
+                  );
+                }
+                return (
+                  <div
+                    key={conv.id}
+                    className="group flex items-center w-full text-left px-4 py-2.5 text-sm text-text-secondary hover:bg-bg-tertiary transition-colors"
+                  >
+                    <button
+                      className="flex-1 text-left truncate"
+                      onClick={() => {
+                        if (activeTabId) {
+                          handleSwitchConversation(activeTabId, conv.id);
+                        } else {
+                          const c = conversations.find((cc) => cc.id === conv.id);
+                          openTab(conv.id, c?.title || 'Chat');
+                          const newTabId = useAppStore.getState().activeTabId;
+                          if (newTabId) handleSelectTab(newTabId);
+                        }
+                        setDrawerOpen(false);
+                      }}
+                    >
+                      {conv.cronEnabled && <ClockIcon size={10} className="inline mr-1.5 text-accent" />}
+                      {conv.title}
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDrawerConfirmDeleteId(conv.id);
+                      }}
+                      className="shrink-0 p-1 rounded text-text-muted hover:text-error hover:bg-error/10 transition-colors"
+                      aria-label={t('sidebar.deleteConversation', 'Delete conversation')}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                );
+              })}
+              {conversations.length === 0 && (
+                <p className="px-4 py-3 text-xs text-text-muted">{t('sidebar.noConversations', 'No conversations yet')}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </MobileDrawer>
 
       <div className="flex-1 overflow-hidden relative">
-        {activeTab?.mode === 'cron' ? (
-          <CronPage onOpenConversation={handleOpenCronAsConversation} />
-        ) : (
-          /* Main content area: flex row for ChatView + ArtifactsPanel */
-          <div className="h-full flex flex-row">
-            {/* Chat area — shrinks when artifacts panel is open on desktop */}
-            <div className="flex-1 flex flex-col min-w-0 h-full">
-              <ChatView
-                tabId={activeTabId}
-                onNewConversation={handleNewTab}
-                onSend={handleSend}
-                onAbort={handleAbort}
-                onBashSend={handleBashSend}
-                isStreaming={activeTab?.isStreaming ?? false}
-                disabled={!activeTabId}
-                currentModel={activeConversation?.model || defaultModel}
-                onModelChange={handleModelChange}
-                currentCwd={activeConversation?.cwd || cwd}
-                onCwdChange={handleCwdChange}
-                onClearConversation={handleClearConversation}
-                onSettingsOpen={() => setSettingsOpen(true)}
-                onUserInputResponse={(requestId, answer, wasFreeform) => {
-                  const tab = activeTabId ? useAppStore.getState().tabs[activeTabId] : null;
-                  if (tab?.conversationId) {
-                    sendUserInputResponse(tab.conversationId, requestId, answer, wasFreeform);
-                  }
-                }}
-                onOpenConversation={(conversationId) => {
-                  const conv = conversations.find((c) => c.id === conversationId);
-                  openTab(conversationId, conv?.title || 'Chat');
-                  const newActiveTabId = useAppStore.getState().activeTabId;
-                  if (newActiveTabId) {
-                    handleSelectTab(newActiveTabId);
-                  }
-                }}
-                onExecutePlan={handleExecutePlan}
-              />
-            </div>
-
-            {/* Artifacts panel — full overlay on mobile, side panel on desktop */}
-            {activeTab?.artifactsPanelOpen && activeTab.artifacts.length > 0 && (
-              <ArtifactsPanel
-                artifacts={activeTab.artifacts}
-                activeArtifactId={activeTab.activeArtifactId}
-                onSelectArtifact={(id) => {
-                  if (activeTabId) {
-                    useAppStore.getState().setTabActiveArtifact(activeTabId, id);
-                  }
-                }}
-                onClose={() => {
-                  if (activeTabId) {
-                    useAppStore.getState().setTabArtifactsPanelOpen(activeTabId, false);
-                  }
-                }}
-              />
-            )}
+        {/* Main content area: flex row for ChatView + ArtifactsPanel */}
+        <div className="h-full flex flex-row">
+          {/* Chat area — shrinks when artifacts panel is open on desktop */}
+          <div className="flex-1 flex flex-col min-w-0 h-full">
+            <ChatView
+              tabId={activeTabId}
+              onNewConversation={handleNewTab}
+              onSend={handleSend}
+              onAbort={handleAbort}
+              onBashSend={handleBashSend}
+              isStreaming={activeTab?.isStreaming ?? false}
+              disabled={!activeTabId}
+              currentModel={activeConversation?.model || defaultModel}
+              onModelChange={handleModelChange}
+              currentCwd={activeConversation?.cwd || cwd}
+              onCwdChange={handleCwdChange}
+              onClearConversation={handleClearConversation}
+              onSettingsOpen={() => setSettingsOpen(true)}
+              onUserInputResponse={(requestId, answer, wasFreeform) => {
+                const tab = activeTabId ? useAppStore.getState().tabs[activeTabId] : null;
+                if (tab?.conversationId) {
+                  sendUserInputResponse(tab.conversationId, requestId, answer, wasFreeform);
+                }
+              }}
+              onOpenConversation={(conversationId) => {
+                const conv = conversations.find((c) => c.id === conversationId);
+                openTab(conversationId, conv?.title || 'Chat');
+                const newActiveTabId = useAppStore.getState().activeTabId;
+                if (newActiveTabId) {
+                  handleSelectTab(newActiveTabId);
+                }
+              }}
+              onExecutePlan={handleExecutePlan}
+              onCronSaved={refreshConversations}
+            />
           </div>
-        )}
+
+          {/* Artifacts panel — full overlay on mobile, side panel on desktop */}
+          {activeTab?.artifactsPanelOpen && activeTab.artifacts.length > 0 && (
+            <ArtifactsPanel
+              artifacts={activeTab.artifacts}
+              activeArtifactId={activeTab.activeArtifactId}
+              onSelectArtifact={(id) => {
+                if (activeTabId) {
+                  useAppStore.getState().setTabActiveArtifact(activeTabId, id);
+                }
+              }}
+              onClose={() => {
+                if (activeTabId) {
+                  useAppStore.getState().setTabArtifactsPanelOpen(activeTabId, false);
+                }
+              }}
+            />
+          )}
+        </div>
       </div>
 
       <SettingsPanel

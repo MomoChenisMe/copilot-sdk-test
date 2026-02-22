@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Sun, Moon, Settings, Keyboard } from 'lucide-react';
+import { Sun, Moon, Settings, Keyboard, Menu } from 'lucide-react';
 import type { WsStatus } from '../../lib/ws-types';
 import type { Theme } from '../../store';
 import { ConnectionBadge } from '../shared/ConnectionBadge';
@@ -12,12 +12,24 @@ interface TopBarProps {
   onHomeClick: () => void;
   onSettingsClick?: () => void;
   onShortcutsClick?: () => void;
+  onMenuClick?: () => void;
 }
 
-export function TopBar({ title, status, theme, onThemeToggle, onHomeClick, onSettingsClick, onShortcutsClick }: TopBarProps) {
+export function TopBar({ title, status, theme, onThemeToggle, onHomeClick, onSettingsClick, onShortcutsClick, onMenuClick }: TopBarProps) {
   const { t } = useTranslation();
   return (
     <header className="h-12 flex items-center gap-2 px-4 bg-bg-primary border-b border-border-subtle shrink-0">
+      {/* Left: Hamburger menu (mobile only) */}
+      {onMenuClick && (
+        <button
+          onClick={onMenuClick}
+          className="md:hidden p-2 rounded-lg hover:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
+          aria-label={t('topBar.menu', 'Menu')}
+        >
+          <Menu size={18} />
+        </button>
+      )}
+
       {/* Center: Title (clickable → home) */}
       <button
         onClick={onHomeClick}

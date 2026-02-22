@@ -6,6 +6,11 @@ export interface Conversation {
   cwd: string;
   pinned: boolean;
   planFilePath: string | null;
+  cronEnabled: boolean;
+  cronScheduleType: 'cron' | 'interval' | null;
+  cronScheduleValue: string | null;
+  cronPrompt: string | null;
+  cronModel: string | null;
   createdAt: string;
   updatedAt: string;
 }

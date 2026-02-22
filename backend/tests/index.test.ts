@@ -51,7 +51,12 @@ vi.mock('../src/conversation/db.js', () => ({
 }));
 
 vi.mock('../src/conversation/repository.js', () => ({
-  ConversationRepository: vi.fn(),
+  ConversationRepository: vi.fn(() => ({
+    listCronEnabled: vi.fn(() => []),
+    getById: vi.fn(),
+    update: vi.fn(),
+    addMessage: vi.fn(),
+  })),
 }));
 
 vi.mock('../src/auth/session.js', () => ({

@@ -29,7 +29,12 @@ export function createConversationRoutes(repo: ConversationRepository): Router {
     res.status(201).json(conversation);
   });
 
-  router.get('/', (_req, res) => {
+  router.get('/', (req, res) => {
+    if (req.query.cronEnabled === 'true') {
+      const conversations = repo.listCronEnabled();
+      res.json(conversations);
+      return;
+    }
     const conversations = repo.list();
     res.json(conversations);
   });

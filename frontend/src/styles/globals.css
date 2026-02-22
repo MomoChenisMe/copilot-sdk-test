@@ -194,15 +194,31 @@ html[data-theme="dark"] .hljs-deletion { color: #ffdcd7; background-color: rgba(
    (@layer utilities) can properly override these.
    ============================================ */
 
-/* Override @tailwindcss/typography prose margins on pre elements */
-.prose pre {
-  margin: 0;
-  padding: 0;
-  background: transparent;
-  border-radius: 0;
+/* Override @tailwindcss/typography prose code block backgrounds.
+   Placed OUTSIDE @layer so it beats the typography plugin's component-layer rules.
+   Only background resets here — padding/margin stay in @layer base so utilities can override. */
+.prose pre code,
+.prose code.hljs,
+pre code.hljs {
+  background-color: transparent;
 }
 
 @layer base {
+  /* Override @tailwindcss/typography prose margins on pre elements.
+     Inside @layer base so Tailwind utilities (px-4 py-2) can override padding. */
+  .prose pre {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+  }
+
+  .prose pre code,
+  pre code.hljs {
+    padding: 0;
+    margin: 0;
+  }
+
   *,
   *::before,
   *::after {

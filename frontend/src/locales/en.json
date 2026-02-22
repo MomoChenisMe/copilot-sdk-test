@@ -81,6 +81,7 @@
     "settingsDesc": "Open settings",
     "newDesc": "New conversation",
     "contextDesc": "Show system context info",
+    "cronDesc": "Configure scheduled cron prompt",
     "copilot": "Copilot",
     "systemSkills": "System Skills",
     "userSkills": "User Skills"
@@ -133,9 +134,15 @@
       "openspec": "OpenSpec",
       "memory": "Memory",
       "skills": "Skills",
-      "apiKeys": "API Keys",
+      "webSearch": "WebSearch",
       "mcp": "MCP",
       "cron": "Cron Jobs"
+    },
+    "groups": {
+      "general": "General",
+      "prompts": "Prompts",
+      "memory": "Memory",
+      "tools": "Tools"
     },
     "back": "Back",
     "general": {
@@ -314,6 +321,13 @@
   },
   "cron": {
     "title": "Cron Jobs",
+    "configTitle": "Scheduled Task",
+    "enable": "Enable",
+    "disable": "Disable",
+    "cronExpression": "Cron Expression",
+    "interval": "Interval",
+    "saved": "Cron saved",
+    "noActiveConversations": "No conversations with active cron",
     "newJob": "+ New Job",
     "addJob": "Add Job",
     "noJobs": "No cron jobs configured. Click \"+ New Job\" to create one.",

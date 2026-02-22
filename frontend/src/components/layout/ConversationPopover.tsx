@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { Search, Plus, Trash2 } from 'lucide-react';
+import { Search, Plus, Trash2, Clock } from 'lucide-react';
 
 export interface ConversationPopoverProps {
   open: boolean;
   onClose: () => void;
-  conversations: Array<{ id: string; title: string; pinned?: boolean; updatedAt?: string }>;
+  conversations: Array<{ id: string; title: string; pinned?: boolean; updatedAt?: string; cronEnabled?: boolean }>;
   currentConversationId: string | null;
   onSelect: (conversationId: string) => void;
   onNew: () => void;
@@ -176,6 +176,7 @@ export function ConversationPopover({
         onMouseEnter={() => setHoveredId(conv.id)}
         onMouseLeave={() => setHoveredId(null)}
       >
+        {conv.cronEnabled && <Clock size={10} className="shrink-0 text-accent" />}
         <span className="block truncate flex-1">{conv.title}</span>
         {onDelete && isHovered && (
           <button

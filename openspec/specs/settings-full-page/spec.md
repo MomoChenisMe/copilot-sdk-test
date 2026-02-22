@@ -1,24 +1,35 @@
-## MODIFIED Requirements
-
 ### Requirement: 設定面板 Tab 結構
 
-設定面板 MUST 包含以下 tabs（從 8 個重組為 8 個，移除 Agent 規則、新增 OpenSpec）：
-1. **一般** — 語言、SDK 版本、登出
-2. **系統提示詞** — 編輯/重設系統提示詞
-3. **個人檔案** — 編輯統一個人檔案（含身份、Agent 規則、偏好設定）
-4. **記憶** — 自動記憶 + LLM Intelligence（移除偏好/專案/解決方案）
-5. **OpenSpec** — OpenSpec SDD 工作流程開關 + OPENSPEC_SDD.md 編輯器
-6. **技能** — 技能管理
-7. **API 金鑰** — API 金鑰管理
-8. **MCP** — MCP 伺服器管理
+設定面板 MUST 將 tab 分為 4 個邏輯群組：
 
-系統 MUST NOT 顯示 "Agent 規則" tab。
-OpenSpec SDD toggle 和編輯器 MUST 從原 Agent 規則 tab 搬移到獨立的 OpenSpec tab。
+| 群組 | 群組標籤 | 子項目 |
+|------|----------|--------|
+| 一般 | 一般 | general |
+| 提示詞 | 提示詞 | system-prompt, profile, openspec |
+| 記憶 | 記憶 | memory |
+| 工具 | 工具 | skills, WebSearch (原 api-keys), mcp |
 
-#### Scenario: 設定面板 Tab 列表
+原「API 金鑰」tab MUST 重命名為「WebSearch」。
 
-- **WHEN** 使用者開啟設定面板
-- **THEN** 顯示 8 個 tabs，包含 "OpenSpec" 但不包含 "Agent 規則"
+#### Scenario: 設定面板 Tab 分組顯示（桌面版）
+
+- **WHEN** 使用者在桌面版開啟設定面板
+- **THEN** 左側 sidebar MUST 顯示 4 個群組
+- **AND** 每個群組 MUST 有灰色小標題（`text-xs uppercase text-text-muted tracking-wider`）
+- **AND** 群組內子項目 MUST 縮排顯示（`px-6`）
+- **AND** 活躍的子項目 MUST 以 accent 色高亮（`text-accent bg-accent-soft`）
+
+#### Scenario: 設定面板 Tab 分組顯示（手機版）
+
+- **WHEN** 使用者在手機版開啟設定面板
+- **THEN** 頂部水平 tab 列 MUST 以 `|` 分隔符區分群組
+- **AND** 所有子項目 MUST 可水平捲動選取
+
+#### Scenario: WebSearch Tab 取代 API 金鑰
+
+- **WHEN** 使用者在設定面板的工具群組中
+- **THEN** MUST 看到「WebSearch」而非「API 金鑰」
+- **AND** 功能內容不變（仍為 Brave Search API key 管理）
 
 #### Scenario: OpenSpec Tab 內容
 

@@ -80,6 +80,7 @@ export interface TabState {
   activeArtifactId: string | null;
   artifactsPanelOpen: boolean;
   tasks: TaskItem[];
+  cronConfigOpen: boolean;
 }
 
 export interface AppState {
@@ -241,6 +242,7 @@ export interface AppState {
   setTabShowPlanCompletePrompt: (tabId: string, show: boolean) => void;
   setTabPlanFilePath: (tabId: string, path: string | null) => void;
   setTabUserInputRequest: (tabId: string, request: UserInputRequest | null) => void;
+  setTabCronConfigOpen: (tabId: string, open: boolean) => void;
 
   // Actions — Per-tab tasks
   setTabTasks: (tabId: string, tasks: TaskItem[]) => void;
@@ -255,13 +257,6 @@ export interface AppState {
   toasts: ToastItem[];
   addToast: (toast: Omit<ToastItem, 'id'>) => void;
   removeToast: (id: string) => void;
-
-  // Cron badge
-  cronUnreadCount: number;
-  cronFailedCount: number;
-  setCronBadge: (unread: number, failed: number) => void;
-  cronRefreshTrigger: number;
-  triggerCronRefresh: () => void;
 
   // Premium quota (global, not per-tab)
   premiumQuota: { used: number; total: number; resetDate: string | null; unlimited: boolean } | null;
@@ -548,6 +543,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeArtifactId: null,
       artifactsPanelOpen: false,
       tasks: [],
+      cronConfigOpen: false,
     };
     const newTabs = { ...state.tabs, [tabId]: tab };
     const newOrder = [...state.tabOrder, tabId];
@@ -618,6 +614,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeArtifactId: null,
       artifactsPanelOpen: false,
       tasks: [],
+      cronConfigOpen: false,
     };
     const newTabs = { ...state.tabs, [tabId]: updatedTab };
     set({ tabs: newTabs });
@@ -665,6 +662,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           artifacts: [],
           activeArtifactId: null,
           artifactsPanelOpen: false,
+          cronConfigOpen: false,
           tasks: [],
         };
         tabOrder.push(tabId);
@@ -938,6 +936,18 @@ export const useAppStore = create<AppState>((set, get) => ({
       };
     }),
 
+  setTabCronConfigOpen: (tabId, open) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return {
+        tabs: {
+          ...state.tabs,
+          [tabId]: { ...tab, cronConfigOpen: open },
+        },
+      };
+    }),
+
   // Artifacts actions
   addTabArtifacts: (tabId, artifacts) =>
     set((state) => {
@@ -1014,13 +1024,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       toasts: state.toasts.filter((t) => t.id !== id),
     })),
-
-  // Cron badge
-  cronUnreadCount: 0,
-  cronFailedCount: 0,
-  setCronBadge: (unread, failed) => set({ cronUnreadCount: unread, cronFailedCount: failed }),
-  cronRefreshTrigger: 0,
-  triggerCronRefresh: () => set((s) => ({ cronRefreshTrigger: s.cronRefreshTrigger + 1 })),
 
   // Premium quota (global)
   premiumQuota: null,

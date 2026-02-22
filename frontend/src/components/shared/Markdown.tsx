@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { Children, useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -9,6 +9,26 @@ import { useLightbox } from './LightboxContext';
 
 interface MarkdownProps {
   content: string;
+}
+
+/** Strip leading/trailing newlines from code block children to avoid blank lines in <pre> */
+function trimCodeChildren(children: React.ReactNode): React.ReactNode {
+  const arr = Children.toArray(children);
+  if (arr.length === 0) return children;
+
+  // Trim leading newlines from first child
+  if (typeof arr[0] === 'string') {
+    arr[0] = arr[0].replace(/^\n+/, '');
+    if (arr[0] === '') arr.shift();
+  }
+
+  // Trim trailing newlines from last child
+  if (arr.length > 0 && typeof arr[arr.length - 1] === 'string') {
+    arr[arr.length - 1] = (arr[arr.length - 1] as string).replace(/\n+$/, '');
+    if (arr[arr.length - 1] === '') arr.pop();
+  }
+
+  return arr;
 }
 
 function CodeBlock({ className, children, ...props }: React.HTMLAttributes<HTMLElement> & { children?: React.ReactNode }) {
@@ -36,7 +56,7 @@ function CodeBlock({ className, children, ...props }: React.HTMLAttributes<HTMLE
   const lang = className?.split(/\s+/).find(c => c.startsWith('language-'))?.replace('language-', '') || '';
 
   return (
-    <div className="group rounded-xl overflow-hidden border border-border my-4">
+    <div className="group rounded-xl overflow-hidden border border-border my-4 bg-code-bg">
       <div className="flex items-center justify-between px-4 py-2 bg-code-header-bg">
         <span className="text-xs text-text-muted font-mono">{lang}</span>
         <button
@@ -47,9 +67,9 @@ function CodeBlock({ className, children, ...props }: React.HTMLAttributes<HTMLE
           {copied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
         </button>
       </div>
-      <pre className="bg-code-bg px-4 py-3 overflow-x-auto">
-        <code className={className} {...props}>
-          {children}
+      <pre className="bg-code-bg px-4 py-2 overflow-x-auto">
+        <code className={`${className} !p-0 !bg-transparent`} {...props}>
+          {trimCodeChildren(children)}
         </code>
       </pre>
     </div>

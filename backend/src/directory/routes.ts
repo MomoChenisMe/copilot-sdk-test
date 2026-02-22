@@ -95,5 +95,121 @@ export function createDirectoryRoutes(): Router {
     res.json(result);
   });
 
+  // ── Fuzzy file search across entire project ──
+
+  const IGNORE_DIRS = new Set([
+    '.git', 'node_modules', 'dist', 'build', '.next', '__pycache__',
+    '.cache', '.DS_Store', '.angular', '.vite', 'coverage', '.turbo',
+  ]);
+
+  const MAX_SEARCH_DEPTH = 8;
+  const MAX_SEARCH_FILES = 10_000;
+
+  interface SearchEntry {
+    name: string;
+    path: string;
+    relativePath: string;
+    isDirectory: boolean;
+    score: number;
+  }
+
+  function walkAndScore(
+    rootDir: string,
+    query: string,
+    limit: number,
+  ): SearchEntry[] {
+    const lowerQuery = query.toLowerCase();
+    const results: SearchEntry[] = [];
+    let scanned = 0;
+
+    function walk(dir: string, depth: number) {
+      if (depth > MAX_SEARCH_DEPTH || scanned >= MAX_SEARCH_FILES) return;
+
+      let entries: fs.Dirent[];
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+
+      for (const entry of entries) {
+        if (scanned >= MAX_SEARCH_FILES) return;
+        scanned++;
+
+        if (IGNORE_DIRS.has(entry.name)) continue;
+        if (entry.name.startsWith('.') && entry.isDirectory()) continue;
+
+        const fullPath = path.join(dir, entry.name);
+        const relativePath = path.relative(rootDir, fullPath);
+        const lowerName = entry.name.toLowerCase();
+        const lowerRelative = relativePath.toLowerCase();
+
+        const isDir = entry.isDirectory();
+
+        // Skip binary files
+        if (!isDir && BINARY_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
+          continue;
+        }
+
+        // Score: exact filename match > filename contains > path contains
+        let score = 0;
+        if (lowerName === lowerQuery) {
+          score = 100;
+        } else if (lowerName.includes(lowerQuery)) {
+          score = 80;
+        } else if (lowerRelative.includes(lowerQuery)) {
+          score = 60;
+        }
+
+        if (score > 0) {
+          results.push({ name: entry.name, path: fullPath, relativePath, isDirectory: isDir, score });
+        }
+
+        if (isDir) {
+          walk(fullPath, depth + 1);
+        }
+      }
+    }
+
+    walk(rootDir, 0);
+
+    // Sort by score desc, then by name asc
+    results.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+
+    return results.slice(0, limit);
+  }
+
+  router.get('/search', (req, res) => {
+    const root = req.query.root as string | undefined;
+    const query = req.query.q as string | undefined;
+    const limit = Math.min(parseInt(req.query.limit as string) || 30, 100);
+
+    if (!root) {
+      res.status(400).json({ error: 'root parameter is required' });
+      return;
+    }
+
+    const resolvedRoot = path.resolve(root);
+
+    try {
+      const stat = fs.statSync(resolvedRoot);
+      if (!stat.isDirectory()) {
+        res.status(400).json({ error: 'root is not a directory' });
+        return;
+      }
+    } catch {
+      res.status(400).json({ error: 'root does not exist' });
+      return;
+    }
+
+    if (!query || query.trim() === '') {
+      res.json({ results: [] });
+      return;
+    }
+
+    const results = walkAndScore(resolvedRoot, query.trim(), limit);
+    res.json({ results });
+  });
+
   return router;
 }

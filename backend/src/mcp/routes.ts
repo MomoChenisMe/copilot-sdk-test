@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import type { McpManager } from './mcp-manager.js';
+import { addToMcpConfig, removeFromMcpConfig } from './mcp-config.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('mcp-routes');
 
-export function createMcpRoutes(manager: McpManager): Router {
+export function createMcpRoutes(manager: McpManager, configPath?: string): Router {
   const router = Router();
 
   router.get('/servers', (_req, res) => {
@@ -22,6 +23,9 @@ export function createMcpRoutes(manager: McpManager): Router {
     try {
       const { name, transport, command, args, url, env } = req.body;
       await manager.startServer({ name, transport, command, args, url, env });
+      if (configPath) {
+        addToMcpConfig(configPath, { name, transport, command, args, url, env });
+      }
       res.json({ ok: true });
     } catch (err: any) {
       log.error('Failed to add MCP server:', err);
@@ -32,6 +36,9 @@ export function createMcpRoutes(manager: McpManager): Router {
   router.delete('/servers/:name', async (req, res) => {
     try {
       await manager.stopServer(req.params.name);
+      if (configPath) {
+        removeFromMcpConfig(configPath, req.params.name);
+      }
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
