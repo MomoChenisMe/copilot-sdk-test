@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import Database from 'better-sqlite3';
 import express from 'express';
 import { SessionStore } from '../../src/auth/session.js';
 import { createAuthMiddleware } from '../../src/auth/middleware.js';
@@ -46,7 +47,8 @@ describe('auth middleware', () => {
   let app: express.Express;
 
   beforeEach(() => {
-    store = new SessionStore();
+    const db = new Database(':memory:');
+    store = new SessionStore(db);
     app = createTestApp(store);
   });
 

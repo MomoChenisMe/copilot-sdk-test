@@ -39,7 +39,7 @@ describe('promptsApi', () => {
 
       expect(mockFetch).toHaveBeenCalledWith('/api/prompts/system-prompt', expect.objectContaining({
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ content: 'Updated system prompt' }),
       }));
     });
@@ -75,7 +75,7 @@ describe('promptsApi', () => {
 
       expect(mockFetch).toHaveBeenCalledWith('/api/prompts/profile', expect.objectContaining({
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ content: 'Updated profile' }),
       }));
     });

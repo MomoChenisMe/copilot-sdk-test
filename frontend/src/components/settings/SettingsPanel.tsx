@@ -847,10 +847,6 @@ function SkillsTab({ onClose }: { onClose?: () => void }) {
   const toggleSkill = useAppStore((s) => s.toggleSkill);
   const [skills, setSkills] = useState<SkillItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newDescription, setNewDescription] = useState('');
-  const [newContent, setNewContent] = useState('');
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
   const [editDescription, setEditDescription] = useState('');
   const [editContent, setEditContent] = useState('');
@@ -863,8 +859,6 @@ function SkillsTab({ onClose }: { onClose?: () => void }) {
   const [installing, setInstalling] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const nameError = newName.trim() !== '' && INVALID_NAME_RE.test(newName.trim());
 
   useEffect(() => {
     skillsApi.list().then((r) => {
@@ -880,28 +874,6 @@ function SkillsTab({ onClose }: { onClose?: () => void }) {
       useAppStore.getState().setSkills(r.skills);
     } catch { /* ignore */ }
   }, []);
-
-  const handleCreate = useCallback(async () => {
-    if (!newName.trim() || INVALID_NAME_RE.test(newName.trim())) return;
-    try {
-      await skillsApi.put(newName.trim(), newDescription, newContent);
-      const newSkill = { name: newName.trim(), description: newDescription, content: newContent, builtin: false };
-      setSkills((prev) => {
-        const updated = [...prev, newSkill];
-        useAppStore.getState().setSkills(updated);
-        return updated;
-      });
-      setNewName('');
-      setNewDescription('');
-      setNewContent('');
-      setShowCreate(false);
-      setToast(t('settings.toast.saved'));
-      setTimeout(() => setToast(null), 2000);
-    } catch {
-      setToast(t('settings.toast.saveFailed'));
-      setTimeout(() => setToast(null), 2000);
-    }
-  }, [newName, newDescription, newContent, t]);
 
   const handleExpand = useCallback((name: string, description: string, content: string) => {
     if (expandedSkill === name) {
@@ -970,8 +942,14 @@ function SkillsTab({ onClose }: { onClose?: () => void }) {
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer.files[0];
-    if (file) handleUploadFile(file);
-  }, [handleUploadFile]);
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.zip')) {
+      setToast(t('settings.skills.onlyZip'));
+      setTimeout(() => setToast(null), 3000);
+      return;
+    }
+    handleUploadFile(file);
+  }, [handleUploadFile, t]);
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1011,85 +989,81 @@ function SkillsTab({ onClose }: { onClose?: () => void }) {
   const systemSkills = skills.filter((s) => s.builtin);
   const userSkills = skills.filter((s) => !s.builtin);
 
-  if (userSkills.length === 0 && systemSkills.length === 0 && !showCreate) {
-    return (
-      <div className="flex flex-col items-center justify-center py-8 text-center">
-        <p className="text-sm text-text-secondary mb-4">{t('settings.skills.empty')}</p>
+  // Reusable install section JSX
+  const installSection = (
+    <div data-testid="skill-install-section" className="flex flex-col gap-3">
+      {/* Upload ZIP */}
+      <div
+        data-testid="skill-upload-drop"
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+        onClick={() => fileInputRef.current?.click()}
+        className={`flex items-center justify-center gap-2 px-4 py-6 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+          dragOver
+            ? 'border-accent bg-accent/5'
+            : 'border-border hover:border-accent/50 hover:bg-bg-tertiary'
+        }`}
+      >
+        <Upload size={16} className="text-text-secondary" />
+        <span className="text-sm text-text-secondary">{t('settings.skills.uploadDrop')}</span>
+        <input
+          ref={fileInputRef}
+          data-testid="skill-upload-input"
+          type="file"
+          accept=".zip"
+          onChange={handleFileInput}
+          className="hidden"
+        />
+      </div>
+
+      {/* URL Install */}
+      <div className="flex gap-2">
+        <div className="flex-1 flex items-center gap-2 px-3 py-1.5 bg-bg-secondary border border-border rounded-lg">
+          <Link size={14} className="text-text-secondary shrink-0" />
+          <input
+            data-testid="skill-url-input"
+            type="text"
+            value={installUrl}
+            onChange={(e) => setInstallUrl(e.target.value)}
+            placeholder={t('settings.skills.urlPlaceholder')}
+            className="flex-1 text-sm bg-transparent text-text-primary outline-none placeholder:text-text-secondary/50"
+            onKeyDown={(e) => { if (e.key === 'Enter') handleInstallFromUrl(); }}
+          />
+        </div>
         <button
-          data-testid="new-skill-button"
-          onClick={() => setShowCreate(true)}
-          className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
+          data-testid="skill-url-install"
+          onClick={handleInstallFromUrl}
+          disabled={!installUrl.trim() || installing}
+          className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
         >
-          {t('settings.skills.newSkill')}
+          {installing ? t('settings.skills.installing') : t('settings.skills.installFromUrl')}
         </button>
+      </div>
+
+      {/* AI Create */}
+      <button
+        data-testid="skill-ai-create"
+        onClick={handleAiCreate}
+        className="self-start flex items-center gap-2 px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-bg-tertiary text-text-secondary"
+      >
+        <Sparkles size={14} />
+        {t('settings.skills.createWithAI')}
+      </button>
+    </div>
+  );
+
+  if (userSkills.length === 0 && systemSkills.length === 0) {
+    return (
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-text-secondary">{t('settings.skills.empty')}</p>
+        {installSection}
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Install Actions */}
-      <div data-testid="skill-install-section" className="flex flex-col gap-3">
-        {/* Upload ZIP */}
-        <div
-          data-testid="skill-upload-drop"
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
-          className={`flex items-center justify-center gap-2 px-4 py-6 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
-            dragOver
-              ? 'border-accent bg-accent/5'
-              : 'border-border hover:border-accent/50 hover:bg-bg-tertiary'
-          }`}
-        >
-          <Upload size={16} className="text-text-secondary" />
-          <span className="text-sm text-text-secondary">{t('settings.skills.uploadDrop')}</span>
-          <input
-            ref={fileInputRef}
-            data-testid="skill-upload-input"
-            type="file"
-            accept=".zip"
-            onChange={handleFileInput}
-            className="hidden"
-          />
-        </div>
-
-        {/* URL Install */}
-        <div className="flex gap-2">
-          <div className="flex-1 flex items-center gap-2 px-3 py-1.5 bg-bg-secondary border border-border rounded-lg">
-            <Link size={14} className="text-text-secondary shrink-0" />
-            <input
-              data-testid="skill-url-input"
-              type="text"
-              value={installUrl}
-              onChange={(e) => setInstallUrl(e.target.value)}
-              placeholder={t('settings.skills.urlPlaceholder')}
-              className="flex-1 text-sm bg-transparent text-text-primary outline-none placeholder:text-text-secondary/50"
-              onKeyDown={(e) => { if (e.key === 'Enter') handleInstallFromUrl(); }}
-            />
-          </div>
-          <button
-            data-testid="skill-url-install"
-            onClick={handleInstallFromUrl}
-            disabled={!installUrl.trim() || installing}
-            className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-          >
-            {installing ? t('settings.skills.installing') : t('settings.skills.installFromUrl')}
-          </button>
-        </div>
-
-        {/* AI Create */}
-        <button
-          data-testid="skill-ai-create"
-          onClick={handleAiCreate}
-          className="self-start flex items-center gap-2 px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-bg-tertiary text-text-secondary"
-        >
-          <Sparkles size={14} />
-          {t('settings.skills.createWithAI')}
-        </button>
-      </div>
-
       {/* System Skills Section */}
       {systemSkills.length > 0 && (
         <div data-testid="system-skills-section" className="flex flex-col gap-2">
@@ -1227,58 +1201,9 @@ function SkillsTab({ onClose }: { onClose?: () => void }) {
           </div>
         ))}
 
-        {/* New Skill button */}
-        <button
-          data-testid="new-skill-button"
-          onClick={() => setShowCreate(!showCreate)}
-          className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90 self-start"
-        >
-          {t('settings.skills.newSkill')}
-        </button>
+        {/* Install section under user skills */}
+        {installSection}
       </div>
-
-      {/* Create form */}
-      {showCreate && (
-        <div className="border border-border rounded-lg p-3 flex flex-col gap-2">
-          <label className="text-xs font-medium text-text-secondary">{t('settings.skills.name')}</label>
-          <input
-            data-testid="new-skill-name"
-            type="text"
-            placeholder={t('settings.skills.namePlaceholder')}
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            className={`w-full p-2 text-sm bg-bg-secondary border rounded-lg text-text-primary ${nameError ? 'border-error' : 'border-border'}`}
-          />
-          {nameError && (
-            <p data-testid="skill-name-error" className="text-xs text-error">{t('settings.skills.nameInvalid')}</p>
-          )}
-          <label className="text-xs font-medium text-text-secondary">{t('settings.skills.description')}</label>
-          <input
-            data-testid="new-skill-description"
-            type="text"
-            placeholder={t('settings.skills.descriptionPlaceholder')}
-            value={newDescription}
-            onChange={(e) => setNewDescription(e.target.value)}
-            className="w-full p-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-primary"
-          />
-          <label className="text-xs font-medium text-text-secondary">{t('settings.skills.content')}</label>
-          <textarea
-            data-testid="new-skill-content"
-            placeholder={t('settings.skills.contentPlaceholder')}
-            value={newContent}
-            onChange={(e) => setNewContent(e.target.value)}
-            className="w-full h-32 p-2 text-sm bg-bg-secondary border border-border rounded-lg resize-y font-mono text-text-primary"
-          />
-          <button
-            data-testid="create-skill-button"
-            onClick={handleCreate}
-            disabled={!newName.trim() || nameError}
-            className="self-start px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {t('settings.skills.create')}
-          </button>
-        </div>
-      )}
 
       {/* Delete Confirmation Dialog */}
       {confirmDelete && (

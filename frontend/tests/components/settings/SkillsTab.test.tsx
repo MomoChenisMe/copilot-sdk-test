@@ -130,6 +130,17 @@ describe('SkillsTab — Upload/URL/AI UI', () => {
         expect(mockSkillsApi.upload).toHaveBeenCalledWith(file);
       });
     });
+
+    it('should reject non-ZIP file on drag-and-drop', async () => {
+      await navigateToSkillsTab();
+      const dropZone = screen.getByTestId('skill-upload-drop');
+      const txtFile = new File(['hello'], 'readme.txt', { type: 'text/plain' });
+      fireEvent.drop(dropZone, { dataTransfer: { files: [txtFile] } });
+
+      await waitFor(() => {
+        expect(mockSkillsApi.upload).not.toHaveBeenCalled();
+      });
+    });
   });
 
   describe('URL install', () => {
@@ -197,6 +208,38 @@ describe('SkillsTab — Upload/URL/AI UI', () => {
 
       expect(handler).toHaveBeenCalledOnce();
       window.removeEventListener('skills:ai-create', handler);
+    });
+  });
+
+  describe('layout — install section under user skills', () => {
+    it('should NOT render a "new-skill-button"', async () => {
+      await navigateToSkillsTab();
+      expect(screen.queryByTestId('new-skill-button')).toBeNull();
+    });
+
+    it('should NOT render a manual create form (new-skill-name input)', async () => {
+      await navigateToSkillsTab();
+      expect(screen.queryByTestId('new-skill-name')).toBeNull();
+    });
+
+    it('install section should appear after user skills list', async () => {
+      await navigateToSkillsTab();
+      const userSection = screen.getByTestId('user-skills-section');
+      const installSection = screen.getByTestId('skill-install-section');
+      // Install section should be a descendant of or follow user-skills-section
+      expect(userSection.contains(installSection) ||
+        userSection.compareDocumentPosition(installSection) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    });
+
+    it('should show install section when there are no skills (empty state)', async () => {
+      mockSkillsApi.list.mockResolvedValueOnce({ skills: [] });
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('skill-install-section')).toBeTruthy();
+      });
     });
   });
 

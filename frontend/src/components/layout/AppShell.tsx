@@ -25,6 +25,7 @@ import { SettingsPanel } from '../settings/SettingsPanel';
 import { ShortcutsPanel } from '../shared/ShortcutsPanel';
 import { SdkUpdateBanner } from '../copilot/SdkUpdateBanner';
 import { MobileDrawer } from './MobileDrawer';
+import { OpenSpecPanel } from '../openspec/OpenSpecPanel';
 import { ToastContainer } from '../shared/ToastContainer';
 
 export function AppShell({ onLogout }: { onLogout: () => void }) {
@@ -58,6 +59,9 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   const closeTab = useAppStore((s) => s.closeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const switchTabConversation = useAppStore((s) => s.switchTabConversation);
+
+  const openspecPanelOpen = useAppStore((s) => s.openspecPanelOpen);
+  const setOpenspecPanelOpen = useAppStore((s) => s.setOpenspecPanelOpen);
 
   const { sendMessage, abortMessage, sendUserInputResponse, cleanupDedup } = useTabCopilot({ subscribe, send });
 
@@ -187,6 +191,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     useAppStore.getState().restoreDisabledSkills();
     // Sync openspec skills disabled state based on toggle
     configApi.getOpenspecSdd().then(({ enabled }) => {
+      useAppStore.getState().setSettings({ openspecEnabled: enabled });
       skillsApi.list().then(({ skills }) => {
         const names = skills.filter((s: { name: string }) => s.name.startsWith('openspec-')).map((s: { name: string }) => s.name);
         useAppStore.getState().batchSetSkillsDisabled(names, !enabled);
@@ -594,6 +599,18 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       document.dispatchEvent(new CustomEvent('shortcut:modelSelector'));
     },
     onShowShortcuts: () => setShortcutsOpen((v) => !v),
+    onTogglePlanMode: () => {
+      const { activeTabId: tabId, tabs } = useAppStore.getState();
+      if (!tabId) return;
+      const tab = tabs[tabId];
+      if (!tab || tab.isStreaming) return;
+      useAppStore.getState().setTabPlanMode(tabId, !tab.planMode);
+    },
+    onToggleOpenSpec: () => {
+      const { openspecEnabled } = useAppStore.getState().settings ?? {};
+      if (!openspecEnabled) return;
+      useAppStore.getState().setOpenspecPanelOpen(!useAppStore.getState().openspecPanelOpen);
+    },
   });
 
   return (
@@ -606,6 +623,9 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         onHomeClick={handleHomeClick}
         onSettingsClick={() => setSettingsOpen(!settingsOpen)}
         onShortcutsClick={() => setShortcutsOpen(true)}
+        onOpenSpecClick={(useAppStore.getState().settings as any)?.openspecEnabled ? () => {
+          setOpenspecPanelOpen(!openspecPanelOpen);
+        } : undefined}
         onMenuClick={() => setDrawerOpen(true)}
       />
 
@@ -824,6 +844,12 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
               }}
             />
           )}
+
+          {/* OpenSpec panel — sliding right panel */}
+          <OpenSpecPanel
+            open={openspecPanelOpen}
+            onClose={() => setOpenspecPanelOpen(false)}
+          />
         </div>
       </div>
 

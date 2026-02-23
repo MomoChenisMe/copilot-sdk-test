@@ -1,13 +1,14 @@
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Terminal } from 'lucide-react';
+import { CodeForgeLogo } from '../shared/CodeForgeLogo';
 
 interface LoginPageProps {
   onLogin: (password: string) => Promise<void>;
   error?: string | null;
+  errorCode?: 'rate_limited' | 'locked';
 }
 
-export function LoginPage({ onLogin, error }: LoginPageProps) {
+export function LoginPage({ onLogin, error, errorCode }: LoginPageProps) {
   const { t } = useTranslation();
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,7 +32,7 @@ export function LoginPage({ onLogin, error }: LoginPageProps) {
       >
         <div className="flex justify-center mb-6">
           <div className="w-14 h-14 rounded-2xl bg-accent-soft flex items-center justify-center">
-            <Terminal size={28} className="text-accent" />
+            <CodeForgeLogo size={28} className="text-accent" />
           </div>
         </div>
 
@@ -39,7 +40,15 @@ export function LoginPage({ onLogin, error }: LoginPageProps) {
         <p className="text-sm text-text-secondary mb-6 text-center">{t('login.subtitle')}</p>
 
         {error && (
-          <div className="mb-4 p-3 rounded-lg bg-error/10 text-error text-sm">{error}</div>
+          <div className={`mb-4 p-3 rounded-lg text-sm ${
+            errorCode === 'rate_limited' || errorCode === 'locked'
+              ? 'bg-warning/10 text-warning'
+              : 'bg-error/10 text-error'
+          }`}>
+            {errorCode === 'rate_limited' && t('login.rateLimited')}
+            {errorCode === 'locked' && t('login.locked')}
+            {!errorCode && error}
+          </div>
         )}
 
         <input
@@ -51,9 +60,11 @@ export function LoginPage({ onLogin, error }: LoginPageProps) {
           className="w-full px-4 py-3 rounded-xl bg-bg-input border border-border text-text-primary placeholder-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
         />
 
+        <p className="mt-2 text-xs text-text-muted">{t('login.passwordHint')}</p>
+
         <button
           type="submit"
-          disabled={!password || loading}
+          disabled={!password || loading || errorCode === 'locked'}
           className="w-full mt-4 px-4 py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {loading ? t('login.loggingIn') : t('login.login')}

@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Sun, Moon, Settings, Keyboard, Menu } from 'lucide-react';
+import { Sun, Moon, Settings, Keyboard, Menu, BookOpen } from 'lucide-react';
 import type { WsStatus } from '../../lib/ws-types';
 import type { Theme } from '../../store';
 import { ConnectionBadge } from '../shared/ConnectionBadge';
@@ -12,10 +12,11 @@ interface TopBarProps {
   onHomeClick: () => void;
   onSettingsClick?: () => void;
   onShortcutsClick?: () => void;
+  onOpenSpecClick?: () => void;
   onMenuClick?: () => void;
 }
 
-export function TopBar({ title, status, theme, onThemeToggle, onHomeClick, onSettingsClick, onShortcutsClick, onMenuClick }: TopBarProps) {
+export function TopBar({ title, status, theme, onThemeToggle, onHomeClick, onSettingsClick, onShortcutsClick, onOpenSpecClick, onMenuClick }: TopBarProps) {
   const { t } = useTranslation();
   return (
     <header className="h-12 flex items-center gap-2 px-4 bg-bg-primary border-b border-border-subtle shrink-0">
@@ -49,6 +50,15 @@ export function TopBar({ title, status, theme, onThemeToggle, onHomeClick, onSet
             aria-label={t('topBar.shortcuts', 'Keyboard shortcuts')}
           >
             <Keyboard size={18} />
+          </button>
+        )}
+        {onOpenSpecClick && (
+          <button
+            onClick={onOpenSpecClick}
+            className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
+            aria-label={t('topBar.openspec', 'OpenSpec')}
+          >
+            <BookOpen size={18} />
           </button>
         )}
         {onSettingsClick && (

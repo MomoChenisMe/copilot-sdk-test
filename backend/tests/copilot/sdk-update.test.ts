@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
+// Hoisted mock for createRequire so it's available inside vi.mock factories
+const { mockResolve, mockCreateRequire } = vi.hoisted(() => {
+  const mockResolve = vi.fn();
+  const mockCreateRequire = vi.fn(() => ({ resolve: mockResolve }));
+  return { mockResolve, mockCreateRequire };
+});
+
 // Mock child_process and fs
 vi.mock('child_process', () => ({
   exec: vi.fn(),
@@ -12,6 +19,11 @@ vi.mock('fs', async (importOriginal) => {
     readFileSync: vi.fn(),
   };
 });
+
+// Mock node:module to control createRequire behavior
+vi.mock('node:module', () => ({
+  createRequire: mockCreateRequire,
+}));
 
 // Mock global fetch
 const mockFetch = vi.fn();
@@ -34,18 +46,74 @@ describe('SdkUpdateChecker', () => {
   });
 
   describe('getInstalledVersion', () => {
-    it('should read version from node_modules package.json', () => {
-      (readFileSync as any).mockReturnValue(JSON.stringify({ version: '0.1.23' }));
+    it('should resolve main entry and walk up to find package.json with correct name', () => {
+      // Simulate: require.resolve('@github/copilot-sdk') → .../dist/index.js
+      mockResolve.mockReturnValue('/fake/node_modules/@github/copilot-sdk/dist/index.js');
+
+      (readFileSync as any).mockImplementation((path: string) => {
+        // dist/package.json doesn't exist
+        if (path === '/fake/node_modules/@github/copilot-sdk/dist/package.json') {
+          throw new Error('ENOENT');
+        }
+        // copilot-sdk/package.json has the correct name
+        if (path === '/fake/node_modules/@github/copilot-sdk/package.json') {
+          return JSON.stringify({ name: '@github/copilot-sdk', version: '0.1.23' });
+        }
+        throw new Error('ENOENT');
+      });
 
       const version = checker.getInstalledVersion();
       expect(version).toBe('0.1.23');
-      expect(readFileSync).toHaveBeenCalledWith(
-        expect.stringContaining('@github/copilot-sdk/package.json'),
-        'utf-8',
-      );
     });
 
-    it('should return null when package.json not found', () => {
+    it('should skip package.json with wrong name and keep walking up', () => {
+      mockResolve.mockReturnValue('/fake/node_modules/@github/copilot-sdk/dist/index.js');
+
+      (readFileSync as any).mockImplementation((path: string) => {
+        // dist/package.json exists but has wrong name (e.g., a nested dependency)
+        if (path === '/fake/node_modules/@github/copilot-sdk/dist/package.json') {
+          return JSON.stringify({ name: 'some-other-pkg', version: '1.0.0' });
+        }
+        // copilot-sdk/package.json has the correct name
+        if (path === '/fake/node_modules/@github/copilot-sdk/package.json') {
+          return JSON.stringify({ name: '@github/copilot-sdk', version: '0.1.23' });
+        }
+        throw new Error('ENOENT');
+      });
+
+      const version = checker.getInstalledVersion();
+      expect(version).toBe('0.1.23');
+    });
+
+    it('should not throw ERR_PACKAGE_PATH_NOT_EXPORTED (resolves main entry, not package.json subpath)', () => {
+      // The key fix: we resolve '@github/copilot-sdk' (main), not '@github/copilot-sdk/package.json'
+      mockResolve.mockReturnValue('/fake/node_modules/@github/copilot-sdk/dist/index.js');
+      (readFileSync as any).mockReturnValue(
+        JSON.stringify({ name: '@github/copilot-sdk', version: '0.2.0' }),
+      );
+
+      const version = checker.getInstalledVersion();
+      expect(version).toBe('0.2.0');
+      expect(mockResolve).toHaveBeenCalledWith('@github/copilot-sdk');
+    });
+
+    it('should fallback to candidate paths when createRequire fails', () => {
+      mockResolve.mockImplementation(() => { throw new Error('MODULE_NOT_FOUND'); });
+
+      // Strategy 2: candidate paths
+      (readFileSync as any).mockImplementation((path: string) => {
+        if (path.includes('node_modules/@github/copilot-sdk/package.json')) {
+          return JSON.stringify({ version: '0.1.23' });
+        }
+        throw new Error('ENOENT');
+      });
+
+      const version = checker.getInstalledVersion();
+      expect(version).toBe('0.1.23');
+    });
+
+    it('should return null when package.json not found anywhere', () => {
+      mockResolve.mockImplementation(() => { throw new Error('MODULE_NOT_FOUND'); });
       (readFileSync as any).mockImplementation(() => { throw new Error('ENOENT'); });
 
       const version = checker.getInstalledVersion();
@@ -95,7 +163,8 @@ describe('SdkUpdateChecker', () => {
 
   describe('checkForUpdate', () => {
     it('should return update info when newer version is available', async () => {
-      (readFileSync as any).mockReturnValue(JSON.stringify({ version: '0.1.23' }));
+      mockResolve.mockReturnValue('/fake/node_modules/@github/copilot-sdk/dist/index.js');
+      (readFileSync as any).mockReturnValue(JSON.stringify({ name: '@github/copilot-sdk', version: '0.1.23' }));
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ 'dist-tags': { latest: '0.2.0' } }),
@@ -110,7 +179,8 @@ describe('SdkUpdateChecker', () => {
     });
 
     it('should return no update when versions match', async () => {
-      (readFileSync as any).mockReturnValue(JSON.stringify({ version: '0.2.0' }));
+      mockResolve.mockReturnValue('/fake/node_modules/@github/copilot-sdk/dist/index.js');
+      (readFileSync as any).mockReturnValue(JSON.stringify({ name: '@github/copilot-sdk', version: '0.2.0' }));
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ 'dist-tags': { latest: '0.2.0' } }),

@@ -15,12 +15,20 @@ export class SdkUpdateChecker {
   private latestVersionCache: { version: string; timestamp: number } | null = null;
 
   getInstalledVersion(): string | null {
-    // Strategy 1: Use Node's module resolution (handles npm hoisting correctly)
+    // Strategy 1: Resolve main entry, then walk up to find package.json
+    // (avoids ERR_PACKAGE_PATH_NOT_EXPORTED when exports field omits ./package.json)
     try {
       const require = createRequire(import.meta.url);
-      const pkgPath = require.resolve('@github/copilot-sdk/package.json');
-      const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-      return pkg.version;
+      const mainPath = require.resolve('@github/copilot-sdk');
+      let dir = dirname(mainPath);
+      while (dir !== dirname(dir)) {
+        const candidate = resolve(dir, 'package.json');
+        try {
+          const pkg = JSON.parse(readFileSync(candidate, 'utf-8'));
+          if (pkg.name === '@github/copilot-sdk') return pkg.version;
+        } catch { /* continue walking up */ }
+        dir = dirname(dir);
+      }
     } catch (err) {
       log.warn({ err }, 'Failed to resolve SDK version via createRequire');
     }

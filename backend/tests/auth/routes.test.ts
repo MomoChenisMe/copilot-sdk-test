@@ -1,12 +1,18 @@
 import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
+import Database from 'better-sqlite3';
 import express from 'express';
 import { SessionStore } from '../../src/auth/session.js';
 import { createAuthRoutes } from '../../src/auth/routes.js';
 import { createAuthMiddleware } from '../../src/auth/middleware.js';
+import { RateLimiter } from '../../src/auth/rate-limiter.js';
+import { AccountLockout } from '../../src/auth/lockout.js';
+import { ActivityLog } from '../../src/auth/activity-log.js';
 import type { Server } from 'node:http';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const TEST_PASSWORD = 'correct-password';
-// bcrypt hash of 'correct-password' with 1 round (fast for tests)
 let passwordHash: string;
 
 describe('auth routes', () => {
@@ -14,6 +20,7 @@ describe('auth routes', () => {
   let app: express.Express;
   let server: Server;
   let baseUrl: string;
+  let db: InstanceType<typeof Database>;
 
   beforeAll(async () => {
     const bcrypt = await import('bcrypt');
@@ -21,11 +28,19 @@ describe('auth routes', () => {
   });
 
   beforeEach(() => {
-    store = new SessionStore();
+    db = new Database(':memory:');
+    store = new SessionStore(db);
     app = express();
     app.use(express.json());
 
-    const authRoutes = createAuthRoutes(store, passwordHash);
+    const authRoutes = createAuthRoutes({
+      sessionStore: store,
+      passwordHash,
+      rateLimiter: new RateLimiter(),
+      lockout: new AccountLockout(db),
+      activityLog: new ActivityLog(db),
+      dataDir: mkdtempSync(join(tmpdir(), 'auth-test-')),
+    });
     app.use('/api/auth', authRoutes);
 
     // Protected route to test auth status

@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Sparkles, Plus, X, MessageSquare, Clock } from 'lucide-react';
+import { CodeForgeLogo } from '../shared/CodeForgeLogo';
 import { useAppStore } from '../../store';
 import { apiGet } from '../../lib/api';
 import { modelSupportsAttachments } from '../../lib/model-capabilities';
@@ -164,10 +165,21 @@ export function ChatView({
   }, []);
 
   useEffect(() => {
-    if (isAutoScrolling.current && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    const el = scrollRef.current;
+    if (!el) return; // DOM not mounted yet — don't increment unreadCount
+
+    if (isAutoScrolling.current) {
+      el.scrollTop = el.scrollHeight;
+      // If content doesn't overflow, ensure button stays hidden
+      if (el.scrollHeight <= el.clientHeight + 50) {
+        setShowScrollButton(false);
+        setUnreadCount(0);
+      }
     } else {
-      setUnreadCount((prev) => prev + 1);
+      // Only count as unread if there's actually scrollable content
+      if (el.scrollHeight > el.clientHeight) {
+        setUnreadCount((prev) => prev + 1);
+      }
     }
   }, [messages, streamingText, toolRecords]);
 
@@ -294,7 +306,7 @@ export function ChatView({
         <div className="flex-1 overflow-y-auto flex items-center justify-center">
           <div className="text-center px-4 max-w-lg">
             <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-accent-soft flex items-center justify-center">
-              <Sparkles size={28} className="text-accent" />
+              <CodeForgeLogo size={28} className="text-accent" />
             </div>
             <h2 className="text-2xl font-semibold tracking-tight text-text-primary mb-2">
               {t('chat.welcomeTitle')}
@@ -372,19 +384,6 @@ export function ChatView({
                 <CwdSelector currentCwd={currentCwd} onCwdChange={onCwdChange} mode={tabMode} onModeChange={handleModeChange} />
               )}
               {tabId && <PlanActToggle planMode={planMode} onToggle={handlePlanModeToggle} disabled={isStreaming} />}
-              {tabId && (
-                <button
-                  onClick={() => activeConversationId && setTabCronConfigOpen(tabId, !cronConfigOpen)}
-                  disabled={!activeConversationId}
-                  className={`p-1.5 rounded-lg border transition-colors ${cronConfigOpen ? 'border-accent bg-accent-soft text-accent' : 'border-border text-text-muted hover:bg-bg-tertiary'} disabled:opacity-40 disabled:cursor-not-allowed`}
-                  title={t('cron.configTitle', 'Scheduled Task')}
-                >
-                  <Clock size={14} />
-                </button>
-              )}
-              {tabId && webSearchAvailable && (
-                <WebSearchToggle forced={webSearchForced} onToggle={(f) => setTabWebSearchForced(tabId, f)} disabled={isStreaming} />
-              )}
             </div>
             {cronConfigOpen && tabId && activeConversationId && (
               <CronConfigPanel
@@ -410,22 +409,24 @@ export function ChatView({
               statusText={premiumQuota ? (premiumQuota.unlimited ? `${premiumQuota.used} PR` : `${premiumQuota.used}/${premiumQuota.total} PR`) : undefined}
               inputHistory={inputHistory}
               leftActions={
-                <div className="flex md:hidden items-center gap-1">
-                  <MobileToolbarPopup
-                    currentModel={currentModel}
-                    onModelChange={onModelChange}
-                    currentCwd={currentCwd}
-                    onCwdChange={onCwdChange}
-                    tabMode={tabMode}
-                    onModeChange={handleModeChange}
-                    tabId={tabId}
-                    planMode={planMode}
-                    onPlanModeToggle={handlePlanModeToggle}
-                    isStreaming={isStreaming}
-                    webSearchForced={webSearchForced}
-                    onWebSearchToggle={(f) => tabId && setTabWebSearchForced(tabId, f)}
-                    webSearchAvailable={webSearchAvailable}
-                  />
+                <div className="flex items-center gap-1">
+                  <div className="md:hidden">
+                    <MobileToolbarPopup
+                      currentModel={currentModel}
+                      onModelChange={onModelChange}
+                      currentCwd={currentCwd}
+                      onCwdChange={onCwdChange}
+                      tabMode={tabMode}
+                      onModeChange={handleModeChange}
+                      tabId={tabId}
+                      planMode={planMode}
+                      onPlanModeToggle={handlePlanModeToggle}
+                      isStreaming={isStreaming}
+                      webSearchForced={webSearchForced}
+                      onWebSearchToggle={(f) => tabId && setTabWebSearchForced(tabId, f)}
+                      webSearchAvailable={webSearchAvailable}
+                    />
+                  </div>
                   {tabId && (
                     <button
                       onClick={() => activeConversationId && setTabCronConfigOpen(tabId, !cronConfigOpen)}
@@ -435,6 +436,9 @@ export function ChatView({
                     >
                       <Clock size={14} />
                     </button>
+                  )}
+                  {tabId && webSearchAvailable && (
+                    <WebSearchToggle forced={webSearchForced} onToggle={(f) => setTabWebSearchForced(tabId, f)} disabled={isStreaming} />
                   )}
                 </div>
               }
@@ -642,19 +646,6 @@ export function ChatView({
                   <CwdSelector currentCwd={currentCwd} onCwdChange={onCwdChange} mode={tabMode} onModeChange={handleModeChange} />
                 )}
                 {tabId && <PlanActToggle planMode={planMode} onToggle={handlePlanModeToggle} disabled={isStreaming} />}
-                {tabId && (
-                  <button
-                    onClick={() => activeConversationId && setTabCronConfigOpen(tabId, !cronConfigOpen)}
-                    disabled={!activeConversationId}
-                    className={`p-1.5 rounded-lg border transition-colors ${cronConfigOpen ? 'border-accent bg-accent-soft text-accent' : 'border-border text-text-muted hover:bg-bg-tertiary'} disabled:opacity-40 disabled:cursor-not-allowed`}
-                    title={t('cron.configTitle', 'Scheduled Task')}
-                  >
-                    <Clock size={14} />
-                  </button>
-                )}
-                {tabId && webSearchAvailable && (
-                  <WebSearchToggle forced={webSearchForced} onToggle={(f) => setTabWebSearchForced(tabId, f)} disabled={isStreaming} />
-                )}
               </div>
               {cronConfigOpen && tabId && activeConversationId && (
                 <CronConfigPanel
@@ -680,22 +671,24 @@ export function ChatView({
                 statusText={premiumQuota ? (premiumQuota.unlimited ? `${premiumQuota.used} PR` : `${premiumQuota.used}/${premiumQuota.total} PR`) : undefined}
                 inputHistory={inputHistory}
                 leftActions={
-                  <div className="flex md:hidden items-center gap-1">
-                    <MobileToolbarPopup
-                      currentModel={currentModel}
-                      onModelChange={onModelChange}
-                      currentCwd={currentCwd}
-                      onCwdChange={onCwdChange}
-                      tabMode={tabMode}
-                      onModeChange={handleModeChange}
-                      tabId={tabId}
-                      planMode={planMode}
-                      onPlanModeToggle={handlePlanModeToggle}
-                      isStreaming={isStreaming}
-                      webSearchForced={webSearchForced}
-                      onWebSearchToggle={(forced) => tabId && setTabWebSearchForced(tabId, forced)}
-                      webSearchAvailable={webSearchAvailable}
-                    />
+                  <div className="flex items-center gap-1">
+                    <div className="md:hidden">
+                      <MobileToolbarPopup
+                        currentModel={currentModel}
+                        onModelChange={onModelChange}
+                        currentCwd={currentCwd}
+                        onCwdChange={onCwdChange}
+                        tabMode={tabMode}
+                        onModeChange={handleModeChange}
+                        tabId={tabId}
+                        planMode={planMode}
+                        onPlanModeToggle={handlePlanModeToggle}
+                        isStreaming={isStreaming}
+                        webSearchForced={webSearchForced}
+                        onWebSearchToggle={(forced) => tabId && setTabWebSearchForced(tabId, forced)}
+                        webSearchAvailable={webSearchAvailable}
+                      />
+                    </div>
                     {tabId && (
                       <button
                         onClick={() => activeConversationId && setTabCronConfigOpen(tabId, !cronConfigOpen)}
@@ -705,6 +698,9 @@ export function ChatView({
                       >
                         <Clock size={14} />
                       </button>
+                    )}
+                    {tabId && webSearchAvailable && (
+                      <WebSearchToggle forced={webSearchForced} onToggle={(forced) => tabId && setTabWebSearchForced(tabId, forced)} disabled={isStreaming} />
                     )}
                   </div>
                 }

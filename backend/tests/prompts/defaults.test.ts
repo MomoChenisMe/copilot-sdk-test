@@ -26,16 +26,36 @@ describe('DEFAULT_SYSTEM_PROMPT', () => {
     expect(DEFAULT_SYSTEM_PROMPT).toContain('Safety & Ethics');
   });
 
-  it('should contain Response Guidelines section', () => {
+  it('should contain Workspace Context section', () => {
+    expect(DEFAULT_SYSTEM_PROMPT).toContain('Workspace Context');
+  });
+
+  // ── Act Mode sub-sections ──────────────────────────────────────────
+  it('should contain Act Mode with four behavioral sub-sections', () => {
+    expect(DEFAULT_SYSTEM_PROMPT).toContain('Act Mode');
+    expect(DEFAULT_SYSTEM_PROMPT).toContain('Doing Tasks');
+    expect(DEFAULT_SYSTEM_PROMPT).toContain('Executing Actions with Care');
+    expect(DEFAULT_SYSTEM_PROMPT).toContain('Tool Usage');
     expect(DEFAULT_SYSTEM_PROMPT).toContain('Response Guidelines');
   });
 
-  it('should contain Tool Usage section', () => {
-    expect(DEFAULT_SYSTEM_PROMPT).toContain('Tool Usage');
+  // ── Plan Mode workflow steps ────────────────────────────────────────
+  it('should contain Plan Mode with four-step workflow', () => {
+    expect(DEFAULT_SYSTEM_PROMPT).toContain('Plan Mode');
+    expect(DEFAULT_SYSTEM_PROMPT).toContain('Plan Mode Workflow');
+    expect(DEFAULT_SYSTEM_PROMPT).toMatch(/\*\*Understand\*\*/);
+    expect(DEFAULT_SYSTEM_PROMPT).toMatch(/\*\*Explore\*\*/);
+    expect(DEFAULT_SYSTEM_PROMPT).toMatch(/\*\*Design\*\*/);
+    expect(DEFAULT_SYSTEM_PROMPT).toMatch(/\*\*Plan\*\*/);
   });
 
-  it('should contain Workspace Context section', () => {
-    expect(DEFAULT_SYSTEM_PROMPT).toContain('Workspace Context');
+  // ── No standalone duplicate sections ─────────────────────────────────
+  it('should not have standalone ## Tool Usage or ## Response Guidelines sections', () => {
+    // These should be nested under Act Mode, not as separate top-level ## headings
+    const toolUsageH2 = DEFAULT_SYSTEM_PROMPT.match(/^## Tool Usage$/gm);
+    const responseH2 = DEFAULT_SYSTEM_PROMPT.match(/^## Response Guidelines$/gm);
+    expect(toolUsageH2).toBeNull();
+    expect(responseH2).toBeNull();
   });
 
   it('should be written in English', () => {
@@ -110,9 +130,9 @@ describe('DEFAULT_SYSTEM_PROMPT', () => {
   });
 
   // ── Length budget ─────────────────────────────────────────────────
-  it('should be between 5,000 and 8,000 characters', () => {
+  it('should be between 5,000 and 10,000 characters', () => {
     expect(DEFAULT_SYSTEM_PROMPT.length).toBeGreaterThanOrEqual(5000);
-    expect(DEFAULT_SYSTEM_PROMPT.length).toBeLessThanOrEqual(8000);
+    expect(DEFAULT_SYSTEM_PROMPT.length).toBeLessThanOrEqual(10000);
   });
 });
 

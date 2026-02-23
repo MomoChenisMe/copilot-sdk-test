@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, X, AlertTriangle, ChevronDown, History, Clock } from 'lucide-react';
 import { useAppStore } from '../../store';
@@ -22,10 +22,79 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
   const activeStreams = useAppStore((s) => s.activeStreams);
   const tabLimitWarning = useAppStore((s) => s.tabLimitWarning);
 
+  const reorderTabs = useAppStore((s) => s.reorderTabs);
   const [popoverTabId, setPopoverTabId] = useState<string | null>(null);
   const [globalHistoryOpen, setGlobalHistoryOpen] = useState(false);
   const tabTitleRefs = useRef<Record<string, HTMLSpanElement | null>>({});
   const historyButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  // Drag state
+  const [dragTabId, setDragTabId] = useState<string | null>(null);
+  const [dragOverTabId, setDragOverTabId] = useState<string | null>(null);
+  const [dragSide, setDragSide] = useState<'left' | 'right'>('left');
+
+  const handleDragStart = useCallback((e: React.DragEvent, tabId: string) => {
+    setDragTabId(tabId);
+    setPopoverTabId(null); // Close any open popover
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', tabId);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, tabId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (!dragTabId || dragTabId === tabId) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midX = rect.left + rect.width / 2;
+    setDragOverTabId(tabId);
+    setDragSide(e.clientX < midX ? 'left' : 'right');
+  }, [dragTabId]);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverTabId(null);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, targetTabId: string) => {
+    e.preventDefault();
+    if (!dragTabId || dragTabId === targetTabId) {
+      setDragTabId(null);
+      setDragOverTabId(null);
+      return;
+    }
+    const newOrder = tabOrder.filter((id) => id !== dragTabId);
+    const targetIndex = newOrder.indexOf(targetTabId);
+    const insertIndex = dragSide === 'left' ? targetIndex : targetIndex + 1;
+    newOrder.splice(insertIndex, 0, dragTabId);
+    reorderTabs(newOrder);
+    setDragTabId(null);
+    setDragOverTabId(null);
+  }, [dragTabId, dragSide, tabOrder, reorderTabs]);
+
+  const handleDragEnd = useCallback(() => {
+    setDragTabId(null);
+    setDragOverTabId(null);
+  }, []);
+
+  // Keyboard tab reordering: Ctrl+Shift+Arrow
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || !e.shiftKey || !activeTabId) return;
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault();
+      const currentIndex = tabOrder.indexOf(activeTabId);
+      if (currentIndex === -1) return;
+      const newOrder = [...tabOrder];
+      if (e.key === 'ArrowLeft' && currentIndex > 0) {
+        [newOrder[currentIndex], newOrder[currentIndex - 1]] = [newOrder[currentIndex - 1], newOrder[currentIndex]];
+        reorderTabs(newOrder);
+      } else if (e.key === 'ArrowRight' && currentIndex < newOrder.length - 1) {
+        [newOrder[currentIndex], newOrder[currentIndex + 1]] = [newOrder[currentIndex + 1], newOrder[currentIndex]];
+        reorderTabs(newOrder);
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [tabOrder, activeTabId, reorderTabs]);
 
   return (
     <div className="h-10 flex items-center gap-1 px-2 bg-bg-primary border-b border-border-subtle shrink-0 overflow-x-auto flex-nowrap">
@@ -35,13 +104,33 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
         const isActive = activeTabId === tabId;
         const isStreaming = tab.conversationId ? !!activeStreams[tab.conversationId] : false;
 
+        const isDragging = dragTabId === tabId;
+        const isDropTarget = dragOverTabId === tabId && dragTabId !== tabId;
+
         return (
-          <div key={tabId} className="relative">
+          <div
+            key={tabId}
+            className={`relative ${isDragging ? 'opacity-30' : ''}`}
+            draggable
+            onDragStart={(e) => handleDragStart(e, tabId)}
+            onDragOver={(e) => handleDragOver(e, tabId)}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, tabId)}
+            onDragEnd={handleDragEnd}
+          >
+            {/* Left drop indicator */}
+            {isDropTarget && dragSide === 'left' && (
+              <div className="absolute left-0 top-1 bottom-1 w-0.5 bg-accent rounded-full z-10" />
+            )}
+            {/* Right drop indicator */}
+            {isDropTarget && dragSide === 'right' && (
+              <div className="absolute right-0 top-1 bottom-1 w-0.5 bg-accent rounded-full z-10" />
+            )}
             <button
               data-testid={`tab-${tabId}`}
-              onClick={() => onSelectTab(tabId)}
+              onClick={() => { if (!dragTabId) onSelectTab(tabId); }}
               onAuxClick={(e) => {
-                if (e.button === 1) onCloseTab(tabId);
+                if (e.button === 1 && !dragTabId) onCloseTab(tabId);
               }}
               className={`group flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors shrink-0 ${
                 isActive
@@ -72,6 +161,7 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
                 className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (dragTabId) return;
                   setPopoverTabId(popoverTabId === tabId ? null : tabId);
                 }}
               >
@@ -83,6 +173,7 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
                 tabIndex={-1}
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (dragTabId) return;
                   onCloseTab(tabId);
                 }}
                 className="shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-bg-tertiary transition-opacity"

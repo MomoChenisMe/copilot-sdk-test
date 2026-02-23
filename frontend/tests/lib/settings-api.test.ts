@@ -36,7 +36,7 @@ describe('settingsApi', () => {
         '/api/settings',
         expect.objectContaining({
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ language: 'zh-TW' }),
         }),
       );

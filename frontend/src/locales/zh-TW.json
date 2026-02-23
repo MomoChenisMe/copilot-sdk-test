@@ -8,7 +8,10 @@
     "subtitle": "請輸入密碼以繼續",
     "password": "密碼",
     "loggingIn": "登入中...",
-    "login": "登入"
+    "login": "登入",
+    "passwordHint": "至少 8 個字元",
+    "rateLimited": "登入嘗試過於頻繁，請稍後再試。",
+    "locked": "帳號因多次失敗嘗試已被暫時鎖定。"
   },
   "connection": {
     "connected": "已連線",
@@ -110,7 +113,8 @@
     "home": "首頁",
     "newChat": "新對話",
     "shortcuts": "鍵盤快捷鍵",
-    "settings": "設定"
+    "settings": "設定",
+    "openspec": "OpenSpec"
   },
   "tabBar": {
     "copilot": "Copilot",
@@ -222,7 +226,8 @@
       "urlPlaceholder": "GitHub URL 或直接連結...",
       "installing": "安裝中...",
       "installSuccess": "技能安裝成功",
-      "installError": "安裝失敗"
+      "installError": "安裝失敗",
+      "onlyZip": "僅接受 ZIP 檔案"
     }
   },
   "terminal": {
@@ -483,7 +488,34 @@
     "toggleTheme": "切換主題",
     "upload": "上傳檔案",
     "modelSelector": "模型選擇器",
-    "showShortcuts": "顯示快捷鍵"
+    "showShortcuts": "顯示快捷鍵",
+    "togglePlanMode": "切換計劃/執行模式",
+    "toggleOpenSpec": "切換 OpenSpec 面板"
+  },
+  "openspecPanel": {
+    "title": "OpenSpec",
+    "refresh": "重新整理",
+    "overview": "總覽",
+    "changes": "變更",
+    "specs": "規格",
+    "archived": "已封存",
+    "activeChanges": "進行中變更",
+    "specsCount": "規格數量",
+    "archivedCount": "已封存",
+    "noChanges": "沒有進行中的變更",
+    "noSpecs": "沒有規格文件",
+    "noArchived": "沒有已封存的變更",
+    "tasks": "任務",
+    "proposal": "提案",
+    "design": "設計",
+    "deltaSpecs": "差異規格",
+    "archive": "封存",
+    "delete": "刪除",
+    "confirmDelete": "再點一次確認刪除",
+    "back": "返回",
+    "loading": "載入中...",
+    "noContent": "無內容",
+    "taskProgress": "{{completed}}/{{total}} 任務"
   },
   "common": {
     "close": "關閉",

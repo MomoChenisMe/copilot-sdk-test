@@ -11,6 +11,12 @@ import { ConversationRepository } from './conversation/repository.js';
 import { SessionStore } from './auth/session.js';
 import { createAuthRoutes } from './auth/routes.js';
 import { createAuthMiddleware } from './auth/middleware.js';
+import { RateLimiter } from './auth/rate-limiter.js';
+import { AccountLockout } from './auth/lockout.js';
+import { ActivityLog } from './auth/activity-log.js';
+import { createCsrfMiddleware } from './auth/csrf.js';
+import { OpenSpecService } from './openspec/openspec-service.js';
+import { createOpenSpecRoutes } from './openspec/openspec-routes.js';
 import { createConversationRoutes } from './conversation/routes.js';
 import { ClientManager } from './copilot/client-manager.js';
 import { SessionManager } from './copilot/session-manager.js';
@@ -120,9 +126,13 @@ export function createApp() {
   const repo = new ConversationRepository(db);
 
   // Auth
-  const sessionStore = new SessionStore();
+  const sessionStore = new SessionStore(db);
   const passwordHash = bcrypt.hashSync(config.webPassword, 10);
   const authMiddleware = createAuthMiddleware(sessionStore);
+  const rateLimiter = new RateLimiter();
+  const lockout = new AccountLockout(db);
+  const activityLog = new ActivityLog(db);
+  const csrfMiddleware = createCsrfMiddleware();
 
   // Prompts file store
   const promptStore = new PromptFileStore(config.promptsPath);
@@ -202,8 +212,28 @@ export function createApp() {
   const app = express();
   app.use(express.json());
 
-  // Auth routes (no auth required)
-  app.use('/api/auth', createAuthRoutes(sessionStore, passwordHash));
+  // Auth routes (no auth required, no CSRF)
+  const dataDir = path.resolve(config.dbPath, '..');
+  app.use('/api/auth', createAuthRoutes({
+    sessionStore,
+    passwordHash,
+    rateLimiter,
+    lockout,
+    activityLog,
+    dataDir,
+  }));
+
+  // CSRF protection for all mutating requests on protected routes
+  app.use('/api', (req, res, next) => {
+    // Skip CSRF for auth endpoints (login sets the token)
+    if (req.path.startsWith('/auth')) return next();
+    csrfMiddleware(req, res, next);
+  });
+
+  // OpenSpec API
+  const openspecBasePath = path.resolve(process.cwd(), 'openspec');
+  const openspecService = new OpenSpecService(openspecBasePath);
+  app.use('/api/openspec', authMiddleware, createOpenSpecRoutes(openspecService));
 
   // Protected routes
   app.use('/api/conversations', authMiddleware, createConversationRoutes(repo));

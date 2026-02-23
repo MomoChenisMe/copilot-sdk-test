@@ -596,42 +596,6 @@ describe('SettingsPanel', () => {
       });
     });
 
-    it('should show create form with name, description, and content fields', async () => {
-      render(<SettingsPanel {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
-      await waitFor(() => {
-        expect(screen.getByTestId('new-skill-button')).toBeTruthy();
-      });
-      fireEvent.click(screen.getByTestId('new-skill-button'));
-      expect(screen.getByPlaceholderText('e.g. code-review')).toBeTruthy();
-      expect(screen.getByPlaceholderText('Brief description of what this skill does...')).toBeTruthy();
-      expect(screen.getByPlaceholderText('Write your SKILL.md content here...')).toBeTruthy();
-    });
-
-    it('should create a new skill with description via API', async () => {
-      const { skillsApi } = await import('../../../src/lib/prompts-api');
-      render(<SettingsPanel {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
-      await waitFor(() => {
-        expect(screen.getByTestId('new-skill-button')).toBeTruthy();
-      });
-      fireEvent.click(screen.getByTestId('new-skill-button'));
-
-      fireEvent.change(screen.getByPlaceholderText('e.g. code-review'), {
-        target: { value: 'testing' },
-      });
-      fireEvent.change(screen.getByPlaceholderText('Brief description of what this skill does...'), {
-        target: { value: 'Run tests for the project' },
-      });
-      fireEvent.change(screen.getByPlaceholderText('Write your SKILL.md content here...'), {
-        target: { value: '# Testing Skill' },
-      });
-
-      fireEvent.click(screen.getByTestId('create-skill-button'));
-      await waitFor(() => {
-        expect(skillsApi.put).toHaveBeenCalledWith('testing', 'Run tests for the project', '# Testing Skill');
-      });
-    });
 
     it('should expand skill for editing with description and content', async () => {
       render(<SettingsPanel {...defaultProps} />);
@@ -696,41 +660,8 @@ describe('SettingsPanel', () => {
       expect(screen.getByDisplayValue('# Code Review Skill')).toBeTruthy();
     });
 
-    it('should prevent creation with empty name', async () => {
-      const { skillsApi } = await import('../../../src/lib/prompts-api');
-      render(<SettingsPanel {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
-      await waitFor(() => {
-        expect(screen.getByTestId('new-skill-button')).toBeTruthy();
-      });
-      fireEvent.click(screen.getByTestId('new-skill-button'));
 
-      // Leave name empty, try to create
-      fireEvent.click(screen.getByTestId('create-skill-button'));
-      expect(skillsApi.put).not.toHaveBeenCalled();
-    });
-
-    it('should show validation error for name with special characters', async () => {
-      render(<SettingsPanel {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
-      await waitFor(() => {
-        expect(screen.getByTestId('new-skill-button')).toBeTruthy();
-      });
-      fireEvent.click(screen.getByTestId('new-skill-button'));
-
-      // Type name with path traversal chars
-      fireEvent.change(screen.getByPlaceholderText('e.g. code-review'), {
-        target: { value: '../malicious' },
-      });
-
-      // Should show error message
-      expect(screen.getByTestId('skill-name-error')).toBeTruthy();
-
-      // Create button should be disabled
-      expect(screen.getByTestId('create-skill-button').hasAttribute('disabled')).toBe(true);
-    });
-
-    it('should show empty state when no skills exist', async () => {
+    it('should show empty state with install section when no skills exist', async () => {
       const { skillsApi } = await import('../../../src/lib/prompts-api');
       (skillsApi.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ skills: [] });
 
@@ -738,6 +669,7 @@ describe('SettingsPanel', () => {
       fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
       await waitFor(() => {
         expect(screen.getByText('No skills yet. Create one to get started.')).toBeTruthy();
+        expect(screen.getByTestId('skill-install-section')).toBeTruthy();
       });
     });
 

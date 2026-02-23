@@ -31,6 +31,8 @@ describe('useGlobalShortcuts', () => {
       onTriggerUpload: vi.fn(),
       onToggleModelSelector: vi.fn(),
       onShowShortcuts: vi.fn(),
+      onTogglePlanMode: vi.fn(),
+      onToggleOpenSpec: vi.fn(),
     };
   });
 
@@ -124,6 +126,30 @@ describe('useGlobalShortcuts', () => {
     renderHook(() => useGlobalShortcuts(actions));
     act(() => { fireShortcut('t', { metaKey: true, code: 'KeyT' }); });
     expect(actions.onNewTab).not.toHaveBeenCalled();
+  });
+
+  it('Shift+Tab triggers onTogglePlanMode', () => {
+    renderHook(() => useGlobalShortcuts(actions));
+    act(() => { fireShortcut('Tab', { shiftKey: true, code: 'Tab' }); });
+    expect(actions.onTogglePlanMode).toHaveBeenCalledTimes(1);
+  });
+
+  it('Shift+Tab does NOT trigger when Alt is also held', () => {
+    renderHook(() => useGlobalShortcuts(actions));
+    act(() => { fireShortcut('Tab', { shiftKey: true, altKey: true, code: 'Tab' }); });
+    expect(actions.onTogglePlanMode).not.toHaveBeenCalled();
+  });
+
+  it('Shift+Tab does NOT trigger when Ctrl is also held', () => {
+    renderHook(() => useGlobalShortcuts(actions));
+    act(() => { fireShortcut('Tab', { shiftKey: true, ctrlKey: true, code: 'Tab' }); });
+    expect(actions.onTogglePlanMode).not.toHaveBeenCalled();
+  });
+
+  it('Alt+O triggers onToggleOpenSpec', () => {
+    renderHook(() => useGlobalShortcuts(actions));
+    act(() => { fireShortcut('o', { altKey: true, code: 'KeyO' }); });
+    expect(actions.onToggleOpenSpec).toHaveBeenCalledTimes(1);
   });
 
   it('cleans up event listener on unmount', () => {

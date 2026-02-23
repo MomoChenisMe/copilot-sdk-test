@@ -87,6 +87,16 @@ vi.mock('../../../src/components/copilot/UserInputDialog', () => ({
   UserInputDialog: () => <div data-testid="user-input-overlay" />,
 }));
 
+vi.mock('../../../src/components/copilot/WebSearchToggle', () => ({
+  default: ({ forced, disabled }: { forced: boolean; disabled?: boolean }) => (
+    <button data-testid="web-search-toggle" data-forced={String(forced)} disabled={disabled}>WebSearch</button>
+  ),
+}));
+
+vi.mock('../../../src/components/copilot/MobileToolbarPopup', () => ({
+  MobileToolbarPopup: () => <div data-testid="mobile-toolbar-popup" />,
+}));
+
 import { ChatView } from '../../../src/components/copilot/ChatView';
 
 describe('ChatView', () => {
@@ -688,6 +698,56 @@ describe('ChatView', () => {
       // Should have opacity-0 since we're at the bottom initially
       expect(btn.className).toContain('opacity-0');
     });
+
+    it('does not show unread badge when content does not overflow container', () => {
+      // In jsdom, scrollHeight === clientHeight === 0 (no overflow)
+      // When new messages arrive, unreadCount should NOT increment
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: tabState },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      const { rerender } = render(<ChatView {...defaultProps} tabId={tabId} />);
+
+      // Add a new message to trigger the useEffect
+      const updatedTab = {
+        ...tabState,
+        messages: [
+          ...tabState.messages,
+          { id: 'msg-3', conversationId: 'conv-1', role: 'assistant' as const, content: 'New message', metadata: null, createdAt: '' },
+        ],
+      };
+      useAppStore.setState({
+        tabs: { [tabId]: updatedTab },
+      });
+      rerender(<ChatView {...defaultProps} tabId={tabId} />);
+
+      // Button should remain hidden and no unread badge
+      const btn = screen.getByTestId('scroll-to-bottom');
+      expect(btn.className).toContain('opacity-0');
+      expect(screen.queryByTestId('unread-badge')).toBeNull();
+    });
+
+    it('does not increment unread count when streaming updates arrive and content fits', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: tabState },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      const { rerender } = render(<ChatView {...defaultProps} tabId={tabId} />);
+
+      // Simulate streaming text update
+      const streamingTab = { ...tabState, streamingText: 'Streaming content...' };
+      useAppStore.setState({
+        tabs: { [tabId]: streamingTab },
+      });
+      rerender(<ChatView {...defaultProps} tabId={tabId} />);
+
+      // No unread badge should appear
+      expect(screen.queryByTestId('unread-badge')).toBeNull();
+    });
   });
 
   // === TaskPanel integration ===
@@ -1083,6 +1143,114 @@ describe('ChatView', () => {
         activeTabId: tabId,
       });
       expect(() => render(<ChatView {...defaultProps} tabId={tabId} />)).not.toThrow();
+    });
+  });
+
+  // === Toolbar layout: Clock + WebSearch in input leftActions ===
+  describe('toolbar layout - schedule and websearch in input', () => {
+    const tabId = 'tab-toolbar-layout';
+    const makeToolbarTab = (extra?: Record<string, unknown>) => ({
+      id: tabId,
+      conversationId: 'conv-1',
+      title: 'Toolbar Tab',
+      mode: 'copilot' as const,
+      messages: [
+        { id: 'msg-1', conversationId: 'conv-1', role: 'user' as const, content: 'Hello', metadata: null, createdAt: '' },
+      ],
+      streamingText: '',
+      isStreaming: false,
+      toolRecords: [] as any[],
+      reasoningText: '',
+      turnContentSegments: [] as string[],
+      turnSegments: [] as any[],
+      copilotError: null,
+      messagesLoaded: true,
+      createdAt: Date.now(),
+      ...extra,
+    });
+
+    it('desktop toolbar does not contain Clock button', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makeToolbarTab() },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      const { container } = render(<ChatView {...defaultProps} tabId={tabId} />);
+      const toolbar = container.querySelector('[data-testid="bottom-toolbar-row"]');
+      expect(toolbar).toBeTruthy();
+      // Clock button (with Scheduled Task title) should NOT be inside the desktop toolbar
+      const allToolbarButtons = toolbar!.querySelectorAll('button');
+      const clockBtn = Array.from(allToolbarButtons).find(b => b.getAttribute('title')?.includes('Scheduled'));
+      expect(clockBtn).toBeFalsy();
+    });
+
+    it('desktop toolbar does not contain WebSearchToggle', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makeToolbarTab() },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+        webSearchAvailable: true,
+      });
+      const { container } = render(<ChatView {...defaultProps} tabId={tabId} />);
+      const toolbar = container.querySelector('[data-testid="bottom-toolbar-row"]');
+      expect(toolbar).toBeTruthy();
+      // WebSearchToggle should NOT be inside the desktop toolbar
+      const wsToggle = toolbar!.querySelector('[data-testid="web-search-toggle"]');
+      expect(wsToggle).toBeFalsy();
+    });
+
+    it('Clock button exists in input leftActions area (visible on all sizes)', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makeToolbarTab() },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      const { container } = render(<ChatView {...defaultProps} tabId={tabId} />);
+      // Clock button should exist somewhere in the DOM (in leftActions, not in toolbar)
+      const allButtons = container.querySelectorAll('button');
+      const clockBtn = Array.from(allButtons).find(b => b.getAttribute('title')?.includes('Scheduled'));
+      expect(clockBtn).toBeTruthy();
+      // It should NOT be inside the toolbar
+      const toolbar = container.querySelector('[data-testid="bottom-toolbar-row"]');
+      expect(toolbar!.contains(clockBtn!)).toBe(false);
+    });
+
+    it('WebSearchToggle exists in input leftActions when webSearchAvailable', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makeToolbarTab() },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+        webSearchAvailable: true,
+      });
+      const { container } = render(<ChatView {...defaultProps} tabId={tabId} />);
+      // WebSearchToggle should exist somewhere in the DOM
+      const wsToggle = container.querySelector('[data-testid="web-search-toggle"]');
+      expect(wsToggle).toBeTruthy();
+      // It should NOT be inside the desktop toolbar
+      const toolbar = container.querySelector('[data-testid="bottom-toolbar-row"]');
+      expect(toolbar!.contains(wsToggle!)).toBe(false);
+    });
+
+    it('leftActions container does not have md:hidden class', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makeToolbarTab() },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      const { container } = render(<ChatView {...defaultProps} tabId={tabId} />);
+      // Find the Clock button and check its parent container
+      const allButtons = container.querySelectorAll('button');
+      const clockBtn = Array.from(allButtons).find(b => b.getAttribute('title')?.includes('Scheduled'));
+      expect(clockBtn).toBeTruthy();
+      // The parent div (leftActions container) should have 'flex' but NOT 'md:hidden'
+      const parentDiv = clockBtn!.parentElement;
+      expect(parentDiv?.className).toContain('flex');
+      expect(parentDiv?.className).not.toContain('md:hidden');
     });
   });
 });

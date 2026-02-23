@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import Database from 'better-sqlite3';
 import { SessionStore } from '../../src/auth/session.js';
 
 describe('SessionStore', () => {
   let store: SessionStore;
 
   beforeEach(() => {
-    store = new SessionStore();
+    const db = new Database(':memory:');
+    store = new SessionStore(db);
   });
 
   it('should create a session token', () => {

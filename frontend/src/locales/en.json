@@ -8,7 +8,10 @@
     "subtitle": "Enter password to continue",
     "password": "Password",
     "loggingIn": "Logging in...",
-    "login": "Login"
+    "login": "Login",
+    "passwordHint": "Minimum 8 characters",
+    "rateLimited": "Too many login attempts. Please wait and try again.",
+    "locked": "Account temporarily locked due to repeated failed attempts."
   },
   "connection": {
     "connected": "Connected",
@@ -110,7 +113,8 @@
     "home": "Home",
     "newChat": "New chat",
     "shortcuts": "Keyboard shortcuts",
-    "settings": "Settings"
+    "settings": "Settings",
+    "openspec": "OpenSpec"
   },
   "tabBar": {
     "copilot": "Copilot",
@@ -222,7 +226,8 @@
       "urlPlaceholder": "GitHub URL or direct link...",
       "installing": "Installing...",
       "installSuccess": "Skill installed successfully",
-      "installError": "Installation failed"
+      "installError": "Installation failed",
+      "onlyZip": "Only ZIP files are accepted"
     }
   },
   "terminal": {
@@ -483,7 +488,34 @@
     "toggleTheme": "Toggle Theme",
     "upload": "Upload File",
     "modelSelector": "Model Selector",
-    "showShortcuts": "Show Shortcuts"
+    "showShortcuts": "Show Shortcuts",
+    "togglePlanMode": "Toggle Plan/Act Mode",
+    "toggleOpenSpec": "Toggle OpenSpec Panel"
+  },
+  "openspecPanel": {
+    "title": "OpenSpec",
+    "refresh": "Refresh",
+    "overview": "Overview",
+    "changes": "Changes",
+    "specs": "Specs",
+    "archived": "Archived",
+    "activeChanges": "Active Changes",
+    "specsCount": "Specifications",
+    "archivedCount": "Archived",
+    "noChanges": "No active changes",
+    "noSpecs": "No specifications",
+    "noArchived": "No archived changes",
+    "tasks": "Tasks",
+    "proposal": "Proposal",
+    "design": "Design",
+    "deltaSpecs": "Delta Specs",
+    "archive": "Archive",
+    "delete": "Delete",
+    "confirmDelete": "Click again to confirm",
+    "back": "Back",
+    "loading": "Loading...",
+    "noContent": "No content",
+    "taskProgress": "{{completed}}/{{total}} tasks"
   },
   "common": {
     "close": "Close",

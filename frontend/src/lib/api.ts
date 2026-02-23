@@ -1,9 +1,14 @@
 const BASE_URL = '';
 
+function getCsrfToken(): string {
+  const match = document.cookie.match(/(?:^|;\s*)csrf=([^;]*)/);
+  return match ? match[1] : '';
+}
+
 export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCsrfToken() },
     body: body ? JSON.stringify(body) : undefined,
     credentials: 'same-origin',
   });
@@ -28,7 +33,7 @@ export async function apiGet<T>(path: string): Promise<T> {
 export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCsrfToken() },
     body: body ? JSON.stringify(body) : undefined,
     credentials: 'same-origin',
   });
@@ -42,6 +47,7 @@ export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
 export async function apiDelete<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'DELETE',
+    headers: { 'X-CSRF-Token': getCsrfToken() },
     credentials: 'same-origin',
   });
   if (!res.ok) {
@@ -55,7 +61,7 @@ export async function apiDelete<T>(path: string): Promise<T> {
 export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCsrfToken() },
     body: body ? JSON.stringify(body) : undefined,
     credentials: 'same-origin',
   });

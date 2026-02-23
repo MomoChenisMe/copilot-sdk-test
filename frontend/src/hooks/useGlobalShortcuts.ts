@@ -14,6 +14,8 @@ export interface ShortcutActions {
   onTriggerUpload: () => void;
   onToggleModelSelector: () => void;
   onShowShortcuts: () => void;
+  onTogglePlanMode: () => void;
+  onToggleOpenSpec: () => void;
 }
 
 export function useGlobalShortcuts(actions: ShortcutActions) {
@@ -28,6 +30,13 @@ export function useGlobalShortcuts(actions: ShortcutActions) {
       // Use e.code for Alt-based shortcuts because macOS Option+key produces
       // special characters (e.g. Option+T → †), making e.key unreliable.
       const code = e.code;
+
+      // Shift+Tab — toggle Plan/Act mode (before alt gate)
+      if (key === 'Tab' && shift && !alt && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        actionsRef.current.onTogglePlanMode();
+        return;
+      }
 
       // ? key — show shortcuts panel (skip when in input/textarea)
       if (key === '?' && !alt && !shift) {
@@ -100,6 +109,10 @@ export function useGlobalShortcuts(actions: ShortcutActions) {
             e.preventDefault();
             actionsRef.current.onToggleModelSelector();
             return;
+          case 'KeyO':
+            e.preventDefault();
+            actionsRef.current.onToggleOpenSpec();
+            return;
         }
       }
     };
@@ -124,4 +137,6 @@ export const SHORTCUT_DEFINITIONS = [
   { action: 'shortcuts.upload', keys: ['⌥', '⇧', 'U'] },
   { action: 'shortcuts.modelSelector', keys: ['⌥', 'M'] },
   { action: 'shortcuts.showShortcuts', keys: ['?'] },
+  { action: 'shortcuts.togglePlanMode', keys: ['⇧', 'Tab'] },
+  { action: 'shortcuts.toggleOpenSpec', keys: ['⌥', 'O'] },
 ] as const;

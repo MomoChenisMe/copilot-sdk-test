@@ -265,6 +265,14 @@ export interface AppState {
   // Premium quota (global, not per-tab)
   premiumQuota: { used: number; total: number; resetDate: string | null; unlimited: boolean } | null;
   setPremiumQuota: (quota: { used: number; total: number; resetDate: string | null; unlimited: boolean } | null) => void;
+
+  // OpenSpec panel
+  openspecPanelOpen: boolean;
+  setOpenspecPanelOpen: (open: boolean) => void;
+
+  // Settings cache (synced from backend)
+  settings: { openspecEnabled?: boolean } | null;
+  setSettings: (settings: { openspecEnabled?: boolean } | null) => void;
 }
 
 const MIGRATION_KEYS = [
@@ -1049,6 +1057,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Premium quota (global)
   premiumQuota: null,
   setPremiumQuota: (quota) => set({ premiumQuota: quota }),
+
+  // OpenSpec panel
+  openspecPanelOpen: false,
+  setOpenspecPanelOpen: (open) => set({ openspecPanelOpen: open }),
+
+  // Settings cache
+  settings: null,
+  setSettings: (settings) => set({ settings }),
 }));
 
 function persistOpenTabs(tabs: Record<string, TabState>, tabOrder: string[]) {

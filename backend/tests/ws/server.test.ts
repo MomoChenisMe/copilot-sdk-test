@@ -4,6 +4,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import http from 'node:http';
 import { WebSocket } from 'ws';
+import Database from 'better-sqlite3';
 import { SessionStore } from '../../src/auth/session.js';
 import { createWsServer } from '../../src/ws/server.js';
 
@@ -15,7 +16,7 @@ describe('WebSocket server', () => {
   let port: number;
 
   beforeEach(async () => {
-    sessionStore = new SessionStore();
+    sessionStore = new SessionStore(new Database(':memory:'));
     httpServer = http.createServer();
     createWsServer(httpServer, sessionStore);
 

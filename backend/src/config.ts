@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 const configSchema = z.object({
   port: z.coerce.number().int().positive().default(3001),
   nodeEnv: z.enum(['development', 'production', 'test']).default('development'),
-  webPassword: z.string().min(1, 'WEB_PASSWORD is required'),
+  webPassword: z.string().min(8, 'WEB_PASSWORD must be at least 8 characters'),
   sessionSecret: z.string().min(1, 'SESSION_SECRET is required'),
   defaultCwd: z.string().default(homedir()),
   dbPath: z.string().default('./data/conversations.db'),
