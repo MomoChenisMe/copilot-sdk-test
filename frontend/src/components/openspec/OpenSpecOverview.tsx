@@ -1,13 +1,17 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { GitBranch, FileText, Archive } from 'lucide-react';
+import { Markdown } from '../shared/Markdown';
 import type { OverviewData } from '../../lib/openspec-api';
 
 interface OpenSpecOverviewProps {
   overview: OverviewData | null;
+  onNavigate?: (tab: string) => void;
 }
 
-export function OpenSpecOverview({ overview }: OpenSpecOverviewProps) {
+export function OpenSpecOverview({ overview, onNavigate }: OpenSpecOverviewProps) {
   const { t } = useTranslation();
+  const [configTab, setConfigTab] = useState<'description' | 'rules'>('description');
 
   if (!overview) {
     return (
@@ -20,20 +24,33 @@ export function OpenSpecOverview({ overview }: OpenSpecOverviewProps) {
   const stats = [
     {
       label: t('openspecPanel.overview.activeChanges', 'Active Changes'),
-      value: overview.activeChanges,
+      value: overview.changesCount,
       icon: GitBranch,
+      tab: 'changes',
     },
     {
       label: t('openspecPanel.overview.specs', 'Specs'),
-      value: overview.specs,
+      value: overview.specsCount,
       icon: FileText,
+      tab: 'specs',
     },
     {
       label: t('openspecPanel.overview.archived', 'Archived'),
-      value: overview.archived,
+      value: overview.archivedCount,
       icon: Archive,
+      tab: 'archived',
     },
   ];
+
+  const config = overview.config;
+  const projectDescription = config?.context as string | undefined;
+  // rules is an object { proposal: string[], specs: string[], ... } — format as markdown
+  const rulesObj = config?.rules as Record<string, string[]> | undefined;
+  const outputRules = rulesObj
+    ? Object.entries(rulesObj)
+        .map(([key, items]) => `### ${key}\n${Array.isArray(items) ? items.map((r) => `- ${r}`).join('\n') : String(items)}`)
+        .join('\n\n')
+    : undefined;
 
   return (
     <div className="p-4 space-y-3">
@@ -42,16 +59,72 @@ export function OpenSpecOverview({ overview }: OpenSpecOverviewProps) {
       </h3>
       <div className="grid grid-cols-3 gap-3">
         {stats.map((stat) => (
-          <div
+          <button
             key={stat.label}
-            className="rounded-lg border border-border-subtle bg-bg-primary p-3 text-center"
+            onClick={() => onNavigate?.(stat.tab)}
+            className="rounded-lg border border-border bg-bg-primary p-3 text-center hover:bg-bg-tertiary transition-colors cursor-pointer"
           >
             <stat.icon size={16} className="mx-auto mb-1.5 text-accent" />
             <p className="text-lg font-bold text-accent">{stat.value}</p>
             <p className="text-[11px] text-text-muted leading-tight mt-0.5">{stat.label}</p>
-          </div>
+          </button>
         ))}
       </div>
+
+      {/* Config.yaml display card */}
+      {config && (
+        <div className="rounded-lg border border-border bg-bg-primary overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-text-primary">
+                {t('openspecPanel.overview.configTitle', 'Project Settings')}
+              </span>
+              <span className="text-xs text-text-muted">config.yaml</span>
+            </div>
+          </div>
+
+          {/* Tab buttons */}
+          <div className="flex border-b border-border">
+            <button
+              onClick={() => setConfigTab('description')}
+              className={`flex-1 px-4 py-2 text-xs font-medium transition-colors ${
+                configTab === 'description'
+                  ? 'text-accent border-b-2 border-accent'
+                  : 'text-text-muted hover:text-text-secondary'
+              }`}
+            >
+              {t('openspecPanel.overview.projectDescription', 'Project Description')}
+            </button>
+            <button
+              onClick={() => setConfigTab('rules')}
+              className={`flex-1 px-4 py-2 text-xs font-medium transition-colors ${
+                configTab === 'rules'
+                  ? 'text-accent border-b-2 border-accent'
+                  : 'text-text-muted hover:text-text-secondary'
+              }`}
+            >
+              {t('openspecPanel.overview.outputRules', 'Output Rules')}
+            </button>
+          </div>
+
+          {/* Tab content */}
+          <div className="p-4 max-h-64 overflow-y-auto">
+            {configTab === 'description' ? (
+              projectDescription ? (
+                <Markdown content={projectDescription} />
+              ) : (
+                <p className="text-sm text-text-muted">{t('openspecPanel.noContent', 'No content')}</p>
+              )
+            ) : (
+              outputRules ? (
+                <Markdown content={outputRules} />
+              ) : (
+                <p className="text-sm text-text-muted">{t('openspecPanel.noContent', 'No content')}</p>
+              )
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

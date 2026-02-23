@@ -6,8 +6,7 @@ export interface ShortcutActions {
   onSelectTabByIndex: (index: number) => void;
   onNextTab: () => void;
   onPrevTab: () => void;
-  onToggleAiMode: () => void;
-  onToggleBashMode: () => void;
+  onToggleAiBash: () => void;
   onOpenSettings: () => void;
   onClearConversation: () => void;
   onToggleTheme: () => void;
@@ -30,6 +29,13 @@ export function useGlobalShortcuts(actions: ShortcutActions) {
       // Use e.code for Alt-based shortcuts because macOS Option+key produces
       // special characters (e.g. Option+T → †), making e.key unreliable.
       const code = e.code;
+
+      // Cmd/Ctrl+Shift+Tab — toggle AI/Bash mode (must be before Shift+Tab)
+      if (key === 'Tab' && shift && (e.ctrlKey || e.metaKey) && !alt) {
+        e.preventDefault();
+        actionsRef.current.onToggleAiBash();
+        return;
+      }
 
       // Shift+Tab — toggle Plan/Act mode (before alt gate)
       if (key === 'Tab' && shift && !alt && !e.ctrlKey && !e.metaKey) {
@@ -59,14 +65,6 @@ export function useGlobalShortcuts(actions: ShortcutActions) {
           case 'BracketRight':
             e.preventDefault();
             actionsRef.current.onNextTab();
-            return;
-          case 'KeyA':
-            e.preventDefault();
-            actionsRef.current.onToggleAiMode();
-            return;
-          case 'KeyB':
-            e.preventDefault();
-            actionsRef.current.onToggleBashMode();
             return;
           case 'KeyD':
             e.preventDefault();
@@ -129,8 +127,7 @@ export const SHORTCUT_DEFINITIONS = [
   { action: 'shortcuts.switchTab', keys: ['⌥', '1-9'] },
   { action: 'shortcuts.prevTab', keys: ['⌥', '⇧', '['] },
   { action: 'shortcuts.nextTab', keys: ['⌥', '⇧', ']'] },
-  { action: 'shortcuts.aiMode', keys: ['⌥', '⇧', 'A'] },
-  { action: 'shortcuts.bashMode', keys: ['⌥', '⇧', 'B'] },
+  { action: 'shortcuts.toggleAiBash', keys: ['⌘/⌃', '⇧', 'Tab'] },
   { action: 'shortcuts.settings', keys: ['⌥', ','] },
   { action: 'shortcuts.clearChat', keys: ['⌥', 'K'] },
   { action: 'shortcuts.toggleTheme', keys: ['⌥', '⇧', 'D'] },

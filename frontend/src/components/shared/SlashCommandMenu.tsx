@@ -34,7 +34,12 @@ function CommandItem({
         selected ? 'bg-accent-soft text-accent' : 'hover:bg-bg-tertiary text-text-primary'
       }`}
     >
-      <span className="text-sm font-medium">/{cmd.name}</span>
+      <span className="text-sm font-medium flex items-center gap-1.5">
+        /{cmd.name}
+        {cmd.name.startsWith('openspec-') && (
+          <span className="px-1 py-0.5 text-[9px] font-medium bg-purple-500/10 text-purple-500 rounded">OpenSpec</span>
+        )}
+      </span>
       {cmd.description && (
         <span className="text-xs text-text-muted line-clamp-2">{cmd.description}</span>
       )}

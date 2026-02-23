@@ -102,18 +102,22 @@ export function CronConfigPanel({ conversationId, tabId, onClose, onSaved }: Cro
   if (!loaded) return null;
 
   return (
-    <div className="border border-border rounded-xl bg-bg-elevated p-4 mb-3 shadow-[var(--shadow-sm)]">
+    <div className="bg-bg-elevated border border-border rounded-xl shadow-[var(--shadow-lg)] p-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2 text-sm font-medium text-text-primary">
-          <Clock size={16} className="text-accent" />
-          {t('cron.configTitle', 'Scheduled Task')}
+      <div className="flex items-start gap-3 mb-4">
+        <div className="p-2 rounded-lg bg-accent/10">
+          <Clock size={20} className="text-accent" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium text-text-primary">
+            {t('cron.configTitle', 'Scheduled Task')}
+          </div>
         </div>
         <button
           onClick={onClose}
-          className="p-1 rounded hover:bg-bg-tertiary text-text-muted transition-colors"
+          className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-secondary transition-colors"
         >
-          <X size={14} />
+          <X size={16} />
         </button>
       </div>
 

@@ -79,7 +79,7 @@ export function SettingsPanel({ open, onClose, onLanguageToggle, language, onLog
   return (
     <div
       data-testid="settings-panel"
-      className="fixed inset-0 z-50 bg-bg-primary flex flex-col"
+      className="fixed inset-0 z-50 bg-bg-primary flex flex-col animate-fade-scale-in"
     >
       {/* Header */}
       <div className="h-12 flex items-center gap-3 px-4 border-b border-border-subtle shrink-0">
@@ -185,18 +185,45 @@ function GeneralTab({
   const [sdkLatestVersion, setSdkLatestVersion] = useState<string | null>(null);
   const [sdkUpdateAvailable, setSdkUpdateAvailable] = useState(false);
   const [analyzingChanges, setAnalyzingChanges] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [updatingSdk, setUpdatingSdk] = useState(false);
 
-  useEffect(() => {
-    import('../../lib/api').then(({ apiGet }) => {
-      apiGet<{ currentVersion: string | null; latestVersion: string | null; updateAvailable: boolean }>('/api/copilot/sdk-version')
-        .then((r) => {
-          setSdkVersion(r.currentVersion);
-          setSdkLatestVersion(r.latestVersion);
-          setSdkUpdateAvailable(r.updateAvailable);
-        })
-        .catch((err) => { console.warn('Failed to fetch SDK version:', err); });
-    });
+  const fetchVersionInfo = useCallback(async () => {
+    try {
+      const { apiGet } = await import('../../lib/api');
+      const r = await apiGet<{ currentVersion: string | null; latestVersion: string | null; updateAvailable: boolean }>('/api/copilot/sdk-version');
+      setSdkVersion(r.currentVersion);
+      setSdkLatestVersion(r.latestVersion);
+      setSdkUpdateAvailable(r.updateAvailable);
+    } catch (err) {
+      console.warn('Failed to fetch SDK version:', err);
+    }
   }, []);
+
+  useEffect(() => { fetchVersionInfo(); }, [fetchVersionInfo]);
+
+  const handleCheckForUpdates = useCallback(async () => {
+    setChecking(true);
+    try { await fetchVersionInfo(); } finally { setChecking(false); }
+  }, [fetchVersionInfo]);
+
+  const handleUpdateSdk = useCallback(async () => {
+    setUpdatingSdk(true);
+    try {
+      const { apiPost } = await import('../../lib/api');
+      const r = await apiPost<{ success: boolean; error?: string }>('/api/copilot/sdk-update');
+      if (r.success) {
+        await fetchVersionInfo();
+        useAppStore.getState().addToast?.({ type: 'success', title: t('sdk.updateSuccess', 'SDK updated successfully') });
+      } else {
+        useAppStore.getState().addToast?.({ type: 'error', title: t('sdk.updateFailed', 'SDK update failed'), message: r.error });
+      }
+    } catch {
+      useAppStore.getState().addToast?.({ type: 'error', title: t('sdk.updateFailed', 'SDK update failed') });
+    } finally {
+      setUpdatingSdk(false);
+    }
+  }, [fetchVersionInfo, t]);
 
   const handleAnalyzeChanges = useCallback(async () => {
     if (!sdkVersion || !sdkLatestVersion) return;
@@ -229,20 +256,56 @@ function GeneralTab({
       {/* SDK Version */}
       <section>
         <h3 className="text-xs font-semibold text-text-secondary uppercase mb-2">Copilot SDK</h3>
-        <div className="flex items-center gap-3">
-          <span data-testid="sdk-version" className="text-sm text-text-primary font-mono">
-            {sdkVersion ? `v${sdkVersion}` : t('sdk.versionUnknown')}
-          </span>
-          {sdkUpdateAvailable && sdkLatestVersion && (
+        <div className="flex flex-col gap-2">
+          {/* Version display row */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <span data-testid="sdk-version" className="text-sm text-text-primary font-mono">
+              {sdkVersion ? `v${sdkVersion}` : t('sdk.versionUnknown')}
+            </span>
+            {sdkUpdateAvailable && sdkLatestVersion && (
+              <>
+                <span className="text-text-muted">→</span>
+                <span className="text-sm font-mono text-accent font-semibold">v{sdkLatestVersion}</span>
+                <span className="px-1.5 py-0.5 text-[10px] font-medium bg-accent/10 text-accent rounded">
+                  {t('sdk.updateAvailable', 'Update Available')}
+                </span>
+              </>
+            )}
+            {!sdkUpdateAvailable && sdkLatestVersion && (
+              <span className="text-xs text-green-500">{t('sdk.upToDate', 'Up to date')}</span>
+            )}
+          </div>
+          {/* Action buttons row */}
+          <div className="flex items-center gap-2 flex-wrap">
             <button
-              data-testid="analyze-changes-button"
-              onClick={handleAnalyzeChanges}
-              disabled={analyzingChanges}
-              className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              data-testid="check-updates-button"
+              onClick={handleCheckForUpdates}
+              disabled={checking}
+              className="px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-bg-tertiary transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-text-primary"
             >
-              {analyzingChanges ? '...' : t('sdk.analyzeChanges')}
+              {checking ? '...' : t('sdk.checkForUpdates', 'Check for Updates')}
             </button>
-          )}
+            {sdkUpdateAvailable && sdkLatestVersion && (
+              <>
+                <button
+                  data-testid="update-sdk-button"
+                  onClick={handleUpdateSdk}
+                  disabled={updatingSdk}
+                  className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {updatingSdk ? '...' : t('sdk.updateSdk', 'Update SDK')}
+                </button>
+                <button
+                  data-testid="analyze-changes-button"
+                  onClick={handleAnalyzeChanges}
+                  disabled={analyzingChanges}
+                  className="px-3 py-1.5 text-xs font-medium border border-accent text-accent rounded-lg hover:bg-accent/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {analyzingChanges ? '...' : t('sdk.analyzeChanges')}
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </section>
 
@@ -1087,6 +1150,9 @@ function SkillsTab({ onClose }: { onClose?: () => void }) {
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm text-text-primary hover:text-accent truncate">{skill.name}</span>
                     <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-medium bg-accent/10 text-accent rounded">{t('settings.skills.systemBadge')}</span>
+                    {skill.name.startsWith('openspec-') && (
+                      <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-medium bg-purple-500/10 text-purple-500 rounded">{t('settings.skills.openspecBadge', 'OpenSpec')}</span>
+                    )}
                   </div>
                   {skill.description && (
                     <div className="text-xs text-text-secondary truncate">{skill.description}</div>
@@ -1133,7 +1199,12 @@ function SkillsTab({ onClose }: { onClose?: () => void }) {
                 onClick={() => handleExpand(skill.name, skill.description, skill.content)}
                 className="flex-1 text-left min-w-0"
               >
-                <div className="text-sm text-text-primary hover:text-accent truncate">{skill.name}</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm text-text-primary hover:text-accent truncate">{skill.name}</span>
+                  {skill.name.startsWith('openspec-') && (
+                    <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-medium bg-purple-500/10 text-purple-500 rounded">{t('settings.skills.openspecBadge', 'OpenSpec')}</span>
+                  )}
+                </div>
                 {skill.description && (
                   <div className="text-xs text-text-secondary truncate">{skill.description}</div>
                 )}

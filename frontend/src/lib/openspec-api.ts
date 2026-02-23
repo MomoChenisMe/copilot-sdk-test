@@ -3,17 +3,18 @@ import { apiGet, apiPatch, apiPost, apiDelete } from './api';
 // ── Response Types ──────────────────────────────────────────────────────────
 
 export interface OverviewData {
-  activeChanges: number;
-  specs: number;
-  archived: number;
+  changesCount: number;
+  specsCount: number;
+  archivedCount: number;
+  config: Record<string, unknown> | null;
+  resolvedPath: string | null;
 }
 
 export interface ChangeListItem {
   name: string;
-  status: 'active' | 'completed' | 'archived';
-  tasksCompleted: number;
-  tasksTotal: number;
-  proposalExcerpt: string;
+  status: string;
+  taskProgress: { total: number; completed: number };
+  proposal: string;
 }
 
 export interface DeltaSpecFile {
@@ -23,13 +24,11 @@ export interface DeltaSpecFile {
 
 export interface ChangeDetail {
   name: string;
-  status: 'active' | 'completed' | 'archived';
-  tasksCompleted: number;
-  tasksTotal: number;
-  tasksMd: string;
-  proposalMd: string;
-  designMd: string;
-  deltaSpecs: DeltaSpecFile[];
+  openspec: Record<string, unknown> | null;
+  proposal: string | null;
+  design: string | null;
+  tasks: string | null;
+  specs: string[];
 }
 
 export interface SpecListItem {
@@ -53,40 +52,48 @@ export interface TaskToggleResult {
   tasksTotal: number;
 }
 
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+function withCwd(url: string, cwd?: string): string {
+  if (!cwd) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}cwd=${encodeURIComponent(cwd)}`;
+}
+
 // ── API Client ──────────────────────────────────────────────────────────────
 
 export const openspecApi = {
-  getOverview: () =>
-    apiGet<OverviewData>('/api/openspec/overview'),
+  getOverview: (cwd?: string) =>
+    apiGet<OverviewData>(withCwd('/api/openspec/overview', cwd)),
 
-  listChanges: () =>
-    apiGet<{ changes: ChangeListItem[] }>('/api/openspec/changes').then((r) => r.changes),
+  listChanges: (cwd?: string) =>
+    apiGet<{ changes: ChangeListItem[] }>(withCwd('/api/openspec/changes', cwd)).then((r) => r.changes),
 
-  getChange: (name: string) =>
-    apiGet<ChangeDetail>(`/api/openspec/changes/${encodeURIComponent(name)}`),
+  getChange: (name: string, cwd?: string) =>
+    apiGet<ChangeDetail>(withCwd(`/api/openspec/changes/${encodeURIComponent(name)}`, cwd)),
 
-  updateTask: (name: string, taskLine: string, checked: boolean) =>
+  updateTask: (name: string, taskLine: string, checked: boolean, cwd?: string) =>
     apiPatch<TaskToggleResult>(
-      `/api/openspec/changes/${encodeURIComponent(name)}/task`,
+      withCwd(`/api/openspec/changes/${encodeURIComponent(name)}/task`, cwd),
       { taskLine, checked },
     ),
 
-  archiveChange: (name: string) =>
+  archiveChange: (name: string, cwd?: string) =>
     apiPost<{ ok: boolean }>(
-      `/api/openspec/changes/${encodeURIComponent(name)}/archive`,
+      withCwd(`/api/openspec/changes/${encodeURIComponent(name)}/archive`, cwd),
     ),
 
-  deleteChange: (name: string) =>
+  deleteChange: (name: string, cwd?: string) =>
     apiDelete<{ ok: boolean }>(
-      `/api/openspec/changes/${encodeURIComponent(name)}`,
+      withCwd(`/api/openspec/changes/${encodeURIComponent(name)}`, cwd),
     ),
 
-  listSpecs: () =>
-    apiGet<{ specs: SpecListItem[] }>('/api/openspec/specs').then((r) => r.specs),
+  listSpecs: (cwd?: string) =>
+    apiGet<{ specs: SpecListItem[] }>(withCwd('/api/openspec/specs', cwd)).then((r) => r.specs),
 
-  getSpecFile: (name: string) =>
-    apiGet<SpecFileContent>(`/api/openspec/specs/${encodeURIComponent(name)}`),
+  getSpecFile: (name: string, cwd?: string) =>
+    apiGet<SpecFileContent>(withCwd(`/api/openspec/specs/${encodeURIComponent(name)}`, cwd)),
 
-  listArchived: () =>
-    apiGet<{ archived: ArchivedItem[] }>('/api/openspec/archived').then((r) => r.archived),
+  listArchived: (cwd?: string) =>
+    apiGet<{ archived: ArchivedItem[] }>(withCwd('/api/openspec/archived', cwd)).then((r) => r.archived),
 };

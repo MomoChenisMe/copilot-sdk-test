@@ -384,67 +384,71 @@ export function ChatView({
               {currentCwd && onCwdChange && (
                 <CwdSelector currentCwd={currentCwd} onCwdChange={onCwdChange} mode={tabMode} onModeChange={handleModeChange} />
               )}
-              {tabId && <PlanActToggle planMode={planMode} onToggle={handlePlanModeToggle} disabled={isStreaming} />}
+              {tabId && <PlanActToggle planMode={planMode} onToggle={handlePlanModeToggle} disabled={isStreaming || isTerminalMode} />}
             </div>
-            {cronConfigOpen && tabId && activeConversationId && (
-              <CronConfigPanel
-                conversationId={activeConversationId}
-                tabId={tabId}
-                onClose={() => setTabCronConfigOpen(tabId, false)}
-                onSaved={onCronSaved}
-              />
-            )}
-            <Input
-              ref={inputRef}
-              onSend={isTerminalMode ? handleTerminalSend : onSend}
-              onAbort={onAbort}
-              isStreaming={isStreaming}
-              disabled={disabled}
-              slashCommands={isTerminalMode ? undefined : slashCommands}
-              onSlashCommand={isTerminalMode ? undefined : handleSlashCommand}
-              enableAttachments={canAttach}
-              attachmentsDisabledReason={attachmentsDisabledReason}
-              enableAtFiles={!isTerminalMode}
-              currentCwd={currentCwd}
-              placeholder={isTerminalMode ? t('terminal.placeholder', '$ enter command...') : undefined}
-              statusText={premiumQuota ? (premiumQuota.unlimited ? `${premiumQuota.used} PR` : `${premiumQuota.used}/${premiumQuota.total} PR`) : undefined}
-              inputHistory={inputHistory}
-              leftActions={
-                <div className="flex items-center gap-1">
-                  <div className="md:hidden">
-                    <MobileToolbarPopup
-                      currentModel={currentModel}
-                      onModelChange={onModelChange}
-                      currentCwd={currentCwd}
-                      onCwdChange={onCwdChange}
-                      tabMode={tabMode}
-                      onModeChange={handleModeChange}
-                      tabId={tabId}
-                      planMode={planMode}
-                      onPlanModeToggle={handlePlanModeToggle}
-                      isStreaming={isStreaming}
-                      webSearchForced={webSearchForced}
-                      onWebSearchToggle={(f) => tabId && setTabWebSearchForced(tabId, f)}
-                      webSearchAvailable={webSearchAvailable}
-                    />
-                  </div>
-                  {tabId && webSearchAvailable && (
-                    <WebSearchToggle forced={webSearchForced} onToggle={(f) => setTabWebSearchForced(tabId, f)} disabled={isStreaming} />
-                  )}
-                  {tabId && (
-                    <Tooltip label={t('cron.configTitle', 'Scheduled Task')}>
-                      <button
-                        onClick={() => activeConversationId && setTabCronConfigOpen(tabId, !cronConfigOpen)}
-                        disabled={!activeConversationId}
-                        className={`p-1.5 rounded-lg transition-colors ${cronConfigOpen ? 'text-accent' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'} disabled:opacity-40 disabled:cursor-not-allowed`}
-                      >
-                        <Clock size={14} />
-                      </button>
-                    </Tooltip>
-                  )}
+            <div className="relative">
+              {cronConfigOpen && tabId && activeConversationId && (
+                <div className="absolute bottom-full left-0 right-0 mb-2 z-10">
+                  <CronConfigPanel
+                    conversationId={activeConversationId}
+                    tabId={tabId}
+                    onClose={() => setTabCronConfigOpen(tabId, false)}
+                    onSaved={onCronSaved}
+                  />
                 </div>
-              }
-            />
+              )}
+              <Input
+                ref={inputRef}
+                onSend={isTerminalMode ? handleTerminalSend : onSend}
+                onAbort={onAbort}
+                isStreaming={isStreaming}
+                disabled={disabled}
+                slashCommands={isTerminalMode ? undefined : slashCommands}
+                onSlashCommand={isTerminalMode ? undefined : handleSlashCommand}
+                enableAttachments={canAttach}
+                attachmentsDisabledReason={attachmentsDisabledReason}
+                enableAtFiles={!isTerminalMode}
+                currentCwd={currentCwd}
+                placeholder={isTerminalMode ? t('terminal.placeholder', '$ enter command...') : undefined}
+                statusText={premiumQuota ? (premiumQuota.unlimited ? `${premiumQuota.used} PR` : `${premiumQuota.used}/${premiumQuota.total} PR`) : undefined}
+                inputHistory={inputHistory}
+                leftActions={
+                  <div className="flex items-center gap-1">
+                    <div className="md:hidden">
+                      <MobileToolbarPopup
+                        currentModel={currentModel}
+                        onModelChange={onModelChange}
+                        currentCwd={currentCwd}
+                        onCwdChange={onCwdChange}
+                        tabMode={tabMode}
+                        onModeChange={handleModeChange}
+                        tabId={tabId}
+                        planMode={planMode}
+                        onPlanModeToggle={handlePlanModeToggle}
+                        isStreaming={isStreaming}
+                        webSearchForced={webSearchForced}
+                        onWebSearchToggle={(f) => tabId && setTabWebSearchForced(tabId, f)}
+                        webSearchAvailable={webSearchAvailable}
+                      />
+                    </div>
+                    {tabId && webSearchAvailable && !isTerminalMode && (
+                      <WebSearchToggle forced={webSearchForced} onToggle={(f) => setTabWebSearchForced(tabId, f)} disabled={isStreaming} />
+                    )}
+                    {tabId && !isTerminalMode && (
+                      <Tooltip label={t('cron.configTitle', 'Scheduled Task')}>
+                        <button
+                          onClick={() => activeConversationId && setTabCronConfigOpen(tabId, !cronConfigOpen)}
+                          disabled={!activeConversationId}
+                          className={`p-1.5 rounded-lg transition-colors ${cronConfigOpen ? 'text-accent' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'} disabled:opacity-40 disabled:cursor-not-allowed`}
+                        >
+                          <Clock size={14} />
+                        </button>
+                      </Tooltip>
+                    )}
+                  </div>
+                }
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -647,67 +651,71 @@ export function ChatView({
                 {currentCwd && onCwdChange && (
                   <CwdSelector currentCwd={currentCwd} onCwdChange={onCwdChange} mode={tabMode} onModeChange={handleModeChange} />
                 )}
-                {tabId && <PlanActToggle planMode={planMode} onToggle={handlePlanModeToggle} disabled={isStreaming} />}
+                {tabId && <PlanActToggle planMode={planMode} onToggle={handlePlanModeToggle} disabled={isStreaming || isTerminalMode} />}
               </div>
-              {cronConfigOpen && tabId && activeConversationId && (
-                <CronConfigPanel
-                  conversationId={activeConversationId}
-                  tabId={tabId}
-                  onClose={() => setTabCronConfigOpen(tabId, false)}
-                  onSaved={onCronSaved}
-                />
-              )}
-              <Input
-                ref={inputRef}
-                onSend={isTerminalMode ? handleTerminalSend : onSend}
-                onAbort={onAbort}
-                isStreaming={isStreaming}
-                disabled={disabled}
-                slashCommands={isTerminalMode ? undefined : slashCommands}
-                onSlashCommand={isTerminalMode ? undefined : handleSlashCommand}
-                enableAttachments={canAttach}
-                attachmentsDisabledReason={attachmentsDisabledReason}
-                enableAtFiles={!isTerminalMode}
-                currentCwd={currentCwd}
-                placeholder={isTerminalMode ? t('terminal.placeholder', '$ enter command...') : undefined}
-                statusText={premiumQuota ? (premiumQuota.unlimited ? `${premiumQuota.used} PR` : `${premiumQuota.used}/${premiumQuota.total} PR`) : undefined}
-                inputHistory={inputHistory}
-                leftActions={
-                  <div className="flex items-center gap-1">
-                    <div className="md:hidden">
-                      <MobileToolbarPopup
-                        currentModel={currentModel}
-                        onModelChange={onModelChange}
-                        currentCwd={currentCwd}
-                        onCwdChange={onCwdChange}
-                        tabMode={tabMode}
-                        onModeChange={handleModeChange}
-                        tabId={tabId}
-                        planMode={planMode}
-                        onPlanModeToggle={handlePlanModeToggle}
-                        isStreaming={isStreaming}
-                        webSearchForced={webSearchForced}
-                        onWebSearchToggle={(forced) => tabId && setTabWebSearchForced(tabId, forced)}
-                        webSearchAvailable={webSearchAvailable}
-                      />
-                    </div>
-                    {tabId && webSearchAvailable && (
-                      <WebSearchToggle forced={webSearchForced} onToggle={(forced) => tabId && setTabWebSearchForced(tabId, forced)} disabled={isStreaming} />
-                    )}
-                    {tabId && (
-                      <Tooltip label={t('cron.configTitle', 'Scheduled Task')}>
-                        <button
-                          onClick={() => activeConversationId && setTabCronConfigOpen(tabId, !cronConfigOpen)}
-                          disabled={!activeConversationId}
-                          className={`p-1.5 rounded-lg transition-colors ${cronConfigOpen ? 'text-accent' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'} disabled:opacity-40 disabled:cursor-not-allowed`}
-                        >
-                          <Clock size={14} />
-                        </button>
-                      </Tooltip>
-                    )}
+              <div className="relative">
+                {cronConfigOpen && tabId && activeConversationId && (
+                  <div className="absolute bottom-full left-0 right-0 mb-2 z-10">
+                    <CronConfigPanel
+                      conversationId={activeConversationId}
+                      tabId={tabId}
+                      onClose={() => setTabCronConfigOpen(tabId, false)}
+                      onSaved={onCronSaved}
+                    />
                   </div>
-                }
-              />
+                )}
+                <Input
+                  ref={inputRef}
+                  onSend={isTerminalMode ? handleTerminalSend : onSend}
+                  onAbort={onAbort}
+                  isStreaming={isStreaming}
+                  disabled={disabled}
+                  slashCommands={isTerminalMode ? undefined : slashCommands}
+                  onSlashCommand={isTerminalMode ? undefined : handleSlashCommand}
+                  enableAttachments={canAttach}
+                  attachmentsDisabledReason={attachmentsDisabledReason}
+                  enableAtFiles={!isTerminalMode}
+                  currentCwd={currentCwd}
+                  placeholder={isTerminalMode ? t('terminal.placeholder', '$ enter command...') : undefined}
+                  statusText={premiumQuota ? (premiumQuota.unlimited ? `${premiumQuota.used} PR` : `${premiumQuota.used}/${premiumQuota.total} PR`) : undefined}
+                  inputHistory={inputHistory}
+                  leftActions={
+                    <div className="flex items-center gap-1">
+                      <div className="md:hidden">
+                        <MobileToolbarPopup
+                          currentModel={currentModel}
+                          onModelChange={onModelChange}
+                          currentCwd={currentCwd}
+                          onCwdChange={onCwdChange}
+                          tabMode={tabMode}
+                          onModeChange={handleModeChange}
+                          tabId={tabId}
+                          planMode={planMode}
+                          onPlanModeToggle={handlePlanModeToggle}
+                          isStreaming={isStreaming}
+                          webSearchForced={webSearchForced}
+                          onWebSearchToggle={(forced) => tabId && setTabWebSearchForced(tabId, forced)}
+                          webSearchAvailable={webSearchAvailable}
+                        />
+                      </div>
+                      {tabId && webSearchAvailable && !isTerminalMode && (
+                        <WebSearchToggle forced={webSearchForced} onToggle={(forced) => tabId && setTabWebSearchForced(tabId, forced)} disabled={isStreaming} />
+                      )}
+                      {tabId && !isTerminalMode && (
+                        <Tooltip label={t('cron.configTitle', 'Scheduled Task')}>
+                          <button
+                            onClick={() => activeConversationId && setTabCronConfigOpen(tabId, !cronConfigOpen)}
+                            disabled={!activeConversationId}
+                            className={`p-1.5 rounded-lg transition-colors ${cronConfigOpen ? 'text-accent' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'} disabled:opacity-40 disabled:cursor-not-allowed`}
+                          >
+                            <Clock size={14} />
+                          </button>
+                        </Tooltip>
+                      )}
+                    </div>
+                  }
+                />
+              </div>
             </>
           )}
         </div>

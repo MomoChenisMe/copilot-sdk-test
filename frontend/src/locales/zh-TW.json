@@ -229,6 +229,7 @@
       "system": "系統技能",
       "user": "使用者技能",
       "systemBadge": "系統",
+      "openspecBadge": "OpenSpec",
       "cannotModifyBuiltin": "內建技能無法修改或刪除",
       "upload": "上傳技能包",
       "installFromUrl": "從 URL 安裝",
@@ -460,7 +461,13 @@
   "sdk": {
     "analyzeChanges": "分析更新內容",
     "changelogUnavailable": "更新日誌不可用",
-    "versionUnknown": "未知"
+    "versionUnknown": "未知",
+    "updateAvailable": "有可用更新",
+    "upToDate": "已是最新",
+    "checkForUpdates": "檢查更新",
+    "updateSdk": "更新 SDK",
+    "updateSuccess": "SDK 更新成功",
+    "updateFailed": "SDK 更新失敗"
   },
   "webSearch": {
     "toggleTitle": "強制網路搜尋",
@@ -492,8 +499,7 @@
     "switchTab": "切換頁籤 (1-9)",
     "prevTab": "上一個頁籤",
     "nextTab": "下一個頁籤",
-    "aiMode": "AI 模式",
-    "bashMode": "Bash 模式",
+    "toggleAiBash": "切換 AI/Bash 模式",
     "settings": "設定",
     "clearChat": "清除對話",
     "toggleTheme": "切換主題",
@@ -520,7 +526,10 @@
       "title": "專案概覽",
       "activeChanges": "進行中變更",
       "specs": "規格數量",
-      "archived": "已封存"
+      "archived": "已封存",
+      "configTitle": "專案設定",
+      "projectDescription": "專案說明",
+      "outputRules": "產出規則"
     },
     "changes": {
       "empty": "沒有進行中的變更",
@@ -539,6 +548,11 @@
         "design": "設計",
         "specs": "差異規格"
       },
+      "toolbar": {
+        "markAllComplete": "全部標記完成",
+        "nextIncomplete": "下一個未完成",
+        "resetTasks": "重置任務"
+      },
       "archive": "封存",
       "delete": "刪除",
       "confirmDelete": "再點一次確認刪除",
@@ -546,7 +560,12 @@
       "noSpecs": "沒有差異規格",
       "noProposal": "沒有提案文件",
       "noDesign": "沒有設計文件"
-    }
+    },
+    "usingProject": "專案目錄",
+    "usingDefault": "預設",
+    "notFound": "未找到",
+    "noOpenspec": "未找到 OpenSpec",
+    "noOpenspecDesc": "在目前的工作目錄及其上層目錄中未找到 openspec/ 資料夾。請切換到包含 OpenSpec 的專案目錄，或執行 \"openspec init\" 來初始化。"
   },
   "common": {
     "close": "關閉",

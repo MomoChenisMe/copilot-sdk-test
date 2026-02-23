@@ -188,6 +188,22 @@ html[data-theme="dark"] .hljs-deletion { color: #ffdcd7; background-color: rgba(
   animation: thinking-pulse 2s ease-in-out infinite;
 }
 
+@keyframes fadeScaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.animate-fade-scale-in {
+  animation: fadeScaleIn 0.2s ease-out;
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+.animate-slide-in-right {
+  animation: slideInRight 0.2s ease-out;
+}
+
 /* ============================================
    Base styles
    Wrapped in @layer base so Tailwind v4 utilities

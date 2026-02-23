@@ -31,7 +31,7 @@ export function OpenSpecSpecs({ specs, onSelect }: OpenSpecSpecsProps) {
         <button
           key={spec.name}
           onClick={() => onSelect(spec.name)}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border-subtle bg-bg-primary hover:bg-bg-tertiary transition-colors text-left"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border bg-bg-primary hover:bg-bg-tertiary transition-colors text-left"
         >
           <FileText size={16} className="text-accent shrink-0" />
           <div className="flex-1 min-w-0">

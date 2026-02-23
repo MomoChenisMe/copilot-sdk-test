@@ -18,15 +18,15 @@ export function OpenSpecNavTabs({ activeTab, onTabChange }: OpenSpecNavTabsProps
   const { t } = useTranslation();
 
   return (
-    <div className="flex gap-1 px-3 py-2 border-b border-border-subtle">
+    <div className="flex gap-1 px-4 py-2 border-b border-border">
       {TABS.map((tab) => (
         <button
           key={tab.id}
           onClick={() => onTabChange(tab.id)}
-          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+          className={`px-3 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap transition-colors border ${
             activeTab === tab.id
-              ? 'bg-accent text-white'
-              : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+              ? 'border-accent text-accent bg-accent/5'
+              : 'border-transparent text-text-secondary hover:bg-bg-secondary'
           }`}
         >
           {t(tab.labelKey, tab.id)}

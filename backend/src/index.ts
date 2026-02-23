@@ -15,7 +15,6 @@ import { RateLimiter } from './auth/rate-limiter.js';
 import { AccountLockout } from './auth/lockout.js';
 import { ActivityLog } from './auth/activity-log.js';
 import { createCsrfMiddleware } from './auth/csrf.js';
-import { OpenSpecService } from './openspec/openspec-service.js';
 import { createOpenSpecRoutes } from './openspec/openspec-routes.js';
 import { createConversationRoutes } from './conversation/routes.js';
 import { ClientManager } from './copilot/client-manager.js';
@@ -233,10 +232,19 @@ export function createApp() {
     csrfMiddleware(req, res, next);
   });
 
-  // OpenSpec API
-  const openspecBasePath = path.resolve(process.cwd(), 'openspec');
-  const openspecService = new OpenSpecService(openspecBasePath);
-  app.use('/api/openspec', authMiddleware, createOpenSpecRoutes(openspecService));
+  // OpenSpec API — routes resolve path dynamically from ?cwd= with fallback to default
+  // Walk up from cwd to find openspec/ (handles npm workspace where cwd is backend/)
+  const findOpenspecDefault = (): string => {
+    let dir = process.cwd();
+    while (dir !== path.dirname(dir)) {
+      const candidate = path.join(dir, 'openspec');
+      if (fs.existsSync(candidate)) return candidate;
+      dir = path.dirname(dir);
+    }
+    return path.resolve(process.cwd(), 'openspec');
+  };
+  const openspecDefaultBasePath = findOpenspecDefault();
+  app.use('/api/openspec', authMiddleware, createOpenSpecRoutes(openspecDefaultBasePath));
 
   // Protected routes
   app.use('/api/conversations', authMiddleware, createConversationRoutes(repo));

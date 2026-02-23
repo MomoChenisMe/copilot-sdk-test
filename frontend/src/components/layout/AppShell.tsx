@@ -42,6 +42,12 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     search: searchConversations,
   } = useConversations();
 
+  // Sync conversations to zustand store so cross-component consumers
+  // (e.g. OpenSpecPanel) can access conversation data including CWD
+  useEffect(() => {
+    useAppStore.getState().setConversations(conversations);
+  }, [conversations]);
+
   // Load models, skills, and quota from API
   useModels();
   useSkills();
@@ -309,16 +315,15 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         cleanupDedup(tab.conversationId);
       }
       closeTab(tabId);
-      // Update activeConversationId to match new activeTabId
+      // Trigger lazy-load for the newly activated tab (fixes infinite loading bug)
       const newActiveTabId = useAppStore.getState().activeTabId;
       if (newActiveTabId) {
-        const newTab = useAppStore.getState().tabs[newActiveTabId];
-        setActiveConversationId(newTab?.conversationId ?? null);
+        handleSelectTab(newActiveTabId);
       } else {
         setActiveConversationId(null);
       }
     },
-    [closeTab, cleanupDedup, setActiveConversationId],
+    [closeTab, cleanupDedup, setActiveConversationId, handleSelectTab],
   );
 
   const handleDeleteConversation = useCallback(
@@ -589,8 +594,12 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       const prevIndex = (currentIndex - 1 + tabOrder.length) % tabOrder.length;
       handleSelectTab(tabOrder[prevIndex]);
     },
-    onToggleAiMode: () => { if (activeTabId) setTabMode(activeTabId, 'copilot'); },
-    onToggleBashMode: () => { if (activeTabId) setTabMode(activeTabId, 'terminal'); },
+    onToggleAiBash: () => {
+      if (!activeTabId) return;
+      const tab = useAppStore.getState().tabs[activeTabId];
+      if (!tab) return;
+      setTabMode(activeTabId, tab.mode === 'terminal' ? 'copilot' : 'terminal');
+    },
     onOpenSettings: () => setSettingsOpen(true),
     onClearConversation: handleClearConversation,
     onToggleTheme: toggleTheme,
@@ -606,7 +615,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       const { activeTabId: tabId, tabs } = useAppStore.getState();
       if (!tabId) return;
       const tab = tabs[tabId];
-      if (!tab || tab.isStreaming) return;
+      if (!tab || tab.isStreaming || tab.mode === 'terminal') return;
       useAppStore.getState().setTabPlanMode(tabId, !tab.planMode);
     },
     onToggleOpenSpec: () => {
@@ -797,9 +806,17 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       </MobileDrawer>
 
       <div className="flex-1 overflow-hidden relative">
-        {/* Main content area: flex row for ChatView + ArtifactsPanel */}
+        {/* Main content area: flex row for OpenSpec (left) + ChatView + ArtifactsPanel (right) */}
         <div className="h-full flex flex-row">
-          {/* Chat area — shrinks when artifacts panel is open on desktop */}
+          {/* OpenSpec panel — full overlay on mobile, left side panel on desktop */}
+          {openspecPanelOpen && (
+            <OpenSpecPanel
+              open={openspecPanelOpen}
+              onClose={() => { if (activeTabId) setTabOpenspecPanelOpen(activeTabId, false); }}
+            />
+          )}
+
+          {/* Chat area — shrinks when side panels are open on desktop */}
           <div className="flex-1 flex flex-col min-w-0 h-full">
             <ChatView
               tabId={activeTabId}
@@ -852,11 +869,6 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
             />
           )}
 
-          {/* OpenSpec panel — sliding right panel */}
-          <OpenSpecPanel
-            open={openspecPanelOpen}
-            onClose={() => { if (activeTabId) setTabOpenspecPanelOpen(activeTabId, false); }}
-          />
         </div>
       </div>
 

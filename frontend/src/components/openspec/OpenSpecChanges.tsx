@@ -8,15 +8,10 @@ interface OpenSpecChangesProps {
   onRefresh: () => void;
 }
 
-function statusColor(status: ChangeListItem['status']): string {
-  switch (status) {
-    case 'completed':
-      return 'bg-green-500/20 text-green-400';
-    case 'archived':
-      return 'bg-zinc-500/20 text-zinc-400';
-    default:
-      return 'bg-accent/20 text-accent';
-  }
+function statusBadge(status: string): string {
+  if (status === 'completed') return 'bg-green-500/20 text-green-400';
+  if (status === 'archived') return 'bg-zinc-500/20 text-zinc-400';
+  return 'bg-purple-500/10 text-purple-500';
 }
 
 export function OpenSpecChanges({ changes, onSelect, onRefresh: _onRefresh }: OpenSpecChangesProps) {
@@ -34,16 +29,14 @@ export function OpenSpecChanges({ changes, onSelect, onRefresh: _onRefresh }: Op
   return (
     <div className="p-3 space-y-2">
       {changes.map((change) => {
-        const pct =
-          change.tasksTotal > 0
-            ? Math.round((change.tasksCompleted / change.tasksTotal) * 100)
-            : 0;
+        const { completed, total } = change.taskProgress;
+        const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
         return (
           <button
             key={change.name}
             onClick={() => onSelect(change.name)}
-            className="w-full text-left rounded-lg border border-border-subtle bg-bg-primary p-3 hover:bg-bg-tertiary transition-colors"
+            className="w-full text-left rounded-lg border border-border bg-bg-primary p-3 hover:bg-bg-tertiary transition-colors"
           >
             {/* Top row: name + status */}
             <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -51,7 +44,7 @@ export function OpenSpecChanges({ changes, onSelect, onRefresh: _onRefresh }: Op
                 {change.name}
               </span>
               <span
-                className={`shrink-0 text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${statusColor(change.status)}`}
+                className={`shrink-0 text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${statusBadge(change.status)}`}
               >
                 {change.status}
               </span>
@@ -66,15 +59,15 @@ export function OpenSpecChanges({ changes, onSelect, onRefresh: _onRefresh }: Op
             </div>
             <p className="text-[11px] text-text-muted mb-1">
               {t('openspecPanel.changes.progress', '{{completed}}/{{total}} tasks', {
-                completed: change.tasksCompleted,
-                total: change.tasksTotal,
+                completed,
+                total,
               })}
             </p>
 
             {/* Proposal excerpt */}
-            {change.proposalExcerpt && (
+            {change.proposal && (
               <p className="text-xs text-text-secondary line-clamp-2">
-                {change.proposalExcerpt}
+                {change.proposal}
               </p>
             )}
           </button>

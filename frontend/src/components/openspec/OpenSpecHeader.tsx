@@ -11,7 +11,7 @@ export function OpenSpecHeader({ onClose, onRefresh, loading }: OpenSpecHeaderPr
   const { t } = useTranslation();
 
   return (
-    <div className="h-12 flex items-center gap-3 px-4 border-b border-border-subtle shrink-0">
+    <div className="flex items-center gap-2 px-4 py-3 border-b border-border shrink-0">
       <BookOpen size={18} className="text-accent shrink-0" />
       <h2 className="text-sm font-semibold text-text-primary flex-1">
         {t('openspecPanel.title', 'OpenSpec')}
@@ -19,17 +19,17 @@ export function OpenSpecHeader({ onClose, onRefresh, loading }: OpenSpecHeaderPr
       <button
         onClick={onRefresh}
         disabled={loading}
-        className="p-1.5 rounded-lg hover:bg-bg-tertiary text-text-secondary disabled:opacity-40"
+        className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-secondary disabled:opacity-40 transition-colors"
         aria-label={t('openspecPanel.refresh', 'Refresh')}
       >
         <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
       </button>
       <button
         onClick={onClose}
-        className="p-1.5 rounded-lg hover:bg-bg-tertiary text-text-secondary"
+        className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-secondary transition-colors"
         aria-label={t('openspecPanel.close', 'Close')}
       >
-        <X size={14} />
+        <X size={16} />
       </button>
     </div>
   );

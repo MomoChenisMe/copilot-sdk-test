@@ -203,7 +203,7 @@ export function MobileToolbarPopup({
               </label>
               <div className="inline-flex rounded-xl border border-border overflow-hidden">
                 <button
-                  disabled={isStreaming}
+                  disabled={isStreaming || tabMode === 'terminal'}
                   onClick={() => onPlanModeToggle(true)}
                   className={`flex items-center gap-1 px-3 py-2 text-xs font-medium transition-colors ${
                     planMode ? 'text-accent bg-accent/10' : 'bg-bg-tertiary text-text-secondary hover:bg-bg-secondary'
@@ -213,7 +213,7 @@ export function MobileToolbarPopup({
                   {t('planMode.plan')}
                 </button>
                 <button
-                  disabled={isStreaming}
+                  disabled={isStreaming || tabMode === 'terminal'}
                   onClick={() => onPlanModeToggle(false)}
                   className={`flex items-center gap-1 px-3 py-2 text-xs font-medium transition-colors ${
                     !planMode ? 'text-accent bg-accent/10' : 'bg-bg-tertiary text-text-secondary hover:bg-bg-secondary'
@@ -226,8 +226,8 @@ export function MobileToolbarPopup({
             </div>
           )}
 
-          {/* Web Search toggle */}
-          {webSearchAvailable && (
+          {/* Web Search toggle — hidden in terminal mode */}
+          {webSearchAvailable && tabMode !== 'terminal' && (
             <div className="mt-4">
               <label className="text-[10px] uppercase tracking-wider text-text-muted font-semibold mb-1.5 block">
                 {t('webSearch.label', 'Web Search')}

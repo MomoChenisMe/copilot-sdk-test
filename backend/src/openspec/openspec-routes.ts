@@ -1,22 +1,65 @@
-import { Router } from 'express';
-import type { OpenSpecService } from './openspec-service.js';
+import { Router, type Request } from 'express';
+import fs from 'node:fs';
+import path from 'node:path';
+import { OpenSpecService } from './openspec-service.js';
 
-export function createOpenSpecRoutes(service: OpenSpecService): Router {
+export function createOpenSpecRoutes(defaultBasePath: string): Router {
   const router = Router();
 
-  // GET /overview — project overview stats
-  router.get('/overview', (_req, res) => {
+  /** Walk up from dir to find an openspec/ directory. */
+  function findOpenspecUp(startDir: string): string | null {
+    let dir = startDir;
+    while (dir !== path.dirname(dir)) {
+      const candidate = path.join(dir, 'openspec');
+      if (fs.existsSync(candidate)) return candidate;
+      dir = path.dirname(dir);
+    }
+    return null;
+  }
+
+  /**
+   * Resolve OpenSpec service from ?cwd= query.
+   * - If CWD is provided and openspec found → use it
+   * - If CWD is provided but NOT found → return null (don't fall back)
+   * - If no CWD → use default
+   */
+  function resolveService(req: Request): { service: OpenSpecService | null; resolvedPath: string | null } {
+    const cwd = typeof req.query.cwd === 'string' ? req.query.cwd : undefined;
+    if (cwd && path.isAbsolute(cwd)) {
+      const found = findOpenspecUp(cwd);
+      if (found) {
+        return { service: new OpenSpecService(found), resolvedPath: found };
+      }
+      // CWD explicitly provided but no openspec found — don't fall back
+      return { service: null, resolvedPath: null };
+    }
+    // No CWD provided — use default
+    return { service: new OpenSpecService(defaultBasePath), resolvedPath: defaultBasePath };
+  }
+
+  // GET /overview — project overview stats + resolvedPath
+  router.get('/overview', (req, res) => {
     try {
+      const { service, resolvedPath } = resolveService(req);
+      if (!service) {
+        res.json({ changesCount: 0, specsCount: 0, archivedCount: 0, config: null, resolvedPath: null });
+        return;
+      }
       const overview = service.getOverview();
-      res.json(overview);
+      res.json({ ...overview, resolvedPath });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : 'Internal server error' });
     }
   });
 
   // GET /changes — list all active changes
-  router.get('/changes', (_req, res) => {
+  router.get('/changes', (req, res) => {
     try {
+      const { service } = resolveService(req);
+      if (!service) {
+        res.json({ changes: [] });
+        return;
+      }
       const changes = service.listChanges();
       res.json({ changes });
     } catch (err) {
@@ -27,6 +70,11 @@ export function createOpenSpecRoutes(service: OpenSpecService): Router {
   // GET /changes/:name — get single change detail
   router.get('/changes/:name', (req, res) => {
     try {
+      const { service } = resolveService(req);
+      if (!service) {
+        res.status(404).json({ error: 'No openspec found at specified CWD' });
+        return;
+      }
       const name = Array.isArray(req.params.name) ? req.params.name[0] : req.params.name;
       const change = service.getChange(name);
       if (!change) {
@@ -42,6 +90,11 @@ export function createOpenSpecRoutes(service: OpenSpecService): Router {
   // PATCH /changes/:name/task — toggle a task checkbox
   router.patch('/changes/:name/task', (req, res) => {
     try {
+      const { service } = resolveService(req);
+      if (!service) {
+        res.status(404).json({ error: 'No openspec found at specified CWD' });
+        return;
+      }
       const name = Array.isArray(req.params.name) ? req.params.name[0] : req.params.name;
       const { taskLine, checked } = req.body ?? {};
       if (typeof taskLine !== 'string' || typeof checked !== 'boolean') {
@@ -62,6 +115,11 @@ export function createOpenSpecRoutes(service: OpenSpecService): Router {
   // POST /changes/:name/archive — archive a change
   router.post('/changes/:name/archive', (req, res) => {
     try {
+      const { service } = resolveService(req);
+      if (!service) {
+        res.status(404).json({ error: 'No openspec found at specified CWD' });
+        return;
+      }
       const name = Array.isArray(req.params.name) ? req.params.name[0] : req.params.name;
       const ok = service.archiveChange(name);
       if (!ok) {
@@ -77,6 +135,11 @@ export function createOpenSpecRoutes(service: OpenSpecService): Router {
   // DELETE /changes/:name — delete a change
   router.delete('/changes/:name', (req, res) => {
     try {
+      const { service } = resolveService(req);
+      if (!service) {
+        res.status(404).json({ error: 'No openspec found at specified CWD' });
+        return;
+      }
       const name = Array.isArray(req.params.name) ? req.params.name[0] : req.params.name;
       const ok = service.deleteChange(name);
       if (!ok) {
@@ -90,8 +153,13 @@ export function createOpenSpecRoutes(service: OpenSpecService): Router {
   });
 
   // GET /specs — list all specs
-  router.get('/specs', (_req, res) => {
+  router.get('/specs', (req, res) => {
     try {
+      const { service } = resolveService(req);
+      if (!service) {
+        res.json({ specs: [] });
+        return;
+      }
       const specs = service.listSpecs();
       res.json({ specs });
     } catch (err) {
@@ -102,6 +170,11 @@ export function createOpenSpecRoutes(service: OpenSpecService): Router {
   // GET /specs/:name — get full spec file content
   router.get('/specs/:name', (req, res) => {
     try {
+      const { service } = resolveService(req);
+      if (!service) {
+        res.status(404).json({ error: 'No openspec found at specified CWD' });
+        return;
+      }
       const name = Array.isArray(req.params.name) ? req.params.name[0] : req.params.name;
       const content = service.getSpecFile(name);
       if (content === null) {
@@ -115,8 +188,13 @@ export function createOpenSpecRoutes(service: OpenSpecService): Router {
   });
 
   // GET /archived — list all archived changes
-  router.get('/archived', (_req, res) => {
+  router.get('/archived', (req, res) => {
     try {
+      const { service } = resolveService(req);
+      if (!service) {
+        res.json({ archived: [] });
+        return;
+      }
       const archived = service.listArchived();
       res.json({ archived });
     } catch (err) {
@@ -127,6 +205,11 @@ export function createOpenSpecRoutes(service: OpenSpecService): Router {
   // GET /archived/:name — get archived change detail
   router.get('/archived/:name', (req, res) => {
     try {
+      const { service } = resolveService(req);
+      if (!service) {
+        res.status(404).json({ error: 'No openspec found at specified CWD' });
+        return;
+      }
       const name = Array.isArray(req.params.name) ? req.params.name[0] : req.params.name;
       const change = service.getChange(name, true);
       if (!change) {

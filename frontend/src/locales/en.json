@@ -229,6 +229,7 @@
       "system": "System Skills",
       "user": "User Skills",
       "systemBadge": "System",
+      "openspecBadge": "OpenSpec",
       "cannotModifyBuiltin": "Built-in skills cannot be modified or deleted",
       "upload": "Upload Skill Package",
       "installFromUrl": "Install from URL",
@@ -460,7 +461,13 @@
   "sdk": {
     "analyzeChanges": "Analyze Changes",
     "changelogUnavailable": "Changelog unavailable",
-    "versionUnknown": "Unknown"
+    "versionUnknown": "Unknown",
+    "updateAvailable": "Update Available",
+    "upToDate": "Up to date",
+    "checkForUpdates": "Check for Updates",
+    "updateSdk": "Update SDK",
+    "updateSuccess": "SDK updated successfully",
+    "updateFailed": "SDK update failed"
   },
   "webSearch": {
     "toggleTitle": "Force web search",
@@ -492,8 +499,7 @@
     "switchTab": "Switch Tab (1-9)",
     "prevTab": "Previous Tab",
     "nextTab": "Next Tab",
-    "aiMode": "AI Mode",
-    "bashMode": "Bash Mode",
+    "toggleAiBash": "Toggle AI/Bash Mode",
     "settings": "Settings",
     "clearChat": "Clear Chat",
     "toggleTheme": "Toggle Theme",
@@ -520,7 +526,10 @@
       "title": "Project Overview",
       "activeChanges": "Active Changes",
       "specs": "Specs",
-      "archived": "Archived"
+      "archived": "Archived",
+      "configTitle": "Project Settings",
+      "projectDescription": "Project Description",
+      "outputRules": "Output Rules"
     },
     "changes": {
       "empty": "No active changes",
@@ -539,6 +548,11 @@
         "design": "Design",
         "specs": "Delta Specs"
       },
+      "toolbar": {
+        "markAllComplete": "Mark all complete",
+        "nextIncomplete": "Next incomplete",
+        "resetTasks": "Reset tasks"
+      },
       "archive": "Archive",
       "delete": "Delete",
       "confirmDelete": "Click again to confirm",
@@ -546,7 +560,12 @@
       "noSpecs": "No delta specs",
       "noProposal": "No proposal",
       "noDesign": "No design document"
-    }
+    },
+    "usingProject": "Project",
+    "usingDefault": "Default",
+    "notFound": "Not found",
+    "noOpenspec": "No OpenSpec found",
+    "noOpenspecDesc": "No openspec/ directory was found at the current working directory or any parent directory. Change CWD to a project with OpenSpec, or run \"openspec init\" to initialize."
   },
   "common": {
     "close": "Close",
