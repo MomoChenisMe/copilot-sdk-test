@@ -13,6 +13,7 @@ import { useAppStore } from '../../store';
 import type { ModelInfo } from '../../store';
 import { Markdown } from '../shared/Markdown';
 import { CustomSelect } from '../shared/CustomSelect';
+import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { ApiKeysTab } from './ApiKeysTab';
 import { McpTab } from './McpTab';
 const INVALID_NAME_RE = /[.]{2}|[/\\]|\0/;
@@ -524,6 +525,7 @@ function SystemPromptTab() {
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
   useEffect(() => {
     promptsApi.getSystemPrompt().then((r) => {
@@ -543,8 +545,8 @@ function SystemPromptTab() {
     }
   }, [content, t]);
 
-  const handleReset = useCallback(async () => {
-    if (!window.confirm(t('settings.systemPrompt.resetConfirm'))) return;
+  const handleResetConfirm = useCallback(async () => {
+    setResetDialogOpen(false);
     try {
       const result = await promptsApi.resetSystemPrompt();
       setContent(result.content);
@@ -576,13 +578,21 @@ function SystemPromptTab() {
         </button>
         <button
           data-testid="reset-system-prompt"
-          onClick={handleReset}
+          onClick={() => setResetDialogOpen(true)}
           className="px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-bg-tertiary text-text-secondary"
         >
           {t('settings.systemPrompt.resetToDefault')}
         </button>
         {toast && <span className="text-xs text-text-secondary">{toast}</span>}
       </div>
+      <ConfirmDialog
+        open={resetDialogOpen}
+        title={t('settings.systemPrompt.resetToDefault', 'Reset to default')}
+        description={t('settings.systemPrompt.resetConfirm', 'Are you sure you want to reset the system prompt to default? Current content will be lost.')}
+        destructive
+        onConfirm={handleResetConfirm}
+        onCancel={() => setResetDialogOpen(false)}
+      />
     </div>
   );
 }

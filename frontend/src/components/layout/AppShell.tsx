@@ -89,11 +89,18 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
 
   useEffect(() => { checkOpenSpecDirExists(); }, [checkOpenSpecDirExists]);
 
-  // Re-check when openspec is initialized or deleted
+  // Re-check when openspec is initialized or deleted (debounce 300ms)
   useEffect(() => {
-    const handler = () => checkOpenSpecDirExists();
+    let timer: ReturnType<typeof setTimeout>;
+    const handler = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => checkOpenSpecDirExists(), 300);
+    };
     window.addEventListener('openspec:changed', handler);
-    return () => window.removeEventListener('openspec:changed', handler);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('openspec:changed', handler);
+    };
   }, [checkOpenSpecDirExists]);
 
   const { sendMessage, abortMessage, sendUserInputResponse, cleanupDedup } = useTabCopilot({ subscribe, send });

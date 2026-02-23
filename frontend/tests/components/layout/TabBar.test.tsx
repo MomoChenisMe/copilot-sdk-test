@@ -178,29 +178,44 @@ describe('TabBar', () => {
       expect(screen.queryByText(/Delete conversation|刪除對話/i)).toBeNull();
     });
 
-    it('should call onDeleteTabConversation on confirm', () => {
+    it('should open ConfirmDialog when delete is clicked and call onDeleteTabConversation on confirm', () => {
       const tabId = openTabAndGetId('conv-1', 'Chat 1');
       const onDeleteTabConversation = vi.fn();
-      vi.spyOn(window, 'confirm').mockReturnValue(true);
       render(<TabBar {...defaultProps} onDeleteTabConversation={onDeleteTabConversation} />);
       const tabEl = screen.getByTestId(`tab-${tabId}`).parentElement!;
       fireEvent.contextMenu(tabEl, { clientX: 100, clientY: 50 });
       fireEvent.click(screen.getByText(/Delete conversation|刪除對話/i));
-      expect(window.confirm).toHaveBeenCalled();
+      // Context menu should close, ConfirmDialog should appear
+      expect(screen.queryByText(/Close tab|關閉頁籤/i)).toBeNull();
+      // ConfirmDialog confirm button should be visible
+      const confirmBtn = screen.getByText(/Confirm|確認/i);
+      expect(confirmBtn).toBeTruthy();
+      fireEvent.click(confirmBtn);
       expect(onDeleteTabConversation).toHaveBeenCalledWith(tabId);
-      vi.restoreAllMocks();
     });
 
-    it('should NOT call onDeleteTabConversation when user cancels confirm', () => {
+    it('should NOT call onDeleteTabConversation when user cancels ConfirmDialog', () => {
       const tabId = openTabAndGetId('conv-1', 'Chat 1');
       const onDeleteTabConversation = vi.fn();
-      vi.spyOn(window, 'confirm').mockReturnValue(false);
       render(<TabBar {...defaultProps} onDeleteTabConversation={onDeleteTabConversation} />);
       const tabEl = screen.getByTestId(`tab-${tabId}`).parentElement!;
       fireEvent.contextMenu(tabEl, { clientX: 100, clientY: 50 });
       fireEvent.click(screen.getByText(/Delete conversation|刪除對話/i));
-      expect(window.confirm).toHaveBeenCalled();
+      // ConfirmDialog should be visible
+      const cancelBtn = screen.getByText(/Cancel|取消/i);
+      expect(cancelBtn).toBeTruthy();
+      fireEvent.click(cancelBtn);
       expect(onDeleteTabConversation).not.toHaveBeenCalled();
+    });
+
+    it('should NOT use window.confirm for delete conversation', () => {
+      const tabId = openTabAndGetId('conv-1', 'Chat 1');
+      const confirmSpy = vi.spyOn(window, 'confirm');
+      render(<TabBar {...defaultProps} onDeleteTabConversation={vi.fn()} />);
+      const tabEl = screen.getByTestId(`tab-${tabId}`).parentElement!;
+      fireEvent.contextMenu(tabEl, { clientX: 100, clientY: 50 });
+      fireEvent.click(screen.getByText(/Delete conversation|刪除對話/i));
+      expect(confirmSpy).not.toHaveBeenCalled();
       vi.restoreAllMocks();
     });
 

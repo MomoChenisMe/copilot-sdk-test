@@ -4,6 +4,7 @@ import { Folder, FolderUp, Search, Check, FolderOpen, AlertCircle, ChevronRight,
 import { directoryApi } from '../../lib/api';
 import type { DirectoryEntry } from '../../lib/api';
 import { githubApi } from '../../lib/github-api';
+import { shortenPath } from './CwdSelector';
 import type { GithubRepo } from '../../lib/github-api';
 
 interface DirectoryPickerProps {
@@ -253,7 +254,7 @@ export function DirectoryPicker({ currentPath, onSelect, onClose, onFallback }: 
           {/* Header: current path */}
           <div className="px-3 py-2 border-b border-border flex items-center gap-2 min-h-[36px]">
             <FolderOpen size={14} className="text-accent shrink-0" />
-            <span className="text-xs font-medium text-text-primary truncate">{browsePath}</span>
+            <span className="text-xs font-medium text-text-primary truncate">{shortenPath(browsePath)}</span>
           </div>
 
           {/* Search */}

@@ -82,3 +82,79 @@ ModelSelector 的下拉選單 MUST 使用響應式最大寬度 `min(20rem, calc(
 
 - **WHEN** `includeFiles=true` 回傳檔案清單
 - **THEN** `files` 陣列 MUST 按 `name` 字母升序排列
+
+## Requirements
+
+### Requirement: DirectoryPicker header path SHALL use shortenPath for display
+
+The DirectoryPicker overlay's header path display MUST apply the `shortenPath()` utility function (exported from `CwdSelector.tsx`) to the `browsePath` before rendering, instead of displaying the raw full path with only CSS truncation. The `truncate` CSS class MUST be retained as a fallback safety net, but `shortenPath()` MUST be the primary mechanism for keeping the path readable.
+
+#### Scenario: Long path is intelligently shortened in DirectoryPicker header
+
+- **WHEN** the DirectoryPicker overlay is open
+- **AND** the current browse path is `/Users/momochenisme/Documents/GitHub/copilot-sdk-test`
+- **THEN** the header MUST display `~/…/GitHub/copilot-sdk-test` (using `shortenPath()` output)
+- **AND** the header MUST NOT display the raw truncated path like `/Users/momochenisme/Documents/GitHub/c...`
+
+#### Scenario: Short path is displayed as-is
+
+- **WHEN** the DirectoryPicker overlay is open
+- **AND** the current browse path is `/Users/momochenisme`
+- **THEN** the header MUST display `~` (shortenPath replaces home dir with ~)
+- **AND** no ellipsis shortening is applied since the path has ≤2 segments
+
+#### Scenario: Root path is displayed correctly
+
+- **WHEN** the DirectoryPicker overlay is open
+- **AND** the current browse path is `/`
+- **THEN** the header MUST display `/`
+
+#### Scenario: CSS truncate class is retained as fallback
+
+- **WHEN** the DirectoryPicker header path span is rendered
+- **THEN** the span MUST still have the `truncate` CSS class
+- **AND** `shortenPath()` MUST be applied to the text content before rendering
+
+<!-- @trace
+source: eight-ui-consistency-openspec-sync
+updated: 2026-02-23
+code:
+  - frontend/src/hooks/useTabCopilot.ts
+  - backend/package.json
+  - backend/src/openspec/openspec-routes.ts
+  - frontend/src/lib/settings-api.ts
+  - frontend/src/locales/en.json
+  - frontend/src/components/copilot/ChatView.tsx
+  - frontend/src/components/settings/SettingsPanel.tsx
+  - frontend/src/components/layout/AppShell.tsx
+  - frontend/src/components/openspec/OpenSpecHeader.tsx
+  - frontend/src/components/layout/TopBar.tsx
+  - backend/src/openspec/openspec-service.ts
+  - backend/src/copilot/sdk-update.ts
+  - backend/src/settings/settings-store.ts
+  - frontend/src/lib/ws-client.ts
+  - backend/src/index.ts
+  - backend/src/openspec/openspec-watcher.ts
+  - frontend/src/components/shared/ConfirmDialog.tsx
+  - frontend/src/components/openspec/OpenSpecPanel.tsx
+  - .docker-compose.yml.swp
+  - backend/src/prompts/defaults.ts
+  - frontend/src/components/copilot/DirectoryPicker.tsx
+  - frontend/src/components/openspec/OpenSpecChangeDetail.tsx
+  - frontend/src/store/index.ts
+  - frontend/src/locales/zh-TW.json
+  - frontend/src/components/openspec/OpenSpecOverview.tsx
+  - frontend/src/lib/openspec-api.ts
+  - backend/src/prompts/composer.ts
+  - frontend/src/components/layout/TabBar.tsx
+  - claude/.DS_Store
+  - backend/src/ws/server.ts
+tests:
+  - frontend/tests/components/copilot/DirectoryPicker.test.tsx
+  - frontend/tests/store/tabs.test.ts
+  - backend/tests/prompts/composer.test.ts
+  - frontend/tests/components/layout/TabBar.test.tsx
+  - frontend/tests/components/openspec/OpenSpecChangeDetail.test.tsx
+  - backend/tests/copilot/sdk-update.test.ts
+  - frontend/tests/components/settings/SettingsPanel.test.tsx
+-->

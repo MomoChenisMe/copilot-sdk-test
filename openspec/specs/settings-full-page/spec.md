@@ -92,3 +92,79 @@ SettingsPanel 開啟時 SHALL 播放 fade + scale 進入動畫：opacity 從 0 �
 ### Requirement: 解決方案記憶管理
 **Reason**: 簡化記憶系統，專注於自動記憶
 **Migration**: 檔案實體保留在磁碟上（memory/solutions/），僅移除 UI 和 API endpoints
+
+## Requirements
+
+### Requirement: System prompt reset SHALL use ConfirmDialog
+
+The SystemPromptTab's "Reset" action MUST use the shared `ConfirmDialog` component instead of native `window.confirm()`. The dialog MUST use destructive mode styling. The dialog MUST NOT require typed input confirmation (no `requiredInput` prop).
+
+#### Scenario: Reset system prompt shows ConfirmDialog
+
+- **WHEN** user clicks the "Reset" button in the System Prompt tab
+- **THEN** a `ConfirmDialog` MUST appear with destructive styling
+- **AND** the dialog title MUST convey that this action resets the system prompt to default
+- **AND** the dialog description MUST warn that current content will be lost
+- **AND** the dialog MUST have Confirm and Cancel buttons
+
+#### Scenario: Confirming reset executes the reset
+
+- **WHEN** user clicks Confirm in the reset system prompt ConfirmDialog
+- **THEN** `promptsApi.resetSystemPrompt()` MUST be called
+- **AND** the textarea content MUST be updated to the default system prompt
+- **AND** the dialog MUST close
+
+#### Scenario: Cancelling reset preserves current content
+
+- **WHEN** user clicks Cancel or presses Escape in the reset system prompt ConfirmDialog
+- **THEN** the system prompt content MUST NOT change
+- **AND** the dialog MUST close
+
+#### Scenario: Native window.confirm is not used
+
+- **WHEN** user triggers system prompt reset from Settings
+- **THEN** `window.confirm()` MUST NOT be called
+
+<!-- @trace
+source: eight-ui-consistency-openspec-sync
+updated: 2026-02-23
+code:
+  - frontend/src/hooks/useTabCopilot.ts
+  - backend/package.json
+  - backend/src/openspec/openspec-routes.ts
+  - frontend/src/lib/settings-api.ts
+  - frontend/src/locales/en.json
+  - frontend/src/components/copilot/ChatView.tsx
+  - frontend/src/components/settings/SettingsPanel.tsx
+  - frontend/src/components/layout/AppShell.tsx
+  - frontend/src/components/openspec/OpenSpecHeader.tsx
+  - frontend/src/components/layout/TopBar.tsx
+  - backend/src/openspec/openspec-service.ts
+  - backend/src/copilot/sdk-update.ts
+  - backend/src/settings/settings-store.ts
+  - frontend/src/lib/ws-client.ts
+  - backend/src/index.ts
+  - backend/src/openspec/openspec-watcher.ts
+  - frontend/src/components/shared/ConfirmDialog.tsx
+  - frontend/src/components/openspec/OpenSpecPanel.tsx
+  - .docker-compose.yml.swp
+  - backend/src/prompts/defaults.ts
+  - frontend/src/components/copilot/DirectoryPicker.tsx
+  - frontend/src/components/openspec/OpenSpecChangeDetail.tsx
+  - frontend/src/store/index.ts
+  - frontend/src/locales/zh-TW.json
+  - frontend/src/components/openspec/OpenSpecOverview.tsx
+  - frontend/src/lib/openspec-api.ts
+  - backend/src/prompts/composer.ts
+  - frontend/src/components/layout/TabBar.tsx
+  - claude/.DS_Store
+  - backend/src/ws/server.ts
+tests:
+  - frontend/tests/components/copilot/DirectoryPicker.test.tsx
+  - frontend/tests/store/tabs.test.ts
+  - backend/tests/prompts/composer.test.ts
+  - frontend/tests/components/layout/TabBar.test.tsx
+  - frontend/tests/components/openspec/OpenSpecChangeDetail.test.tsx
+  - backend/tests/copilot/sdk-update.test.ts
+  - frontend/tests/components/settings/SettingsPanel.test.tsx
+-->

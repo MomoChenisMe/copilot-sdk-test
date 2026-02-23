@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Plus, X, AlertTriangle, ChevronDown, History, Clock, Trash2, XCircle } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { ConversationPopover } from './ConversationPopover';
+import { ConfirmDialog } from '../shared/ConfirmDialog';
 
 // ── Tab Context Menu ──────────────────────────────────────────────────────
 
@@ -18,13 +19,13 @@ function TabContextMenu({
   hasConversation,
   onClose,
   onCloseTab,
-  onDeleteConversation,
+  onRequestDelete,
 }: {
   state: ContextMenuState;
   hasConversation: boolean;
   onClose: () => void;
   onCloseTab: () => void;
-  onDeleteConversation: () => void;
+  onRequestDelete: () => void;
 }) {
   const { t } = useTranslation();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -60,9 +61,7 @@ function TabContextMenu({
       {hasConversation && (
         <button
           onClick={() => {
-            if (window.confirm(t('tabBar.deleteConfirm', 'Delete this conversation? This cannot be undone.'))) {
-              onDeleteConversation();
-            }
+            onRequestDelete();
             onClose();
           }}
           className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10 transition-colors text-left"
@@ -98,6 +97,7 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
   const [popoverTabId, setPopoverTabId] = useState<string | null>(null);
   const [globalHistoryOpen, setGlobalHistoryOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [deleteDialogTabId, setDeleteDialogTabId] = useState<string | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tabTitleRefs = useRef<Record<string, HTMLSpanElement | null>>({});
   const historyButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -383,9 +383,22 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
           hasConversation={!!tabs[contextMenu.tabId]?.conversationId}
           onClose={() => setContextMenu(null)}
           onCloseTab={() => onCloseTab(contextMenu.tabId)}
-          onDeleteConversation={() => onDeleteTabConversation?.(contextMenu.tabId)}
+          onRequestDelete={() => setDeleteDialogTabId(contextMenu.tabId)}
         />
       )}
+
+      {/* Delete conversation confirm dialog */}
+      <ConfirmDialog
+        open={deleteDialogTabId !== null}
+        title={t('tabBar.deleteConversation', 'Delete conversation')}
+        description={t('tabBar.deleteConfirm', 'Delete this conversation? This cannot be undone.')}
+        destructive
+        onConfirm={() => {
+          if (deleteDialogTabId) onDeleteTabConversation?.(deleteDialogTabId);
+          setDeleteDialogTabId(null);
+        }}
+        onCancel={() => setDeleteDialogTabId(null)}
+      />
     </div>
   );
 }

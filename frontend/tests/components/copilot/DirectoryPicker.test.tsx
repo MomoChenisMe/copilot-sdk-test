@@ -71,10 +71,37 @@ describe('DirectoryPicker', () => {
     expect(mockList).toHaveBeenCalledWith('/home/user/projects');
   });
 
-  it('should display current path in header', async () => {
+  it('should display shortened path in header (shortenPath applied)', async () => {
     render(<DirectoryPicker {...defaultProps} />);
     await waitFor(() => {
-      expect(screen.getByText('/home/user/projects')).toBeInTheDocument();
+      // /home/user/projects → shortenPath → ~/projects
+      expect(screen.getByText('~/projects')).toBeInTheDocument();
+    });
+  });
+
+  it('should shorten long paths in header using shortenPath', async () => {
+    const longPath = '/Users/momochenisme/Documents/GitHub/copilot-sdk-test';
+    mockList.mockResolvedValue({
+      currentPath: longPath,
+      parentPath: '/Users/momochenisme/Documents/GitHub',
+      directories: [],
+    });
+    render(<DirectoryPicker {...defaultProps} currentPath={longPath} />);
+    await waitFor(() => {
+      // shortenPath: ~/…/GitHub/copilot-sdk-test
+      expect(screen.getByText('~/\u2026/GitHub/copilot-sdk-test')).toBeInTheDocument();
+    });
+  });
+
+  it('should display root path as / in header', async () => {
+    mockList.mockResolvedValue({
+      currentPath: '/',
+      parentPath: '/',
+      directories: [{ name: 'usr', path: '/usr' }],
+    });
+    render(<DirectoryPicker {...defaultProps} currentPath="/" />);
+    await waitFor(() => {
+      expect(screen.getByText('/')).toBeInTheDocument();
     });
   });
 
@@ -239,7 +266,8 @@ describe('DirectoryPicker', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Documents')).toBeInTheDocument();
-      expect(screen.getByText('/Users/me')).toBeInTheDocument();
+      // /Users/me → shortenPath → ~
+      expect(screen.getByText('~')).toBeInTheDocument();
     });
 
     // First call with invalid path, second call with no path (fallback)

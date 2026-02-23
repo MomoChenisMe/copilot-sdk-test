@@ -375,6 +375,56 @@ describe('SettingsPanel', () => {
 
       expect(screen.getByTestId('reset-system-prompt').textContent).toBe('Reset to Default');
     });
+
+    it('should open ConfirmDialog when reset is clicked and execute reset on confirm', async () => {
+      const { promptsApi } = await import('../../../src/lib/prompts-api');
+      render(<SettingsPanel {...defaultProps} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('reset-system-prompt')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('reset-system-prompt'));
+
+      // ConfirmDialog should be visible with Confirm button
+      const confirmBtn = screen.getByText(/Confirm|確認/i);
+      expect(confirmBtn).toBeTruthy();
+
+      fireEvent.click(confirmBtn);
+
+      await waitFor(() => {
+        expect(promptsApi.resetSystemPrompt).toHaveBeenCalled();
+      });
+    });
+
+    it('should NOT reset system prompt when ConfirmDialog is cancelled', async () => {
+      const { promptsApi } = await import('../../../src/lib/prompts-api');
+      render(<SettingsPanel {...defaultProps} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('reset-system-prompt')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('reset-system-prompt'));
+
+      const cancelBtn = screen.getByText(/Cancel|取消/i);
+      fireEvent.click(cancelBtn);
+
+      expect(promptsApi.resetSystemPrompt).not.toHaveBeenCalled();
+    });
+
+    it('should NOT use window.confirm for system prompt reset', async () => {
+      const confirmSpy = vi.spyOn(window, 'confirm');
+      render(<SettingsPanel {...defaultProps} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('reset-system-prompt')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('reset-system-prompt'));
+      expect(confirmSpy).not.toHaveBeenCalled();
+      vi.restoreAllMocks();
+    });
   });
 
   // === Profile Tab ===
@@ -543,6 +593,27 @@ describe('SettingsPanel', () => {
       );
 
       batchSpy.mockRestore();
+    });
+
+    it('should sync global store settings.openspecEnabled when toggle is clicked', async () => {
+      (configApi.getOpenspecSdd as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ enabled: false });
+
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /openspec/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('openspec-sdd-toggle')).toBeTruthy();
+      });
+
+      // Toggle ON
+      fireEvent.click(screen.getByTestId('openspec-sdd-toggle'));
+
+      await waitFor(() => {
+        expect(configApi.putOpenspecSdd).toHaveBeenCalledWith(true);
+      });
+
+      // Global store should be updated
+      expect(useAppStore.getState().settings?.openspecEnabled).toBe(true);
     });
 
     it('should save OpenSpec SDD content when save button is clicked', async () => {
