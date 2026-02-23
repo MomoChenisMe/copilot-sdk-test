@@ -386,7 +386,7 @@ export function OpenSpecPanel({ open, onClose }: OpenSpecPanelProps) {
             )}
 
             {/* Content area */}
-            <div className="flex-1 min-h-0 overflow-y-auto">{renderContent()}</div>
+            <div className={`flex-1 min-h-0 ${activeTab === 'overview' && !selectedChangeName && !selectedSpecName ? 'overflow-hidden' : 'overflow-y-auto'}`}>{renderContent()}</div>
           </>
         )}
       </div>

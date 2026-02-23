@@ -642,6 +642,14 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
           if (!activeTabId) return;
           setTabOpenspecPanelOpen(activeTabId, !openspecPanelOpen);
         } : undefined}
+        onArtifactsClick={activeTabId ? () => {
+          const store = useAppStore.getState();
+          const tab = store.tabs[activeTabId];
+          if (tab) {
+            store.setTabArtifactsPanelOpen(activeTabId, !tab.artifactsPanelOpen);
+          }
+        } : undefined}
+        artifactsCount={activeTab?.artifacts?.length ?? 0}
         onMenuClick={() => setDrawerOpen(true)}
       />
 

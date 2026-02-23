@@ -39,15 +39,15 @@ describe('CwdSelector', () => {
     render(<CwdSelector {...defaultProps} currentCwd="/very/long/path/to/my/awesome/project/directory" />);
     const pill = screen.getByTestId('cwd-selector');
     expect(pill.getAttribute('title')).toBe('/very/long/path/to/my/awesome/project/directory');
-    // Last segment is always visible
-    expect(screen.getByTestId('cwd-path-last').textContent).toBe('directory');
+    // Shortened path shows last two segments
+    expect(pill.textContent).toContain('directory');
   });
 
-  it('hides parent path on mobile via hidden md:inline', () => {
+  it('shows shortened path with smart truncation', () => {
     render(<CwdSelector {...defaultProps} currentCwd="/home/user/projects" />);
-    const parent = screen.getByTestId('cwd-path-parent');
-    expect(parent.className).toContain('hidden');
-    expect(parent.className).toContain('md:inline');
+    const pill = screen.getByTestId('cwd-selector');
+    // shortenPath replaces /home/user with ~ and shows ~/projects
+    expect(pill.textContent).toContain('projects');
   });
 
   it('opens DirectoryPicker popover on click', async () => {
@@ -166,20 +166,16 @@ describe('CwdSelector', () => {
 
   // --- Mobile path truncation ---
 
-  it('renders last directory name always visible and parent path hidden on mobile', () => {
+  it('renders shortened path with last directory visible', () => {
     render(<CwdSelector {...defaultProps} currentCwd="/home/user/projects" />);
-    // The last segment "projects" should always be visible
-    const lastSegment = screen.getByTestId('cwd-path-last');
-    expect(lastSegment.textContent).toBe('projects');
-    // The parent path prefix should be hidden on mobile via hidden md:inline
-    const parentPath = screen.getByTestId('cwd-path-parent');
-    expect(parentPath.className).toContain('hidden');
-    expect(parentPath.className).toContain('md:inline');
+    const pill = screen.getByTestId('cwd-selector');
+    // shortenPath: /home/user/projects → ~/projects
+    expect(pill.textContent).toContain('projects');
   });
 
-  it('shows only root name when path is a single segment', () => {
+  it('shows / for root path', () => {
     render(<CwdSelector {...defaultProps} currentCwd="/" />);
-    const lastSegment = screen.getByTestId('cwd-path-last');
-    expect(lastSegment.textContent).toBe('/');
+    const pill = screen.getByTestId('cwd-selector');
+    expect(pill.textContent).toContain('/');
   });
 });

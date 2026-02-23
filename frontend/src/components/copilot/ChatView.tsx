@@ -458,7 +458,7 @@ export function ChatView({
   return (
     <div className="flex flex-col h-full">
       {/* Plan mode banner */}
-      {planMode && (
+      {planMode && !isTerminalMode && (
         <div data-testid="plan-mode-banner" className="px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-amber-400 text-xs text-center">
           {t('planMode.active', 'Plan mode active — AI will plan but not execute tools')}
         </div>

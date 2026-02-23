@@ -10,15 +10,26 @@ interface CwdSelectorProps {
   onModeChange?: (mode: 'copilot' | 'terminal') => void;
 }
 
+/** Shorten a filesystem path for display: ~/…/parent/last */
+export function shortenPath(fullPath: string): string {
+  if (fullPath === '/') return '/';
+
+  // Replace home directory prefix with ~
+  const homePath = fullPath.replace(/^\/Users\/[^/]+/, '~').replace(/^\/home\/[^/]+/, '~');
+  const parts = homePath.split('/').filter(Boolean);
+
+  if (parts.length === 0) return '/';
+  if (parts.length <= 2) return homePath;
+
+  // Show: <first>/…/<second-to-last>/<last>
+  const prefix = parts[0] === '~' ? '~' : `/${parts[0]}`;
+  return `${prefix}/\u2026/${parts[parts.length - 2]}/${parts[parts.length - 1]}`;
+}
+
 export function CwdSelector({ currentCwd, onCwdChange, mode, onModeChange }: CwdSelectorProps) {
   const { t } = useTranslation();
   const [pickerOpen, setPickerOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  // Split path into parent prefix and last segment for mobile truncation
-  const lastSlash = currentCwd.lastIndexOf('/');
-  const pathParent = lastSlash > 0 ? currentCwd.slice(0, lastSlash + 1) : '';
-  const pathLast = lastSlash > 0 ? currentCwd.slice(lastSlash + 1) : currentCwd;
 
   const handleClick = () => {
     setPickerOpen(true);
@@ -54,10 +65,7 @@ export function CwdSelector({ currentCwd, onCwdChange, mode, onModeChange }: Cwd
         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary bg-bg-tertiary rounded-lg hover:bg-bg-secondary transition-colors truncate max-w-40 sm:max-w-56"
       >
         <FolderOpen size={12} className="shrink-0" />
-        <span className="truncate">
-          {pathParent && <span data-testid="cwd-path-parent" className="hidden md:inline">{pathParent}</span>}
-          <span data-testid="cwd-path-last">{pathLast || '/'}</span>
-        </span>
+        <span className="truncate">{shortenPath(currentCwd)}</span>
       </button>
 
       {pickerOpen && (

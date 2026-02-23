@@ -28,6 +28,8 @@ export interface ChangeDetail {
 export interface SpecSummary {
   name: string;
   content: string;
+  summary: string;
+  size: number;
 }
 
 export interface ArchivedSummary {
@@ -197,16 +199,39 @@ export class OpenSpecService {
     return true;
   }
 
-  /** List all specs with name and first 200 chars of content. */
+  /** List all specs with name, summary, size, and first 200 chars of content. */
   listSpecs(): SpecSummary[] {
     const specsDir = path.join(this.basePath, 'specs');
     const dirs = listSubdirectories(specsDir);
 
     return dirs.map((name) => {
-      const specContent = readFileOrNull(path.join(specsDir, name, 'spec.md'));
+      const specPath = path.join(specsDir, name, 'spec.md');
+      const specContent = readFileOrNull(specPath);
+
+      // Extract summary: first non-empty, non-heading, non-frontmatter line
+      let summary = '';
+      if (specContent) {
+        for (const line of specContent.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          if (trimmed.startsWith('#')) continue;
+          if (trimmed.startsWith('---')) continue;
+          summary = trimmed.slice(0, 150);
+          break;
+        }
+      }
+
+      // Get file size
+      let size = 0;
+      try {
+        size = fs.statSync(specPath).size;
+      } catch { /* file missing */ }
+
       return {
         name,
         content: specContent ? specContent.slice(0, 200) : '',
+        summary,
+        size,
       };
     });
   }

@@ -125,7 +125,8 @@
     "newChat": "New chat",
     "shortcuts": "Keyboard shortcuts",
     "settings": "Settings",
-    "openspec": "OpenSpec"
+    "openspec": "OpenSpec",
+    "artifacts": "Artifacts"
   },
   "tabBar": {
     "copilot": "Copilot",
@@ -536,7 +537,8 @@
       "progress": "{{completed}}/{{total}} tasks"
     },
     "specs": {
-      "empty": "No spec files found"
+      "empty": "No spec files found",
+      "copyName": "Copy spec name"
     },
     "archived": {
       "empty": "No archived changes"

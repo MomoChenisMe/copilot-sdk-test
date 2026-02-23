@@ -1,8 +1,9 @@
 import { useTranslation } from 'react-i18next';
-import { Sun, Moon, Settings, Keyboard, Menu, BookOpen } from 'lucide-react';
+import { Sun, Moon, Settings, Keyboard, Menu, BookOpen, PanelRight } from 'lucide-react';
 import type { WsStatus } from '../../lib/ws-types';
 import type { Theme } from '../../store';
 import { ConnectionBadge } from '../shared/ConnectionBadge';
+import { Tooltip } from '../shared/Tooltip';
 
 interface TopBarProps {
   title: string;
@@ -13,10 +14,12 @@ interface TopBarProps {
   onSettingsClick?: () => void;
   onShortcutsClick?: () => void;
   onOpenSpecClick?: () => void;
+  onArtifactsClick?: () => void;
+  artifactsCount?: number;
   onMenuClick?: () => void;
 }
 
-export function TopBar({ title, status, theme, onThemeToggle, onHomeClick, onSettingsClick, onShortcutsClick, onOpenSpecClick, onMenuClick }: TopBarProps) {
+export function TopBar({ title, status, theme, onThemeToggle, onHomeClick, onSettingsClick, onShortcutsClick, onOpenSpecClick, onArtifactsClick, artifactsCount, onMenuClick }: TopBarProps) {
   const { t } = useTranslation();
   return (
     <header className="h-12 flex items-center gap-2 px-4 bg-bg-primary border-b border-border-subtle shrink-0">
@@ -44,39 +47,63 @@ export function TopBar({ title, status, theme, onThemeToggle, onHomeClick, onSet
       {/* Right: Settings + Theme + Connection */}
       <div className="flex items-center gap-1 shrink-0">
         {onShortcutsClick && (
-          <button
-            onClick={onShortcutsClick}
-            className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
-            aria-label={t('topBar.shortcuts', 'Keyboard shortcuts')}
-          >
-            <Keyboard size={18} />
-          </button>
+          <Tooltip label={t('topBar.shortcuts', 'Keyboard shortcuts')} position="bottom">
+            <button
+              onClick={onShortcutsClick}
+              className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
+              aria-label={t('topBar.shortcuts', 'Keyboard shortcuts')}
+            >
+              <Keyboard size={18} />
+            </button>
+          </Tooltip>
         )}
         {onOpenSpecClick && (
-          <button
-            onClick={onOpenSpecClick}
-            className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
-            aria-label={t('topBar.openspec', 'OpenSpec')}
-          >
-            <BookOpen size={18} />
-          </button>
+          <Tooltip label={t('topBar.openspec', 'OpenSpec')} position="bottom">
+            <button
+              onClick={onOpenSpecClick}
+              className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
+              aria-label={t('topBar.openspec', 'OpenSpec')}
+            >
+              <BookOpen size={18} />
+            </button>
+          </Tooltip>
+        )}
+        {onArtifactsClick && (
+          <Tooltip label={t('topBar.artifacts', 'Artifacts')} position="bottom">
+            <button
+              onClick={onArtifactsClick}
+              className="relative p-2 rounded-lg hover:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
+              aria-label={t('topBar.artifacts', 'Artifacts')}
+            >
+              <PanelRight size={18} />
+              {(artifactsCount ?? 0) > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-accent text-white text-[9px] font-bold flex items-center justify-center">
+                  {artifactsCount! > 9 ? '9+' : artifactsCount}
+                </span>
+              )}
+            </button>
+          </Tooltip>
         )}
         {onSettingsClick && (
-          <button
-            onClick={onSettingsClick}
-            className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
-            aria-label={t('topBar.settings', 'Settings')}
-          >
-            <Settings size={18} />
-          </button>
+          <Tooltip label={t('topBar.settings', 'Settings')} position="bottom">
+            <button
+              onClick={onSettingsClick}
+              className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
+              aria-label={t('topBar.settings', 'Settings')}
+            >
+              <Settings size={18} />
+            </button>
+          </Tooltip>
         )}
-        <button
-          onClick={onThemeToggle}
-          className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors text-text-secondary"
-          aria-label={t('topBar.toggleTheme')}
-        >
-          {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-        </button>
+        <Tooltip label={t('topBar.toggleTheme', 'Toggle theme')} position="bottom">
+          <button
+            onClick={onThemeToggle}
+            className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors text-text-secondary"
+            aria-label={t('topBar.toggleTheme')}
+          >
+            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+          </button>
+        </Tooltip>
         <ConnectionBadge status={status} />
       </div>
     </header>

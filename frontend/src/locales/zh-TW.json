@@ -125,7 +125,8 @@
     "newChat": "新對話",
     "shortcuts": "鍵盤快捷鍵",
     "settings": "設定",
-    "openspec": "OpenSpec"
+    "openspec": "OpenSpec",
+    "artifacts": "Artifacts"
   },
   "tabBar": {
     "copilot": "Copilot",
@@ -536,7 +537,8 @@
       "progress": "{{completed}}/{{total}} 項任務"
     },
     "specs": {
-      "empty": "沒有規格文件"
+      "empty": "沒有規格文件",
+      "copyName": "複製規格名稱"
     },
     "archived": {
       "empty": "沒有已封存的變更"

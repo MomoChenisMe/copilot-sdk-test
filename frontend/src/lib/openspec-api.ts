@@ -34,6 +34,7 @@ export interface ChangeDetail {
 export interface SpecListItem {
   name: string;
   size: number;
+  summary?: string;
 }
 
 export interface SpecFileContent {
