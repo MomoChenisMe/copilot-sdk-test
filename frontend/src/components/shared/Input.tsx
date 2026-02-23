@@ -7,6 +7,7 @@ import { AttachmentPreview } from './AttachmentPreview';
 import type { AttachedFile } from './AttachmentPreview';
 import { AtFileMenu } from './AtFileMenu';
 import type { AtFileMenuHandle } from './AtFileMenu';
+import { Tooltip } from './Tooltip';
 
 export interface ContextFileRef {
   path: string;
@@ -565,28 +566,21 @@ export const Input = forwardRef<InputHandle, InputProps>(function Input({ onSend
           style={{ maxHeight: '200px', caretColor: highlightParts ? 'var(--color-text-primary)' : undefined }}
         />
       </div>
-      {leftActions && (
-        <div className="absolute bottom-2 left-2 flex items-center gap-1">
-          {leftActions}
-        </div>
-      )}
-      <div className="absolute bottom-2 right-2 flex items-center gap-1">
-        {statusText && (
-          <span className="text-[10px] text-text-muted tabular-nums mr-1">{statusText}</span>
-        )}
+      <div className="absolute bottom-2 left-2 flex items-center gap-1">
         {enableAttachments && (
           <>
-            <button
-              data-testid="attach-button"
-              onClick={() => !attachmentsDisabledReason && fileInputRef.current?.click()}
-              disabled={!!attachmentsDisabledReason}
-              title={attachmentsDisabledReason}
-              className={`p-2 rounded-lg transition-colors ${attachmentsDisabledReason ? 'text-text-muted opacity-40 cursor-not-allowed' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'}`}
-              aria-label={t('input.attach', 'Attach file')}
-              type="button"
-            >
-              <Paperclip size={16} />
-            </button>
+            <Tooltip label={attachmentsDisabledReason || t('input.attach', 'Attach file')}>
+              <button
+                data-testid="attach-button"
+                onClick={() => !attachmentsDisabledReason && fileInputRef.current?.click()}
+                disabled={!!attachmentsDisabledReason}
+                className={`p-1.5 rounded-lg transition-colors ${attachmentsDisabledReason ? 'text-text-muted opacity-40 cursor-not-allowed' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'}`}
+                aria-label={t('input.attach', 'Attach file')}
+                type="button"
+              >
+                <Paperclip size={14} />
+              </button>
+            </Tooltip>
             <input
               ref={fileInputRef}
               data-testid="file-input"
@@ -598,14 +592,22 @@ export const Input = forwardRef<InputHandle, InputProps>(function Input({ onSend
             />
           </>
         )}
+        {leftActions}
+      </div>
+      <div className="absolute bottom-2 right-2 flex items-center gap-1">
+        {statusText && (
+          <span className="text-[10px] text-text-muted tabular-nums mr-1">{statusText}</span>
+        )}
         {isStreaming ? (
-          <button
-            onClick={onAbort}
-            className="p-2 rounded-lg bg-bg-tertiary hover:bg-error hover:text-white transition-colors text-text-secondary"
-            aria-label={t('input.stop')}
-          >
-            <Square size={16} />
-          </button>
+          <Tooltip label={t('input.stop')}>
+            <button
+              onClick={onAbort}
+              className="p-2 rounded-lg bg-bg-tertiary hover:bg-error hover:text-white transition-colors text-text-secondary"
+              aria-label={t('input.stop')}
+            >
+              <Square size={16} />
+            </button>
+          </Tooltip>
         ) : (
           <button
             onClick={handleSend}

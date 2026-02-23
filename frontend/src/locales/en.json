@@ -11,7 +11,18 @@
     "login": "Login",
     "passwordHint": "Minimum 8 characters",
     "rateLimited": "Too many login attempts. Please wait and try again.",
-    "locked": "Account temporarily locked due to repeated failed attempts."
+    "locked": "Account temporarily locked due to repeated failed attempts.",
+    "forgotPassword": "Forgot password?",
+    "resetTitle": "Reset Password",
+    "resetInstructions": "Run the reset-password CLI command on the server to get a one-time token, then enter it below with your new password.",
+    "resetTokenPlaceholder": "Reset token",
+    "resetNewPassword": "New password",
+    "resetSubmit": "Reset Password",
+    "resetting": "Resetting...",
+    "resetSuccess": "Password reset successful. Please restart the server with the new WEB_PASSWORD.",
+    "resetFailed": "Reset failed. Token may be invalid or expired.",
+    "resetPasswordTooShort": "New password must be at least 8 characters.",
+    "backToLogin": "Back to login"
   },
   "connection": {
     "connected": "Connected",

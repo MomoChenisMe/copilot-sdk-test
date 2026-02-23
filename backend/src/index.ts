@@ -214,6 +214,8 @@ export function createApp() {
 
   // Auth routes (no auth required, no CSRF)
   const dataDir = path.resolve(config.dbPath, '..');
+  // pushService is created later (after VAPID key init); declare here so auth routes can capture it
+  let pushService: InstanceType<typeof PushService> | undefined;
   app.use('/api/auth', createAuthRoutes({
     sessionStore,
     passwordHash,
@@ -221,6 +223,7 @@ export function createApp() {
     lockout,
     activityLog,
     dataDir,
+    pushService: { sendToAll: async (p: { title: string; body: string }) => { await pushService?.sendToAll(p); } },
   }));
 
   // CSRF protection for all mutating requests on protected routes
@@ -429,7 +432,7 @@ export function createApp() {
     vapidKeys.privateKey,
   );
   const pushStore = new PushStore(db);
-  const pushService = new PushService(pushStore, settingsStore);
+  pushService = new PushService(pushStore, settingsStore);
   app.use('/api/push', authMiddleware, createPushRoutes(pushStore, pushService, vapidKeys.publicKey));
   log.info('Push notifications initialized');
 

@@ -1181,7 +1181,7 @@ describe('ChatView', () => {
       expect(toolbar).toBeTruthy();
       // Clock button (with Scheduled Task title) should NOT be inside the desktop toolbar
       const allToolbarButtons = toolbar!.querySelectorAll('button');
-      const clockBtn = Array.from(allToolbarButtons).find(b => b.getAttribute('title')?.includes('Scheduled'));
+      const clockBtn = Array.from(allToolbarButtons).find(b => b.querySelector('.lucide-clock'));
       expect(clockBtn).toBeFalsy();
     });
 
@@ -1211,7 +1211,7 @@ describe('ChatView', () => {
       const { container } = render(<ChatView {...defaultProps} tabId={tabId} />);
       // Clock button should exist somewhere in the DOM (in leftActions, not in toolbar)
       const allButtons = container.querySelectorAll('button');
-      const clockBtn = Array.from(allButtons).find(b => b.getAttribute('title')?.includes('Scheduled'));
+      const clockBtn = Array.from(allButtons).find(b => b.querySelector('.lucide-clock'));
       expect(clockBtn).toBeTruthy();
       // It should NOT be inside the toolbar
       const toolbar = container.querySelector('[data-testid="bottom-toolbar-row"]');
@@ -1245,7 +1245,7 @@ describe('ChatView', () => {
       const { container } = render(<ChatView {...defaultProps} tabId={tabId} />);
       // Find the Clock button and check its parent container
       const allButtons = container.querySelectorAll('button');
-      const clockBtn = Array.from(allButtons).find(b => b.getAttribute('title')?.includes('Scheduled'));
+      const clockBtn = Array.from(allButtons).find(b => b.querySelector('.lucide-clock'));
       expect(clockBtn).toBeTruthy();
       // The parent div (leftActions container) should have 'flex' but NOT 'md:hidden'
       const parentDiv = clockBtn!.parentElement;

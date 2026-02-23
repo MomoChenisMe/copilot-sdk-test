@@ -22,53 +22,65 @@ Composer MUST 不再讀取 AGENT.md 和 memory/preferences.md。
 - **WHEN** PROFILE.md 內容為 "# 個人檔案\n## 基本資訊\n...\n## Agent 規則\n...\n## 偏好設定\n..."
 - **THEN** 整段作為 section 2 注入，與 SYSTEM_PROMPT 以 `---` 分隔
 
-### Requirement: Agent API 降級為相容 Shim
-
-`GET /api/prompts/agent` MUST 回傳空字串。
-`PUT /api/prompts/agent` MUST 將 body 內容附加到 PROFILE.md 末尾（加上 `\n\n## Agent 規則\n` 前綴）。
-
-#### Scenario: GET agent 回傳空
-
-- **WHEN** 發送 `GET /api/prompts/agent`
-- **THEN** 回傳 200 和空字串
-
-#### Scenario: PUT agent 附加到 Profile
-
-- **WHEN** 發送 `PUT /api/prompts/agent` body 為 "你叫做MomoCopilot"
-- **THEN** 將 "\n\n## Agent 規則\n你叫做MomoCopilot" 附加到 PROFILE.md 末尾
-
-### Requirement: Memory Preferences API 降級為相容 Shim
-
-`GET /api/memory/preferences` MUST 回傳空字串。
-`PUT /api/memory/preferences` MUST 將 body 內容附加到 PROFILE.md 末尾（加上 `\n\n## 偏好設定\n` 前綴）。
-
-#### Scenario: GET preferences 回傳空
-
-- **WHEN** 發送 `GET /api/memory/preferences`
-- **THEN** 回傳 200 和空字串
-
 ## ADDED Requirements
 
-### Requirement: 啟動時自動遷移 AGENT.md 和 Preferences
+### Requirement: Act Mode 結構化行為準則
 
-後端啟動時 MUST 執行一次性遷移邏輯：
-1. 檢查 AGENT.md 是否存在且有內容 → 附加到 PROFILE.md 的 `## Agent 規則` 區段
-2. 檢查 memory/preferences.md 是否存在且有內容 → 附加到 PROFILE.md 的 `## 偏好設定` 區段
-3. 將已遷移的原檔重新命名為 `.bak`（例如 AGENT.md → AGENT.md.bak）
+DEFAULT_SYSTEM_PROMPT 的 `## Modes of Operation` 區段中，Act Mode SHALL 包含以下結構化子區段：
 
-遷移 MUST 為冪等：若 .bak 檔案已存在，跳過該檔案的遷移。
+1. **Doing Tasks** — 程式碼修改原則（先讀後改、不過度工程化、不加多餘功能、安全意識）
+2. **Executing Actions with Care** — 操作的可逆性和影響範圍考量（破壞性操作需確認、區分高低風險行為）
+3. **Tool Usage** — 工具使用原則（偏好工具而非猜測、先讀後改、匹配專案風格）
+4. **Response Guidelines** — 回應風格指引（簡潔直接、markdown 格式、步驟化、先確認模糊需求）
 
-#### Scenario: 首次遷移
+#### Scenario: Act Mode 提示詞包含四個子區段
 
-- **WHEN** AGENT.md 含 "你叫做MomoCopilot" 且 AGENT.md.bak 不存在
-- **THEN** 將 "\n\n## Agent 規則\n你叫做MomoCopilot" 附加到 PROFILE.md，AGENT.md 重命名為 AGENT.md.bak
+- **WHEN** 系統讀取 DEFAULT_SYSTEM_PROMPT 中的 Act Mode 區段
+- **THEN** 內容 MUST 包含 "Doing Tasks"、"Executing Actions with Care"、"Tool Usage"、"Response Guidelines" 四個子區段
+- **AND** 每個子區段 MUST 包含具體的行為準則條目
 
-#### Scenario: 冪等重跑
+#### Scenario: Act Mode 包含破壞性操作確認指引
 
-- **WHEN** AGENT.md.bak 已存在
-- **THEN** 跳過 AGENT.md 的遷移，不重複附加
+- **WHEN** AI 在 Act Mode 下收到系統提示詞
+- **THEN** 提示詞 MUST 明確指示對破壞性操作（刪除檔案/分支、rm -rf、force-push）需先確認
+- **AND** MUST 列舉具體的高風險操作範例
 
-#### Scenario: 原檔為空
+#### Scenario: Act Mode 包含程式碼修改原則
 
-- **WHEN** AGENT.md 存在但內容為空
-- **THEN** 跳過遷移，不附加空內容到 PROFILE.md
+- **WHEN** AI 在 Act Mode 下收到系統提示詞
+- **THEN** 提示詞 MUST 明確指示「先讀後改」、「不過度工程化」、「不加不必要的功能」
+
+### Requirement: Plan Mode 結構化工作流程
+
+DEFAULT_SYSTEM_PROMPT 的 `## Modes of Operation` 區段中，Plan Mode SHALL 包含 4 步驟結構化工作流程和明確規則。
+
+#### Scenario: Plan Mode 提示詞包含四步驟工作流程
+
+- **WHEN** 系統讀取 DEFAULT_SYSTEM_PROMPT 中的 Plan Mode 區段
+- **THEN** 內容 MUST 包含 "Understand"、"Explore"、"Design"、"Plan" 四個步驟
+- **AND** 每個步驟 MUST 包含具體描述
+
+#### Scenario: Plan Mode 包含規則清單
+
+- **WHEN** AI 在 Plan Mode 下收到系統提示詞
+- **THEN** 提示詞 MUST 包含「Never call tools」「Be specific: reference actual file paths」「Keep plans concise but actionable」等規則
+- **AND** MUST 指示在規劃完成後告知使用者切換到 Act mode
+
+#### Scenario: Plan Mode 的 Design 步驟包含多方案建議
+
+- **WHEN** AI 在 Plan Mode 下進行 Design 步驟
+- **THEN** 提示詞 MUST 指示「If multiple approaches exist, present 2-3 options with trade-offs and recommend one」
+
+### Requirement: 移除重複的獨立區段
+
+DEFAULT_SYSTEM_PROMPT 中原有的獨立 `## Tool Usage` 和 `## Response Guidelines` 區段 SHALL 被移除或精簡，因為其內容已整合到 Act Mode 的子區段中。
+
+#### Scenario: 無重複的 Tool Usage 區段
+
+- **WHEN** 系統讀取完整的 DEFAULT_SYSTEM_PROMPT
+- **THEN** 不應存在獨立的 `## Tool Usage` 頂層區段（其內容已合併到 `### Act Mode` 的 Tool Usage 子區段）
+
+#### Scenario: 無重複的 Response Guidelines 區段
+
+- **WHEN** 系統讀取完整的 DEFAULT_SYSTEM_PROMPT
+- **THEN** 不應存在獨立的 `## Response Guidelines` 頂層區段（其內容已合併到 `### Act Mode` 的 Response Guidelines 子區段）

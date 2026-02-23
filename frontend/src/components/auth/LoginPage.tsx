@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CodeForgeLogo } from '../shared/CodeForgeLogo';
+import { apiPost } from '../../lib/api';
 
 interface LoginPageProps {
   onLogin: (password: string) => Promise<void>;
@@ -12,6 +13,11 @@ export function LoginPage({ onLogin, error, errorCode }: LoginPageProps) {
   const { t } = useTranslation();
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resetMode, setResetMode] = useState(false);
+  const [resetToken, setResetToken] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetResult, setResetResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -22,6 +28,87 @@ export function LoginPage({ onLogin, error, errorCode }: LoginPageProps) {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleReset(e: FormEvent) {
+    e.preventDefault();
+    if (!resetToken || !newPassword || resetLoading) return;
+    if (newPassword.length < 8) {
+      setResetResult({ ok: false, message: t('login.resetPasswordTooShort') });
+      return;
+    }
+    setResetLoading(true);
+    setResetResult(null);
+    try {
+      const res = await apiPost<{ ok: boolean; message: string }>('/api/auth/reset-password', { token: resetToken, newPassword });
+      setResetResult({ ok: true, message: res.message || t('login.resetSuccess') });
+      setResetToken('');
+      setNewPassword('');
+    } catch (err: any) {
+      setResetResult({ ok: false, message: err?.message || t('login.resetFailed') });
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
+  if (resetMode) {
+    return (
+      <div className="flex items-center justify-center h-full bg-bg-primary">
+        <form
+          onSubmit={handleReset}
+          className="w-full max-w-sm mx-4 p-8 rounded-2xl bg-bg-secondary border border-border shadow-lg"
+        >
+          <div className="flex justify-center mb-6">
+            <div className="w-14 h-14 rounded-2xl bg-accent-soft flex items-center justify-center">
+              <CodeForgeLogo size={28} className="text-accent" />
+            </div>
+          </div>
+
+          <h1 className="text-xl font-bold text-text-primary mb-1 text-center">{t('login.resetTitle')}</h1>
+          <p className="text-sm text-text-secondary mb-6 text-center">{t('login.resetInstructions')}</p>
+
+          {resetResult && (
+            <div className={`mb-4 p-3 rounded-lg text-sm ${resetResult.ok ? 'bg-success/10 text-success' : 'bg-error/10 text-error'}`}>
+              {resetResult.message}
+            </div>
+          )}
+
+          <input
+            type="text"
+            value={resetToken}
+            onChange={(e) => setResetToken(e.target.value)}
+            placeholder={t('login.resetTokenPlaceholder')}
+            autoFocus
+            className="w-full px-4 py-3 rounded-xl bg-bg-input border border-border text-text-primary placeholder-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+          />
+
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder={t('login.resetNewPassword')}
+            className="w-full mt-3 px-4 py-3 rounded-xl bg-bg-input border border-border text-text-primary placeholder-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+          />
+          <p className="mt-2 text-xs text-text-muted">{t('login.passwordHint')}</p>
+
+          <button
+            type="submit"
+            disabled={!resetToken || !newPassword || resetLoading}
+            className="w-full mt-4 px-4 py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {resetLoading ? t('login.resetting') : t('login.resetSubmit')}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setResetMode(false); setResetResult(null); }}
+            className="w-full mt-3 text-sm text-accent hover:underline"
+          >
+            {t('login.backToLogin')}
+          </button>
+        </form>
+      </div>
+    );
   }
 
   return (
@@ -68,6 +155,14 @@ export function LoginPage({ onLogin, error, errorCode }: LoginPageProps) {
           className="w-full mt-4 px-4 py-3 rounded-xl bg-accent hover:bg-accent-hover text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {loading ? t('login.loggingIn') : t('login.login')}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setResetMode(true)}
+          className="w-full mt-3 text-sm text-text-muted hover:text-accent hover:underline"
+        >
+          {t('login.forgotPassword')}
         </button>
       </form>
     </div>

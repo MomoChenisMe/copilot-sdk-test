@@ -609,7 +609,13 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     onToggleOpenSpec: () => {
       const { openspecEnabled } = useAppStore.getState().settings ?? {};
       if (!openspecEnabled) return;
-      useAppStore.getState().setOpenspecPanelOpen(!useAppStore.getState().openspecPanelOpen);
+      const next = !useAppStore.getState().openspecPanelOpen;
+      if (next) {
+        // Mutual exclusion: close ArtifactsPanel when opening OpenSpec
+        const tid = useAppStore.getState().activeTabId;
+        if (tid) useAppStore.getState().setTabArtifactsPanelOpen(tid, false);
+      }
+      useAppStore.getState().setOpenspecPanelOpen(next);
     },
   });
 
@@ -624,7 +630,11 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         onSettingsClick={() => setSettingsOpen(!settingsOpen)}
         onShortcutsClick={() => setShortcutsOpen(true)}
         onOpenSpecClick={(useAppStore.getState().settings as any)?.openspecEnabled ? () => {
-          setOpenspecPanelOpen(!openspecPanelOpen);
+          const next = !openspecPanelOpen;
+          if (next && activeTabId) {
+            useAppStore.getState().setTabArtifactsPanelOpen(activeTabId, false);
+          }
+          setOpenspecPanelOpen(next);
         } : undefined}
         onMenuClick={() => setDrawerOpen(true)}
       />

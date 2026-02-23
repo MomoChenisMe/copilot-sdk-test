@@ -15,10 +15,11 @@ export interface AuthDeps {
   lockout: AccountLockout;
   activityLog: ActivityLog;
   dataDir: string;
+  pushService?: { sendToAll: (payload: { title: string; body: string }) => Promise<void> };
 }
 
 export function createAuthRoutes(deps: AuthDeps): Router {
-  const { sessionStore, passwordHash, rateLimiter, lockout, activityLog, dataDir } = deps;
+  const { sessionStore, passwordHash, rateLimiter, lockout, activityLog, dataDir, pushService } = deps;
   const router = Router();
 
   // POST /login
@@ -76,6 +77,7 @@ export function createAuthRoutes(deps: AuthDeps): Router {
     const knownIps = activityLog.getRecentSuccessIps(30);
     if (knownIps.length > 1 && !knownIps.includes(ip)) {
       activityLog.log('login_new_ip', ip, userAgent, 'New IP address detected');
+      pushService?.sendToAll({ title: 'New Login Detected', body: `Login from new IP: ${ip}` }).catch(() => {});
     }
 
     const sessionCookie = serialize('session', token, {
@@ -155,6 +157,20 @@ export function createAuthRoutes(deps: AuthDeps): Router {
 
     res.setHeader('Set-Cookie', [sessionCookie, csrfCookie]);
     res.json({ ok: true });
+  });
+
+  // GET /activity — requires valid session
+  router.get('/activity', (req, res) => {
+    const cookieHeader = req.headers.cookie;
+    if (!cookieHeader) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    const cookies = parseCookie(cookieHeader);
+    if (!cookies.session || !sessionStore.validate(cookies.session)) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const entries = activityLog.getRecent(limit);
+    res.json({ entries });
   });
 
   // GET /status

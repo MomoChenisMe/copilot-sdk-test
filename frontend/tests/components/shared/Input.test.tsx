@@ -326,7 +326,6 @@ describe('Input', () => {
       );
       const attachBtn = screen.getByTestId('attach-button');
       expect(attachBtn).toBeDisabled();
-      expect(attachBtn.getAttribute('title')).toBe('Model does not support files');
     });
 
     it('enables attach button when attachmentsDisabledReason is undefined', () => {

@@ -2,6 +2,7 @@ import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Sparkles, Plus, X, MessageSquare, Clock } from 'lucide-react';
 import { CodeForgeLogo } from '../shared/CodeForgeLogo';
+import { Tooltip } from '../shared/Tooltip';
 import { useAppStore } from '../../store';
 import { apiGet } from '../../lib/api';
 import { modelSupportsAttachments } from '../../lib/model-capabilities';
@@ -427,18 +428,19 @@ export function ChatView({
                       webSearchAvailable={webSearchAvailable}
                     />
                   </div>
-                  {tabId && (
-                    <button
-                      onClick={() => activeConversationId && setTabCronConfigOpen(tabId, !cronConfigOpen)}
-                      disabled={!activeConversationId}
-                      className={`p-1.5 rounded-lg transition-colors ${cronConfigOpen ? 'text-accent' : 'text-text-muted hover:text-text-primary'} disabled:opacity-40 disabled:cursor-not-allowed`}
-                      title={t('cron.configTitle', 'Scheduled Task')}
-                    >
-                      <Clock size={14} />
-                    </button>
-                  )}
                   {tabId && webSearchAvailable && (
                     <WebSearchToggle forced={webSearchForced} onToggle={(f) => setTabWebSearchForced(tabId, f)} disabled={isStreaming} />
+                  )}
+                  {tabId && (
+                    <Tooltip label={t('cron.configTitle', 'Scheduled Task')}>
+                      <button
+                        onClick={() => activeConversationId && setTabCronConfigOpen(tabId, !cronConfigOpen)}
+                        disabled={!activeConversationId}
+                        className={`p-1.5 rounded-lg transition-colors ${cronConfigOpen ? 'text-accent' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'} disabled:opacity-40 disabled:cursor-not-allowed`}
+                      >
+                        <Clock size={14} />
+                      </button>
+                    </Tooltip>
                   )}
                 </div>
               }
@@ -689,18 +691,19 @@ export function ChatView({
                         webSearchAvailable={webSearchAvailable}
                       />
                     </div>
-                    {tabId && (
-                      <button
-                        onClick={() => activeConversationId && setTabCronConfigOpen(tabId, !cronConfigOpen)}
-                        disabled={!activeConversationId}
-                        className={`p-1.5 rounded-lg transition-colors ${cronConfigOpen ? 'text-accent' : 'text-text-muted hover:text-text-primary'} disabled:opacity-40 disabled:cursor-not-allowed`}
-                        title={t('cron.configTitle', 'Scheduled Task')}
-                      >
-                        <Clock size={14} />
-                      </button>
-                    )}
                     {tabId && webSearchAvailable && (
                       <WebSearchToggle forced={webSearchForced} onToggle={(forced) => tabId && setTabWebSearchForced(tabId, forced)} disabled={isStreaming} />
+                    )}
+                    {tabId && (
+                      <Tooltip label={t('cron.configTitle', 'Scheduled Task')}>
+                        <button
+                          onClick={() => activeConversationId && setTabCronConfigOpen(tabId, !cronConfigOpen)}
+                          disabled={!activeConversationId}
+                          className={`p-1.5 rounded-lg transition-colors ${cronConfigOpen ? 'text-accent' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'} disabled:opacity-40 disabled:cursor-not-allowed`}
+                        >
+                          <Clock size={14} />
+                        </button>
+                      </Tooltip>
                     )}
                   </div>
                 }

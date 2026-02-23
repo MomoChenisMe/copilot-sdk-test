@@ -1014,6 +1014,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       const tab = state.tabs[tabId];
       if (!tab) return state;
       return {
+        // Mutual exclusion: close OpenSpec panel when opening ArtifactsPanel
+        ...(open ? { openspecPanelOpen: false } : {}),
         tabs: {
           ...state.tabs,
           [tabId]: { ...tab, artifactsPanelOpen: open },

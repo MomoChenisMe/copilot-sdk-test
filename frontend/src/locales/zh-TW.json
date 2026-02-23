@@ -11,7 +11,18 @@
     "login": "登入",
     "passwordHint": "至少 8 個字元",
     "rateLimited": "登入嘗試過於頻繁，請稍後再試。",
-    "locked": "帳號因多次失敗嘗試已被暫時鎖定。"
+    "locked": "帳號因多次失敗嘗試已被暫時鎖定。",
+    "forgotPassword": "忘記密碼？",
+    "resetTitle": "重設密碼",
+    "resetInstructions": "請在伺服器上執行 reset-password CLI 指令取得一次性 Token，然後在下方輸入 Token 和新密碼。",
+    "resetTokenPlaceholder": "重設 Token",
+    "resetNewPassword": "新密碼",
+    "resetSubmit": "重設密碼",
+    "resetting": "重設中...",
+    "resetSuccess": "密碼重設成功。請使用新的 WEB_PASSWORD 重新啟動伺服器。",
+    "resetFailed": "重設失敗。Token 可能無效或已過期。",
+    "resetPasswordTooShort": "新密碼至少需要 8 個字元。",
+    "backToLogin": "返回登入"
   },
   "connection": {
     "connected": "已連線",
