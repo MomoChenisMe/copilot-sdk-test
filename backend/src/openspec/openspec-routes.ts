@@ -67,6 +67,27 @@ export function createOpenSpecRoutes(defaultBasePath: string): Router {
     }
   });
 
+  // GET /changes/:name/specs/:specName — get delta spec content
+  router.get('/changes/:name/specs/:specName', (req, res) => {
+    try {
+      const { service } = resolveService(req);
+      if (!service) {
+        res.status(404).json({ error: 'No openspec found at specified CWD' });
+        return;
+      }
+      const name = Array.isArray(req.params.name) ? req.params.name[0] : req.params.name;
+      const specName = Array.isArray(req.params.specName) ? req.params.specName[0] : req.params.specName;
+      const content = service.getDeltaSpecFile(name, specName);
+      if (content === null) {
+        res.status(404).json({ error: 'Delta spec not found' });
+        return;
+      }
+      res.json({ name: specName, content });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Internal server error' });
+    }
+  });
+
   // GET /changes/:name — get single change detail
   router.get('/changes/:name', (req, res) => {
     try {
@@ -217,6 +238,50 @@ export function createOpenSpecRoutes(defaultBasePath: string): Router {
         return;
       }
       res.json(change);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Internal server error' });
+    }
+  });
+
+  // DELETE /delete — delete openspec folder in the given CWD
+  router.delete('/delete', (req, res) => {
+    try {
+      const cwd = typeof req.query.cwd === 'string' ? req.query.cwd : undefined;
+      if (!cwd || !path.isAbsolute(cwd)) {
+        res.status(400).json({ error: 'Valid absolute cwd query parameter is required' });
+        return;
+      }
+      const result = OpenSpecService.deleteOpenspecFolder(cwd);
+      if (result.success) {
+        res.json({ ok: true });
+      } else {
+        res.status(404).json({ error: result.error || 'Delete failed' });
+      }
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Internal server error' });
+    }
+  });
+
+  // POST /init — initialize openspec in the given CWD
+  router.post('/init', async (req, res) => {
+    try {
+      const cwd = typeof req.query.cwd === 'string' ? req.query.cwd : undefined;
+      if (!cwd || !path.isAbsolute(cwd)) {
+        res.status(400).json({ error: 'Valid absolute cwd query parameter is required' });
+        return;
+      }
+      if (!OpenSpecService.isCliAvailable()) {
+        res.status(503).json({
+          error: 'openspec CLI is not installed. Install it with: npm install -g openspec',
+        });
+        return;
+      }
+      const result = await OpenSpecService.initOpenspec(cwd);
+      if (result.success) {
+        res.json({ ok: true });
+      } else {
+        res.status(500).json({ error: result.error || 'Init failed' });
+      }
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : 'Internal server error' });
     }

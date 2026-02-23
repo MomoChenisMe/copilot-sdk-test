@@ -15,10 +15,11 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { Markdown } from '../shared/Markdown';
-import type { ChangeDetail } from '../../lib/openspec-api';
+import type { ChangeDetail, DeltaSpecSummary } from '../../lib/openspec-api';
 
 interface OpenSpecChangeDetailProps {
   change: ChangeDetail | null;
+  cwd?: string;
   onBack: () => void;
   onTaskToggle: (taskLine: string, checked: boolean) => void;
   onBatchToggle: (tasks: { taskLine: string; checked: boolean }[]) => void;
@@ -115,6 +116,7 @@ const DETAIL_TABS: { id: DetailTab; labelKey: string; icon: typeof CheckSquare }
 
 export function OpenSpecChangeDetail({
   change,
+  cwd,
   onBack,
   onTaskToggle,
   onBatchToggle,
@@ -133,10 +135,18 @@ export function OpenSpecChangeDetail({
   const tasksCompleted = parsedTasks.filter((t) => t.type === 'task' && t.checked).length;
   const tasksTotal = parsedTasks.filter((t) => t.type === 'task').length;
 
+  const specsTotals = useMemo(() => {
+    if (!change?.specs) return { added: 0, modified: 0, removed: 0 };
+    return change.specs.reduce(
+      (acc, s) => ({ added: acc.added + s.added, modified: acc.modified + s.modified, removed: acc.removed + s.removed }),
+      { added: 0, modified: 0, removed: 0 },
+    );
+  }, [change?.specs]);
+
   const handleTaskToggle = useCallback(
     (line: ParsedTaskLine) => {
       if (line.type !== 'task') return;
-      onTaskToggle(line.raw, !line.checked);
+      onTaskToggle(line.text, !line.checked);
     },
     [onTaskToggle],
   );
@@ -232,6 +242,13 @@ export function OpenSpecChangeDetail({
           >
             <tab.icon size={12} />
             {t(tab.labelKey, tab.id)}
+            {tab.id === 'specs' && (specsTotals.added > 0 || specsTotals.modified > 0 || specsTotals.removed > 0) && (
+              <span className="flex items-center gap-1 ml-0.5">
+                {specsTotals.added > 0 && <span className="text-green-500 font-semibold">+{specsTotals.added}</span>}
+                {specsTotals.modified > 0 && <span className="text-orange-400 font-semibold">~{specsTotals.modified}</span>}
+                {specsTotals.removed > 0 && <span className="text-red-400 font-semibold">-{specsTotals.removed}</span>}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -251,7 +268,9 @@ export function OpenSpecChangeDetail({
         {activeTab === 'design' && (
           <MarkdownView content={change.design ?? ''} emptyKey="openspecPanel.detail.noDesign" />
         )}
-        {activeTab === 'specs' && <DeltaSpecsView specs={change.specs} />}
+        {activeTab === 'specs' && (
+          <DeltaSpecsView specs={change.specs} changeName={change.name} cwd={cwd} />
+        )}
       </div>
     </div>
   );
@@ -297,14 +316,14 @@ function TasksView({
     const unchecked = allTasks.filter((t) => !t.checked);
     if (unchecked.length === 0) return;
     setBatchLoading(true);
-    onBatchToggle(unchecked.map((t) => ({ taskLine: t.raw, checked: true })));
+    onBatchToggle(unchecked.map((t) => ({ taskLine: t.text, checked: true })));
   }, [allTasks, onBatchToggle]);
 
   const handleResetTasks = useCallback(() => {
     const checked = allTasks.filter((t) => t.checked);
     if (checked.length === 0) return;
     setBatchLoading(true);
-    onBatchToggle(checked.map((t) => ({ taskLine: t.raw, checked: false })));
+    onBatchToggle(checked.map((t) => ({ taskLine: t.text, checked: false })));
   }, [allTasks, onBatchToggle]);
 
   const handleNextIncomplete = useCallback(() => {
@@ -495,8 +514,59 @@ function MarkdownView({ content, emptyKey }: { content: string; emptyKey: string
 
 // ── Delta Specs View ────────────────────────────────────────────────────────
 
-function DeltaSpecsView({ specs }: { specs: string[] }) {
+function DeltaSpecBadges({ spec }: { spec: DeltaSpecSummary }) {
+  const badges: { label: string; cls: string }[] = [];
+  if (spec.added > 0) badges.push({ label: `+${spec.added}`, cls: 'text-green-500' });
+  if (spec.modified > 0) badges.push({ label: `~${spec.modified}`, cls: 'text-orange-400' });
+  if (spec.removed > 0) badges.push({ label: `-${spec.removed}`, cls: 'text-red-400' });
+  if (badges.length === 0) return null;
+  return (
+    <span className="flex items-center gap-1.5 shrink-0 ml-auto">
+      {badges.map((b) => (
+        <span key={b.label} className={`text-[11px] font-semibold ${b.cls}`}>{b.label}</span>
+      ))}
+    </span>
+  );
+}
+
+function DeltaSpecsView({
+  specs,
+  changeName,
+  cwd,
+}: {
+  specs: DeltaSpecSummary[];
+  changeName: string;
+  cwd?: string;
+}) {
   const { t } = useTranslation();
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [cache, setCache] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState<Record<string, boolean>>({});
+  const [errors, setErrors] = useState<Record<string, boolean>>({});
+
+  const toggleSpec = useCallback(
+    async (name: string) => {
+      const isExpanded = expanded[name];
+      if (isExpanded) {
+        setExpanded((prev) => ({ ...prev, [name]: false }));
+        return;
+      }
+      setExpanded((prev) => ({ ...prev, [name]: true }));
+      if (cache[name]) return; // already loaded
+      setLoading((prev) => ({ ...prev, [name]: true }));
+      setErrors((prev) => ({ ...prev, [name]: false }));
+      try {
+        const { openspecApi } = await import('../../lib/openspec-api');
+        const result = await openspecApi.getDeltaSpec(changeName, name, cwd);
+        setCache((prev) => ({ ...prev, [name]: result.content }));
+      } catch {
+        setErrors((prev) => ({ ...prev, [name]: true }));
+      } finally {
+        setLoading((prev) => ({ ...prev, [name]: false }));
+      }
+    },
+    [expanded, cache, changeName, cwd],
+  );
 
   if (specs.length === 0) {
     return (
@@ -508,13 +578,41 @@ function DeltaSpecsView({ specs }: { specs: string[] }) {
 
   return (
     <div className="p-3 space-y-1.5">
-      {specs.map((name) => (
-        <div
-          key={name}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-bg-primary"
-        >
-          <Layers size={14} className="text-accent shrink-0" />
-          <p className="text-xs font-medium text-text-primary truncate">{name}</p>
+      {specs.map((spec) => (
+        <div key={spec.name} className="rounded-lg border border-border bg-bg-primary overflow-hidden">
+          <button
+            type="button"
+            onClick={() => toggleSpec(spec.name)}
+            className="flex items-center gap-2 px-3 py-2 w-full text-left hover:bg-bg-secondary transition-colors"
+          >
+            {expanded[spec.name] ? (
+              <ChevronDown size={14} className="text-text-muted shrink-0" />
+            ) : (
+              <ChevronRight size={14} className="text-text-muted shrink-0" />
+            )}
+            <Layers size={14} className="text-accent shrink-0" />
+            <p className="text-xs font-medium text-text-primary truncate">{spec.name}</p>
+            <DeltaSpecBadges spec={spec} />
+          </button>
+          {expanded[spec.name] && (
+            <div className="border-t border-border px-3 py-2">
+              {loading[spec.name] && (
+                <p className="text-xs text-text-muted animate-pulse">
+                  {t('openspecPanel.detail.loadingSpec', 'Loading spec...')}
+                </p>
+              )}
+              {errors[spec.name] && (
+                <p className="text-xs text-red-400">
+                  {t('openspecPanel.detail.specLoadError', 'Failed to load spec')}
+                </p>
+              )}
+              {cache[spec.name] && (
+                <div className="prose-sm text-xs">
+                  <Markdown content={cache[spec.name]} />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ))}
     </div>

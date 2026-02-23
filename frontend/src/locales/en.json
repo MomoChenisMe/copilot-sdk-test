@@ -136,7 +136,9 @@
     "closeOthers": "Close Others",
     "rename": "Rename",
     "tabLimit": "Tab limit reached. Consider closing unused tabs.",
-    "history": "History"
+    "history": "History",
+    "deleteConversation": "Delete conversation",
+    "deleteConfirm": "Delete this conversation? This cannot be undone."
   },
   "settings": {
     "title": "Settings",
@@ -163,6 +165,11 @@
     "back": "Back",
     "general": {
       "language": "Language",
+      "llmLanguage": "LLM Response Language",
+      "llmLanguageDesc": "Set the language for AI responses, independent from the UI language.",
+      "llmLangAuto": "Same as UI language",
+      "llmLangCustom": "Custom...",
+      "llmLangCustomPlaceholder": "e.g. Bahasa Indonesia",
       "notifications": "Notifications",
       "logout": "Logout"
     },
@@ -561,13 +568,24 @@
       "noTasks": "No tasks defined",
       "noSpecs": "No delta specs",
       "noProposal": "No proposal",
-      "noDesign": "No design document"
+      "noDesign": "No design document",
+      "loadingSpec": "Loading spec...",
+      "specLoadError": "Failed to load spec"
     },
     "usingProject": "Project",
     "usingDefault": "Default",
     "notFound": "Not found",
     "noOpenspec": "No OpenSpec found",
-    "noOpenspecDesc": "No openspec/ directory was found at the current working directory or any parent directory. Change CWD to a project with OpenSpec, or run \"openspec init\" to initialize."
+    "noOpenspecDesc": "No openspec/ directory was found at the current working directory or any parent directory. Change CWD to a project with OpenSpec, or run \"openspec init\" to initialize.",
+    "initButton": "Initialize OpenSpec",
+    "initializing": "Initializing...",
+    "cliNotFound": "openspec CLI not found. Install with: npm install -g openspec",
+    "dangerZone": "Danger Zone",
+    "deleteDesc": "Permanently delete the openspec folder and all its contents.",
+    "deleteFolder": "Delete OpenSpec",
+    "deleting": "Deleting...",
+    "deleteConfirm": "Are you sure you want to delete the openspec folder? All changes, specs, and configuration will be permanently removed.",
+    "deletePrompt": "Type DELETE to confirm:"
   },
   "common": {
     "close": "Close",

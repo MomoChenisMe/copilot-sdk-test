@@ -20,6 +20,7 @@ import { OpenSpecChangeDetail } from './OpenSpecChangeDetail';
 import { OpenSpecSpecs } from './OpenSpecSpecs';
 import { OpenSpecArchived } from './OpenSpecArchived';
 import { Markdown } from '../shared/Markdown';
+import { ConfirmDialog } from '../shared/ConfirmDialog';
 
 interface OpenSpecPanelProps {
   open: boolean;
@@ -55,6 +56,10 @@ export function OpenSpecPanel({ open, onClose }: OpenSpecPanelProps) {
   const [specs, setSpecs] = useState<SpecListItem[]>([]);
   const [specContent, setSpecContent] = useState<SpecFileContent | null>(null);
   const [archived, setArchived] = useState<ArchivedItem[]>([]);
+  const [initializing, setInitializing] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   // ── Data Fetching ───────────────────────────────────────────────────────
 
@@ -143,6 +148,23 @@ export function OpenSpecPanel({ open, onClose }: OpenSpecPanelProps) {
       refreshAll();
     }
   }, [open, activeCwd, refreshAll]);
+
+  // Subscribe to openspec:changed events for auto-refresh
+  useEffect(() => {
+    if (!open) return;
+    let debounceTimer: ReturnType<typeof setTimeout>;
+    const handler = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        refreshAll();
+      }, 300);
+    };
+    window.addEventListener('openspec:changed', handler);
+    return () => {
+      clearTimeout(debounceTimer);
+      window.removeEventListener('openspec:changed', handler);
+    };
+  }, [open, refreshAll]);
 
   // Load detail when a change is selected
   useEffect(() => {
@@ -244,6 +266,42 @@ export function OpenSpecPanel({ open, onClose }: OpenSpecPanelProps) {
     setSelectedSpecName(null);
   }, []);
 
+  const handleInit = useCallback(async () => {
+    if (!activeCwd || initializing) return;
+    setInitializing(true);
+    setInitError(null);
+    try {
+      await openspecApi.initOpenspec(activeCwd);
+      await refreshAll();
+      window.dispatchEvent(new CustomEvent('openspec:changed'));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setInitError(msg);
+    } finally {
+      setInitializing(false);
+    }
+  }, [activeCwd, initializing, refreshAll]);
+
+  const handleDeleteOpenspec = useCallback(() => {
+    if (!activeCwd || deleting) return;
+    setDeleteDialogOpen(true);
+  }, [activeCwd, deleting]);
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!activeCwd) return;
+    setDeleteDialogOpen(false);
+    setDeleting(true);
+    try {
+      await openspecApi.deleteOpenspec(activeCwd);
+      await refreshAll();
+      window.dispatchEvent(new CustomEvent('openspec:changed'));
+    } catch {
+      // refreshAll will show the updated state
+    } finally {
+      setDeleting(false);
+    }
+  }, [activeCwd, refreshAll]);
+
   // ── Path indicator ────────────────────────────────────────────────────────
 
   const resolvedPath = overview?.resolvedPath ?? null;
@@ -261,6 +319,7 @@ export function OpenSpecPanel({ open, onClose }: OpenSpecPanelProps) {
       return (
         <OpenSpecChangeDetail
           change={changeDetail}
+          cwd={activeCwd}
           onBack={() => setSelectedChangeName(null)}
           onTaskToggle={handleTaskToggle}
           onBatchToggle={handleBatchToggle}
@@ -302,7 +361,7 @@ export function OpenSpecPanel({ open, onClose }: OpenSpecPanelProps) {
     // Tab views
     switch (activeTab) {
       case 'overview':
-        return <OpenSpecOverview overview={overview} onNavigate={(tab) => handleTabChange(tab as OpenSpecTabId)} />;
+        return <OpenSpecOverview overview={overview} onNavigate={(tab) => handleTabChange(tab as OpenSpecTabId)} onDeleteOpenspec={handleDeleteOpenspec} deleting={deleting} />;
       case 'changes':
         return (
           <OpenSpecChanges
@@ -342,7 +401,7 @@ export function OpenSpecPanel({ open, onClose }: OpenSpecPanelProps) {
           flex flex-col
         "
       >
-        <OpenSpecHeader onClose={onClose} onRefresh={refreshAll} loading={loading} />
+        <OpenSpecHeader onClose={onClose} />
 
         {/* Resolved path indicator */}
         {(resolvedPath || noOpenspecAtCwd) && (
@@ -374,9 +433,25 @@ export function OpenSpecPanel({ open, onClose }: OpenSpecPanelProps) {
             <p className="text-sm font-medium text-text-primary mb-1">
               {t('openspecPanel.noOpenspec', 'No OpenSpec found')}
             </p>
-            <p className="text-xs text-text-muted leading-relaxed">
+            <p className="text-xs text-text-muted leading-relaxed mb-4">
               {t('openspecPanel.noOpenspecDesc', 'No openspec/ directory was found at the current working directory or any parent directory. Change CWD to a project with OpenSpec, or run "openspec init" to initialize.')}
             </p>
+            <button
+              onClick={handleInit}
+              disabled={initializing}
+              className="px-4 py-2 text-xs font-medium rounded-lg bg-accent text-white hover:bg-accent/90 disabled:opacity-50 transition-colors"
+            >
+              {initializing
+                ? t('openspecPanel.initializing', 'Initializing...')
+                : t('openspecPanel.initButton', 'Initialize OpenSpec')}
+            </button>
+            {initError && (
+              <p className="mt-2 text-xs text-red-400">
+                {initError.includes('not installed') || initError.includes('503')
+                  ? t('openspecPanel.cliNotFound', 'openspec CLI not found. Install with: npm install -g openspec')
+                  : initError}
+              </p>
+            )}
           </div>
         ) : (
           <>
@@ -391,6 +466,19 @@ export function OpenSpecPanel({ open, onClose }: OpenSpecPanelProps) {
         )}
       </div>
 
+      {/* Delete OpenSpec confirm dialog */}
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        title={t('openspecPanel.deleteFolder', 'Delete OpenSpec')}
+        description={t('openspecPanel.deleteConfirm', 'Are you sure you want to delete the openspec folder? All changes, specs, and configuration will be permanently removed.')}
+        requiredInput="DELETE"
+        inputPlaceholder={t('openspecPanel.deletePrompt', 'Type DELETE to confirm:')}
+        confirmLabel={t('openspecPanel.deleteFolder', 'Delete OpenSpec')}
+        destructive
+        loading={deleting}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteDialogOpen(false)}
+      />
     </>
   );
 }

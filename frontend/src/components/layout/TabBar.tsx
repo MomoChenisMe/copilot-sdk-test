@@ -1,9 +1,79 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { flushSync } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { Plus, X, AlertTriangle, ChevronDown, History, Clock } from 'lucide-react';
+import { Plus, X, AlertTriangle, ChevronDown, History, Clock, Trash2, XCircle } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { ConversationPopover } from './ConversationPopover';
+
+// ── Tab Context Menu ──────────────────────────────────────────────────────
+
+interface ContextMenuState {
+  tabId: string;
+  x: number;
+  y: number;
+}
+
+function TabContextMenu({
+  state,
+  hasConversation,
+  onClose,
+  onCloseTab,
+  onDeleteConversation,
+}: {
+  state: ContextMenuState;
+  hasConversation: boolean;
+  onClose: () => void;
+  onCloseTab: () => void;
+  onDeleteConversation: () => void;
+}) {
+  const { t } = useTranslation();
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent | TouchEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
+    };
+    const keyHandler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('touchstart', handler);
+    document.addEventListener('keydown', keyHandler);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('touchstart', handler);
+      document.removeEventListener('keydown', keyHandler);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={menuRef}
+      className="fixed z-[100] min-w-[160px] py-1 rounded-lg border border-border bg-bg-primary shadow-lg"
+      style={{ left: state.x, top: state.y }}
+    >
+      <button
+        onClick={() => { onCloseTab(); onClose(); }}
+        className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-text-secondary hover:bg-bg-tertiary transition-colors text-left"
+      >
+        <XCircle size={13} />
+        {t('tabBar.closeTab', 'Close tab')}
+      </button>
+      {hasConversation && (
+        <button
+          onClick={() => {
+            if (window.confirm(t('tabBar.deleteConfirm', 'Delete this conversation? This cannot be undone.'))) {
+              onDeleteConversation();
+            }
+            onClose();
+          }}
+          className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10 transition-colors text-left"
+        >
+          <Trash2 size={13} />
+          {t('tabBar.deleteConversation', 'Delete conversation')}
+        </button>
+      )}
+    </div>
+  );
+}
 
 interface TabBarProps {
   onNewTab: () => void;
@@ -11,11 +81,12 @@ interface TabBarProps {
   onCloseTab: (tabId: string) => void;
   onSwitchConversation: (tabId: string, conversationId: string) => void;
   onDeleteConversation?: (conversationId: string) => void;
+  onDeleteTabConversation?: (tabId: string) => void;
   onOpenConversation?: (conversationId: string) => void;
   conversations: Array<{ id: string; title: string; pinned?: boolean; updatedAt?: string; cronEnabled?: boolean }>;
 }
 
-export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation, onDeleteConversation, onOpenConversation, conversations }: TabBarProps) {
+export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation, onDeleteConversation, onDeleteTabConversation, onOpenConversation, conversations }: TabBarProps) {
   const { t } = useTranslation();
   const tabOrder = useAppStore((s) => s.tabOrder);
   const tabs = useAppStore((s) => s.tabs);
@@ -26,6 +97,8 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
   const reorderTabs = useAppStore((s) => s.reorderTabs);
   const [popoverTabId, setPopoverTabId] = useState<string | null>(null);
   const [globalHistoryOpen, setGlobalHistoryOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tabTitleRefs = useRef<Record<string, HTMLSpanElement | null>>({});
   const historyButtonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -155,6 +228,26 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
             ref={(el) => { tabElsRef.current[tabId] = el; }}
             className={`relative ${isDragging ? 'z-50 shadow-lg opacity-90' : 'cursor-grab'}`}
             onPointerDown={(e) => handlePointerDown(e, tabId)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              if (wasDraggingRef.current) return;
+              setContextMenu({ tabId, x: e.clientX, y: e.clientY });
+            }}
+            onTouchStart={(e) => {
+              if (longPressTimer.current) clearTimeout(longPressTimer.current);
+              const touch = e.touches[0];
+              const x = touch.clientX;
+              const y = touch.clientY;
+              longPressTimer.current = setTimeout(() => {
+                setContextMenu({ tabId, x, y });
+              }, 500);
+            }}
+            onTouchEnd={() => {
+              if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
+            }}
+            onTouchMove={() => {
+              if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
+            }}
           >
             <button
               data-testid={`tab-${tabId}`}
@@ -282,6 +375,17 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
           anchorRef={historyButtonRef}
         />
       </div>
+
+      {/* Tab context menu */}
+      {contextMenu && (
+        <TabContextMenu
+          state={contextMenu}
+          hasConversation={!!tabs[contextMenu.tabId]?.conversationId}
+          onClose={() => setContextMenu(null)}
+          onCloseTab={() => onCloseTab(contextMenu.tabId)}
+          onDeleteConversation={() => onDeleteTabConversation?.(contextMenu.tabId)}
+        />
+      )}
     </div>
   );
 }

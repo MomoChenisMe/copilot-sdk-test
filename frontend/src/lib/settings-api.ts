@@ -5,6 +5,8 @@ export interface AppSettings {
   language?: string;
   lastSelectedModel?: string;
   disabledSkills?: string[];
+  llmLanguage?: string | null;
+  activeTabId?: string | null;
   openTabs?: unknown[];
   pushNotifications?: {
     enabled?: boolean;

@@ -65,6 +65,14 @@ vi.mock('../../../src/lib/api', () => ({
   },
 }));
 
+// Mock settingsApi to prevent it from consuming apiGet mocks internally
+vi.mock('../../../src/lib/settings-api', () => ({
+  settingsApi: {
+    get: vi.fn().mockResolvedValue({}),
+    patch: vi.fn().mockResolvedValue({ ok: true }),
+  },
+}));
+
 import { configApi, memoryApi as autoMemoryApi } from '../../../src/lib/api';
 import { SettingsPanel } from '../../../src/components/settings/SettingsPanel';
 
@@ -103,7 +111,7 @@ describe('SettingsPanel', () => {
       expect(screen.queryByRole('tab', { name: /presets/i })).toBeNull();
       expect(screen.getByRole('tab', { name: /memory/i })).toBeTruthy();
       expect(screen.getByRole('tab', { name: /skills/i })).toBeTruthy();
-      expect(screen.getByRole('tab', { name: /api keys/i })).toBeTruthy();
+      expect(screen.getByRole('tab', { name: /websearch/i })).toBeTruthy();
       expect(screen.getByRole('tab', { name: /mcp/i })).toBeTruthy();
     });
 
@@ -735,7 +743,7 @@ describe('SettingsPanel', () => {
   describe('API Keys tab', () => {
     it('should render API key input when API Keys tab is clicked', async () => {
       render(<SettingsPanel {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: /api keys/i }));
+      fireEvent.click(screen.getByRole('tab', { name: /websearch/i }));
       await waitFor(() => {
         expect(screen.getByTestId('brave-api-key-input')).toBeTruthy();
       });

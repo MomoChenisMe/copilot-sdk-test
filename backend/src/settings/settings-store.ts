@@ -5,8 +5,10 @@ const SETTINGS_FILE = 'SETTINGS.json';
 export interface AppSettings {
   theme?: string;
   language?: string;
+  llmLanguage?: string | null;
   lastSelectedModel?: string;
   disabledSkills?: string[];
+  activeTabId?: string | null;
   openTabs?: unknown[];
   pushNotifications?: {
     enabled?: boolean;

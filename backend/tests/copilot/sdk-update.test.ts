@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
-// Hoisted mock for createRequire so it's available inside vi.mock factories
-const { mockResolve, mockCreateRequire } = vi.hoisted(() => {
+// Hoisted mocks
+const { mockResolve, mockCreateRequire, mockLogDebug, mockLogWarn } = vi.hoisted(() => {
   const mockResolve = vi.fn();
   const mockCreateRequire = vi.fn(() => ({ resolve: mockResolve }));
-  return { mockResolve, mockCreateRequire };
+  const mockLogDebug = vi.fn();
+  const mockLogWarn = vi.fn();
+  return { mockResolve, mockCreateRequire, mockLogDebug, mockLogWarn };
 });
 
 // Mock child_process and fs
@@ -23,6 +25,16 @@ vi.mock('fs', async (importOriginal) => {
 // Mock node:module to control createRequire behavior
 vi.mock('node:module', () => ({
   createRequire: mockCreateRequire,
+}));
+
+// Mock logger
+vi.mock('../../src/utils/logger.js', () => ({
+  createLogger: () => ({
+    debug: mockLogDebug,
+    warn: mockLogWarn,
+    info: vi.fn(),
+    error: vi.fn(),
+  }),
 }));
 
 // Mock global fetch
@@ -118,6 +130,41 @@ describe('SdkUpdateChecker', () => {
 
       const version = checker.getInstalledVersion();
       expect(version).toBeNull();
+    });
+
+    it('should log at DEBUG level when Strategy 1 fails but Strategy 2 succeeds', () => {
+      mockResolve.mockImplementation(() => { throw new Error('ERR_PACKAGE_PATH_NOT_EXPORTED'); });
+      (readFileSync as any).mockImplementation((path: string) => {
+        if (path.includes('node_modules/@github/copilot-sdk/package.json')) {
+          return JSON.stringify({ version: '0.1.23' });
+        }
+        throw new Error('ENOENT');
+      });
+
+      const version = checker.getInstalledVersion();
+      expect(version).toBe('0.1.23');
+      expect(mockLogDebug).toHaveBeenCalled();
+      expect(mockLogWarn).not.toHaveBeenCalled();
+    });
+
+    it('should log at WARN level when both strategies fail', () => {
+      mockResolve.mockImplementation(() => { throw new Error('MODULE_NOT_FOUND'); });
+      (readFileSync as any).mockImplementation(() => { throw new Error('ENOENT'); });
+
+      checker.getInstalledVersion();
+      expect(mockLogWarn).toHaveBeenCalledWith(expect.stringContaining('Could not find'));
+    });
+
+    it('should NOT log debug or warn when Strategy 1 succeeds', () => {
+      mockResolve.mockReturnValue('/fake/node_modules/@github/copilot-sdk/dist/index.js');
+      (readFileSync as any).mockReturnValue(
+        JSON.stringify({ name: '@github/copilot-sdk', version: '0.2.0' }),
+      );
+
+      const version = checker.getInstalledVersion();
+      expect(version).toBe('0.2.0');
+      expect(mockLogDebug).not.toHaveBeenCalled();
+      expect(mockLogWarn).not.toHaveBeenCalled();
     });
   });
 

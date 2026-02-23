@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { execSync, spawn } from 'node:child_process';
 import yaml from 'js-yaml';
 
 export interface OpenSpecOverview {
@@ -16,13 +17,20 @@ export interface ChangeSummary {
   taskProgress: { total: number; completed: number };
 }
 
+export interface DeltaSpecSummary {
+  name: string;
+  added: number;
+  modified: number;
+  removed: number;
+}
+
 export interface ChangeDetail {
   name: string;
   openspec: Record<string, unknown> | null;
   proposal: string | null;
   design: string | null;
   tasks: string | null;
-  specs: string[];
+  specs: DeltaSpecSummary[];
 }
 
 export interface SpecSummary {
@@ -71,6 +79,24 @@ function countTaskProgress(tasksContent: string | null): { total: number; comple
     }
   }
   return { total, completed };
+}
+
+/** Count requirements in a delta spec markdown by section (ADDED/MODIFIED/REMOVED). */
+function countDeltaSpecRequirements(content: string | null): { added: number; modified: number; removed: number } {
+  if (!content) return { added: 0, modified: 0, removed: 0 };
+  let currentSection: 'added' | 'modified' | 'removed' | null = null;
+  const counts = { added: 0, modified: 0, removed: 0 };
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (/^##\s+ADDED\b/i.test(trimmed)) { currentSection = 'added'; continue; }
+    if (/^##\s+MODIFIED\b/i.test(trimmed)) { currentSection = 'modified'; continue; }
+    if (/^##\s+REMOVED\b/i.test(trimmed)) { currentSection = 'removed'; continue; }
+    if (/^##\s+/.test(trimmed) && !/^###/.test(trimmed)) { currentSection = null; continue; }
+    if (currentSection && /^###\s+Requirement:/i.test(trimmed)) {
+      counts[currentSection]++;
+    }
+  }
+  return counts;
 }
 
 /** List subdirectories in a directory. Returns empty array if directory missing. */
@@ -142,23 +168,28 @@ export class OpenSpecService {
     const design = readFileOrNull(path.join(changeDir, 'design.md'));
     const tasks = readFileOrNull(path.join(changeDir, 'tasks.md'));
 
-    // List delta spec names if specs/ subdirectory exists
+    // List delta specs with requirement counts
     const specsSubdir = path.join(changeDir, 'specs');
-    const specs = listSubdirectories(specsSubdir);
+    const specNames = listSubdirectories(specsSubdir);
+    const specs: DeltaSpecSummary[] = specNames.map((specName) => {
+      const specContent = readFileOrNull(path.join(specsSubdir, specName, 'spec.md'));
+      const counts = countDeltaSpecRequirements(specContent);
+      return { name: specName, ...counts };
+    });
 
     return { name, openspec, proposal, design, tasks, specs };
   }
 
-  /** Toggle a task checkbox in tasks.md. taskLine is like "5.1". */
+  /** Toggle a task checkbox in tasks.md. taskLine is the text after `- [ ] `. */
   updateTask(changeName: string, taskLine: string, checked: boolean): boolean {
     const tasksPath = path.join(this.basePath, 'changes', changeName, 'tasks.md');
     const content = readFileOrNull(tasksPath);
     if (!content) return false;
 
-    // Escape dots in task line for regex
-    const escaped = taskLine.replace(/\./g, '\\.');
-    const uncheckedPattern = new RegExp(`^(\\s*- )\\[ \\]( ${escaped}\\b)`, 'm');
-    const checkedPattern = new RegExp(`^(\\s*- )\\[x\\]( ${escaped}\\b)`, 'm');
+    // Escape ALL regex special characters (not just dots)
+    const escaped = taskLine.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const uncheckedPattern = new RegExp(`^(\\s*- )\\[ \\]( ${escaped})\\s*$`, 'm');
+    const checkedPattern = new RegExp(`^(\\s*- )\\[x\\]( ${escaped})\\s*$`, 'm');
 
     let updated: string;
     if (checked) {
@@ -236,6 +267,12 @@ export class OpenSpecService {
     });
   }
 
+  /** Get full content of a delta spec file within a change. */
+  getDeltaSpecFile(changeName: string, specName: string): string | null {
+    const specPath = path.join(this.basePath, 'changes', changeName, 'specs', specName, 'spec.md');
+    return readFileOrNull(specPath);
+  }
+
   /** Get full content of a spec file. */
   getSpecFile(specName: string): string | null {
     const specPath = path.join(this.basePath, 'specs', specName, 'spec.md');
@@ -252,6 +289,51 @@ export class OpenSpecService {
       const dateMatch = name.match(/^(\d{4}-\d{2}-\d{2})-/);
       const archivedDate = dateMatch ? dateMatch[1] : '';
       return { name, archivedDate };
+    });
+  }
+
+  /** Check if the openspec CLI is available on the system. */
+  static isCliAvailable(): boolean {
+    try {
+      execSync('command -v openspec', { stdio: 'ignore' });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Delete the openspec folder in the given directory. */
+  static deleteOpenspecFolder(cwd: string): { success: boolean; error?: string } {
+    const openspecDir = path.join(cwd, 'openspec');
+    if (!fs.existsSync(openspecDir)) {
+      return { success: false, error: 'openspec folder does not exist' };
+    }
+    try {
+      fs.rmSync(openspecDir, { recursive: true, force: true });
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'Failed to delete' };
+    }
+  }
+
+  /** Initialize openspec in the given directory. */
+  static initOpenspec(cwd: string): Promise<{ success: boolean; error?: string }> {
+    return new Promise((resolve) => {
+      const child = spawn('openspec', ['init'], { cwd, stdio: 'pipe' });
+      let stderr = '';
+      child.stderr.on('data', (data: Buffer) => {
+        stderr += data.toString();
+      });
+      child.on('close', (code) => {
+        if (code === 0) {
+          resolve({ success: true });
+        } else {
+          resolve({ success: false, error: stderr.trim() || `Exit code ${code}` });
+        }
+      });
+      child.on('error', (err) => {
+        resolve({ success: false, error: err.message });
+      });
     });
   }
 }

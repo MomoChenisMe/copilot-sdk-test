@@ -12,6 +12,7 @@ import { useSkills } from '../../hooks/useSkills';
 import { useGlobalShortcuts } from '../../hooks/useGlobalShortcuts';
 import { useQuota } from '../../hooks/useQuota';
 import { conversationApi, configApi } from '../../lib/api';
+import { openspecApi } from '../../lib/openspec-api';
 import { skillsApi } from '../../lib/prompts-api';
 import { settingsApi } from '../../lib/settings-api';
 import { sumUsageFromMessages } from '../../lib/usage-utils';
@@ -71,6 +72,29 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     return tid ? s.tabs[tid]?.openspecPanelOpen ?? false : false;
   });
   const setTabOpenspecPanelOpen = useAppStore((s) => s.setTabOpenspecPanelOpen);
+  const openspecEnabled = useAppStore((s) => s.settings?.openspecEnabled ?? false);
+  const [openSpecDirExists, setOpenSpecDirExists] = useState(false);
+  const openSpecActive = openspecEnabled && openSpecDirExists;
+
+  // Check if openspec directory exists for current tab's CWD
+  const checkOpenSpecDirExists = useCallback(() => {
+    const tab = activeTabId ? useAppStore.getState().tabs[activeTabId] : null;
+    const conv = tab?.conversationId ? useAppStore.getState().conversations.find((c) => c.id === tab.conversationId) : null;
+    const tabCwd = conv?.cwd || cwd;
+    if (!tabCwd) { setOpenSpecDirExists(false); return; }
+    openspecApi.getOverview(tabCwd).then((data) => {
+      setOpenSpecDirExists(data.resolvedPath !== null);
+    }).catch(() => setOpenSpecDirExists(false));
+  }, [activeTabId, cwd]);
+
+  useEffect(() => { checkOpenSpecDirExists(); }, [checkOpenSpecDirExists]);
+
+  // Re-check when openspec is initialized or deleted
+  useEffect(() => {
+    const handler = () => checkOpenSpecDirExists();
+    window.addEventListener('openspec:changed', handler);
+    return () => window.removeEventListener('openspec:changed', handler);
+  }, [checkOpenSpecDirExists]);
 
   const { sendMessage, abortMessage, sendUserInputResponse, cleanupDedup } = useTabCopilot({ subscribe, send });
 
@@ -167,6 +191,9 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         if (settings.disabledSkills) {
           useAppStore.setState({ disabledSkills: settings.disabledSkills });
           try { localStorage.setItem('codeforge:disabledSkills', JSON.stringify(settings.disabledSkills)); } catch { /* noop */ }
+        }
+        if (settings.llmLanguage !== undefined) {
+          useAppStore.setState({ llmLanguage: settings.llmLanguage ?? null });
         }
       } else {
         // One-time migration: push localStorage settings to backend
@@ -619,8 +646,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       useAppStore.getState().setTabPlanMode(tabId, !tab.planMode);
     },
     onToggleOpenSpec: () => {
-      const { openspecEnabled } = useAppStore.getState().settings ?? {};
-      if (!openspecEnabled) return;
+      if (!useAppStore.getState().settings?.openspecEnabled) return;
       const tid = useAppStore.getState().activeTabId;
       if (!tid) return;
       const current = useAppStore.getState().tabs[tid]?.openspecPanelOpen ?? false;
@@ -638,7 +664,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         onHomeClick={handleHomeClick}
         onSettingsClick={() => setSettingsOpen(!settingsOpen)}
         onShortcutsClick={() => setShortcutsOpen(true)}
-        onOpenSpecClick={(useAppStore.getState().settings as any)?.openspecEnabled ? () => {
+        onOpenSpecClick={openspecEnabled ? () => {
           if (!activeTabId) return;
           setTabOpenspecPanelOpen(activeTabId, !openspecPanelOpen);
         } : undefined}
@@ -650,6 +676,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
           }
         } : undefined}
         artifactsCount={activeTab?.artifacts?.length ?? 0}
+        openSpecActive={openSpecActive}
         onMenuClick={() => setDrawerOpen(true)}
       />
 
@@ -662,6 +689,11 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         onCloseTab={handleCloseTab}
         onSwitchConversation={handleSwitchConversation}
         onDeleteConversation={handleDeleteConversation}
+        onDeleteTabConversation={(tabId) => {
+          const tab = useAppStore.getState().tabs[tabId];
+          if (tab?.conversationId) handleDeleteConversation(tab.conversationId);
+          else closeTab(tabId);
+        }}
         onOpenConversation={(conversationId) => {
           const conv = conversations.find((c) => c.id === conversationId);
           openTab(conversationId, conv?.title || 'Chat');
@@ -852,6 +884,11 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
                 const newActiveTabId = useAppStore.getState().activeTabId;
                 if (newActiveTabId) {
                   handleSelectTab(newActiveTabId);
+                }
+              }}
+              onSwitchToConversation={(conversationId) => {
+                if (activeTabId) {
+                  handleSwitchConversation(activeTabId, conversationId);
                 }
               }}
               onExecutePlan={handleExecutePlan}

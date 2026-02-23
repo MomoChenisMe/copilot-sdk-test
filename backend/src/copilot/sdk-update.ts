@@ -30,7 +30,7 @@ export class SdkUpdateChecker {
         dir = dirname(dir);
       }
     } catch (err) {
-      log.warn({ err }, 'Failed to resolve SDK version via createRequire');
+      log.debug({ err }, 'Failed to resolve SDK version via createRequire');
     }
 
     // Strategy 2: Try known candidate paths (backend/ and project root)

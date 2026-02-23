@@ -22,13 +22,20 @@ export interface DeltaSpecFile {
   path: string;
 }
 
+export interface DeltaSpecSummary {
+  name: string;
+  added: number;
+  modified: number;
+  removed: number;
+}
+
 export interface ChangeDetail {
   name: string;
   openspec: Record<string, unknown> | null;
   proposal: string | null;
   design: string | null;
   tasks: string | null;
-  specs: string[];
+  specs: DeltaSpecSummary[];
 }
 
 export interface SpecListItem {
@@ -88,6 +95,17 @@ export const openspecApi = {
     apiDelete<{ ok: boolean }>(
       withCwd(`/api/openspec/changes/${encodeURIComponent(name)}`, cwd),
     ),
+
+  getDeltaSpec: (changeName: string, specName: string, cwd?: string) =>
+    apiGet<SpecFileContent>(
+      withCwd(`/api/openspec/changes/${encodeURIComponent(changeName)}/specs/${encodeURIComponent(specName)}`, cwd),
+    ),
+
+  initOpenspec: (cwd: string) =>
+    apiPost<{ ok: boolean }>(withCwd('/api/openspec/init', cwd)),
+
+  deleteOpenspec: (cwd: string) =>
+    apiDelete<{ ok: boolean }>(withCwd('/api/openspec/delete', cwd)),
 
   listSpecs: (cwd?: string) =>
     apiGet<{ specs: SpecListItem[] }>(withCwd('/api/openspec/specs', cwd)).then((r) => r.specs),

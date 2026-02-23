@@ -39,24 +39,24 @@ export class PromptComposer {
       // CONFIG.json missing or malformed — skip silently
     }
 
-    // 4. Auto-memory MEMORY.md
+    // 4. Auto-memory MEMORY.md (wrapped in XML delimiter)
     if (this.memoryStore) {
       const memory = this.memoryStore.readMemory();
-      if (memory.trim()) sections.push(memory);
+      if (memory.trim()) sections.push(`<memory-context>\n${memory}\n</memory-context>`);
     }
 
-    // 5. .codeforge.md from cwd (falls back to .ai-terminal.md)
+    // 5. .codeforge.md from cwd (wrapped in XML delimiter, falls back to .ai-terminal.md)
     if (cwd) {
       try {
         const codeforgePromptPath = path.join(cwd, '.codeforge.md');
         const projectPrompt = fs.readFileSync(codeforgePromptPath, 'utf-8');
-        if (projectPrompt.trim()) sections.push(projectPrompt);
+        if (projectPrompt.trim()) sections.push(`<project-instructions>\n${projectPrompt}\n</project-instructions>`);
       } catch {
         // .codeforge.md not found — try legacy .ai-terminal.md
         try {
           const legacyPromptPath = path.join(cwd, '.ai-terminal.md');
           const legacyPrompt = fs.readFileSync(legacyPromptPath, 'utf-8');
-          if (legacyPrompt.trim()) sections.push(legacyPrompt);
+          if (legacyPrompt.trim()) sections.push(`<project-instructions>\n${legacyPrompt}\n</project-instructions>`);
         } catch {
           // Neither file exists — skip silently
         }
@@ -70,6 +70,10 @@ export class PromptComposer {
         'zh-CN': '简体中文',
         'ja': '日本語',
         'ko': '한국어',
+        'es': 'Español',
+        'fr': 'Français',
+        'de': 'Deutsch',
+        'pt': 'Português',
       };
       const langName = LOCALE_NAMES[locale] || locale;
       sections.push(`# Language\nAlways respond in ${langName}. Use ${langName} for all explanations, comments, and communications. Technical terms and code identifiers should remain in their original form.`);

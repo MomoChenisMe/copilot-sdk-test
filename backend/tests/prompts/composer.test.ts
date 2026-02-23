@@ -131,8 +131,8 @@ describe('PromptComposer', () => {
       fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
       fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
 
-      const result = composer.compose(undefined, 'fr');
-      expect(result).toContain('Always respond in fr');
+      const result = composer.compose(undefined, 'vi');
+      expect(result).toContain('Always respond in vi');
     });
   });
 
@@ -160,12 +160,15 @@ describe('PromptComposer', () => {
       fs.writeFileSync(path.join(tmpDir, 'CONFIG.json'), JSON.stringify({ openspecSddEnabled: true }));
 
       const result = composerWithMem.compose();
-      const sections = result.split('\n\n---\n\n');
-      const profileIdx = sections.indexOf('Profile rules');
-      const sddIdx = sections.indexOf('OpenSpec content');
-      const memIdx = sections.indexOf('Memory facts');
-      expect(profileIdx).toBeLessThan(sddIdx);
-      expect(sddIdx).toBeLessThan(memIdx);
+      // Use indexOf for ordering since memory is now wrapped in <memory-context> XML tags
+      const profilePos = result.indexOf('Profile rules');
+      const sddPos = result.indexOf('OpenSpec content');
+      const memPos = result.indexOf('Memory facts');
+      expect(profilePos).toBeGreaterThanOrEqual(0);
+      expect(sddPos).toBeGreaterThanOrEqual(0);
+      expect(memPos).toBeGreaterThanOrEqual(0);
+      expect(profilePos).toBeLessThan(sddPos);
+      expect(sddPos).toBeLessThan(memPos);
 
       fs.rmSync(memDir, { recursive: true, force: true });
     });

@@ -16,10 +16,11 @@ interface TopBarProps {
   onOpenSpecClick?: () => void;
   onArtifactsClick?: () => void;
   artifactsCount?: number;
+  openSpecActive?: boolean;
   onMenuClick?: () => void;
 }
 
-export function TopBar({ title, status, theme, onThemeToggle, onHomeClick, onSettingsClick, onShortcutsClick, onOpenSpecClick, onArtifactsClick, artifactsCount, onMenuClick }: TopBarProps) {
+export function TopBar({ title, status, theme, onThemeToggle, onHomeClick, onSettingsClick, onShortcutsClick, onOpenSpecClick, onArtifactsClick, artifactsCount, openSpecActive, onMenuClick }: TopBarProps) {
   const { t } = useTranslation();
   return (
     <header className="h-12 flex items-center gap-2 px-4 bg-bg-primary border-b border-border-subtle shrink-0">
@@ -61,10 +62,13 @@ export function TopBar({ title, status, theme, onThemeToggle, onHomeClick, onSet
           <Tooltip label={t('topBar.openspec', 'OpenSpec')} position="bottom">
             <button
               onClick={onOpenSpecClick}
-              className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
+              className="relative p-2 rounded-lg hover:bg-bg-tertiary transition-colors text-text-secondary hover:text-text-primary"
               aria-label={t('topBar.openspec', 'OpenSpec')}
             >
               <BookOpen size={18} />
+              {openSpecActive && (
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-accent" />
+              )}
             </button>
           </Tooltip>
         )}

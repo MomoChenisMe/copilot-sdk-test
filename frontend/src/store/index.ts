@@ -94,6 +94,8 @@ export interface AppState {
   // Language
   language: string;
   setLanguage: (lang: string) => void;
+  llmLanguage: string | null;
+  setLlmLanguage: (lang: string | null) => void;
 
   // Models
   models: ModelInfo[];
@@ -329,6 +331,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     try { localStorage.setItem('i18nextLng', lang); } catch { /* noop */ }
     set({ language: lang });
     settingsApi.patch({ language: lang }).catch(() => {});
+  },
+  llmLanguage: null,
+  setLlmLanguage: (lang) => {
+    set({ llmLanguage: lang });
+    settingsApi.patch({ llmLanguage: lang }).catch(() => {});
   },
 
   // Models state
@@ -589,7 +596,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     persistOpenTabs(restTabs, newOrder);
   },
 
-  setActiveTab: (tabId) => set({ activeTabId: tabId }),
+  setActiveTab: (tabId) => {
+    set({ activeTabId: tabId });
+    const state = get();
+    persistOpenTabs(state.tabs, state.tabOrder);
+  },
 
   reorderTabs: (tabIds) => {
     set({ tabOrder: tabIds });
@@ -648,11 +659,26 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const raw = localStorage.getItem('codeforge:openTabs');
       if (!raw) return;
-      const saved = JSON.parse(raw) as Array<{ id: string; title: string; conversationId?: string }>;
-      if (!Array.isArray(saved) || saved.length === 0) return;
+      const parsed = JSON.parse(raw);
+
+      // Detect format: new = { tabs: [...], activeTabId }, old = [...]
+      let savedTabs: Array<{ id: string; title: string; conversationId?: string }>;
+      let savedActiveTabId: string | null = null;
+      if (Array.isArray(parsed)) {
+        // Old format (plain array)
+        savedTabs = parsed;
+      } else if (parsed && Array.isArray(parsed.tabs)) {
+        // New format (object with tabs + activeTabId)
+        savedTabs = parsed.tabs;
+        savedActiveTabId = parsed.activeTabId ?? null;
+      } else {
+        return;
+      }
+
+      if (savedTabs.length === 0) return;
       const tabs: Record<string, TabState> = {};
       const tabOrder: string[] = [];
-      for (const item of saved) {
+      for (const item of savedTabs) {
         // Old format migration: if no conversationId, id was the conversationId
         const isOldFormat = !item.conversationId;
         const tabId = isOldFormat ? crypto.randomUUID() : item.id;
@@ -687,7 +713,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         };
         tabOrder.push(tabId);
       }
-      set({ tabs, tabOrder, activeTabId: tabOrder[0] ?? null, tabLimitWarning: tabOrder.length >= 15 });
+      // Restore activeTabId: use saved value if it exists in restored tabs, otherwise fallback to first
+      const activeTabId = (savedActiveTabId && tabOrder.includes(savedActiveTabId))
+        ? savedActiveTabId
+        : (tabOrder[0] ?? null);
+      set({ tabs, tabOrder, activeTabId, tabLimitWarning: tabOrder.length >= 15 });
     } catch { /* noop — invalid JSON or localStorage unavailable */ }
   },
 
@@ -1084,10 +1114,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 function persistOpenTabs(tabs: Record<string, TabState>, tabOrder: string[]) {
   try {
     // Exclude draft tabs (null conversationId) from persistence
-    const data = tabOrder
+    const tabsData = tabOrder
       .filter((id) => tabs[id]?.conversationId !== null)
       .map((id) => ({ id: tabs[id].id, title: tabs[id].title, conversationId: tabs[id].conversationId }));
-    localStorage.setItem('codeforge:openTabs', JSON.stringify(data));
-    settingsApi.patch({ openTabs: data }).catch(() => {});
+    const activeTabId = useAppStore.getState().activeTabId;
+    const payload = { tabs: tabsData, activeTabId };
+    localStorage.setItem('codeforge:openTabs', JSON.stringify(payload));
+    settingsApi.patch({ openTabs: tabsData, activeTabId }).catch(() => {});
   } catch { /* noop */ }
 }

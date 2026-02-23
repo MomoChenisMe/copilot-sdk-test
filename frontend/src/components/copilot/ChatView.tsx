@@ -45,6 +45,7 @@ interface ChatViewProps {
   onSettingsOpen?: () => void;
   onUserInputResponse?: (requestId: string, answer: string, wasFreeform: boolean) => void;
   onOpenConversation?: (conversationId: string) => void;
+  onSwitchToConversation?: (conversationId: string) => void;
   onExecutePlan?: (conversationId: string, planFilePath: string) => void;
   onCronSaved?: () => void;
 }
@@ -65,6 +66,7 @@ export function ChatView({
   onSettingsOpen,
   onUserInputResponse,
   onOpenConversation,
+  onSwitchToConversation,
   onExecutePlan,
   onCronSaved,
 }: ChatViewProps) {
@@ -373,8 +375,33 @@ export function ChatView({
   if (messages.length === 0 && !showStreamingBlock) {
     return (
       <div className="flex flex-col h-full">
-        <div className="flex-1 overflow-y-auto flex items-center justify-center">
+        <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center gap-6">
           <p className="text-text-muted text-sm">{t('chat.emptyPrompt')}</p>
+          {/* Recent conversations in empty tab */}
+          {recentConversations.length > 0 && onSwitchToConversation && (
+            <div className="w-full max-w-md text-left px-4">
+              <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2 px-1">
+                {t('chat.recentConversations')}
+              </h3>
+              <div className="space-y-1">
+                {recentConversations.map((conv) => (
+                  <button
+                    key={conv.id}
+                    onClick={() => onSwitchToConversation(conv.id)}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors"
+                  >
+                    <MessageSquare size={14} className="shrink-0 text-text-muted" />
+                    <span className="truncate flex-1">{conv.title}</span>
+                    {conv.model && (
+                      <span className="shrink-0 text-xs px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted">
+                        {conv.model.split('/').pop()?.split('-').slice(0, 2).join('-') || conv.model}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         {/* Input area */}
         <div className="shrink-0 pb-4 pt-2 px-2 md:px-4">

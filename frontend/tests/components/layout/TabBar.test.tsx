@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { useAppStore } from '../../../src/store/index';
 import { TabBar } from '../../../src/components/layout/TabBar';
 
@@ -11,6 +11,9 @@ vi.mock('lucide-react', () => ({
   ChevronDown: (props: any) => <svg data-testid="chevron-down-icon" {...props} />,
   Search: (props: any) => <svg data-testid="search-icon" {...props} />,
   History: (props: any) => <svg data-testid="history-icon" {...props} />,
+  Clock: (props: any) => <svg data-testid="clock-icon" {...props} />,
+  Trash2: (props: any) => <svg data-testid="trash-icon" {...props} />,
+  XCircle: (props: any) => <svg data-testid="xcircle-icon" {...props} />,
 }));
 
 // Helper: open a tab and return its generated tabId
@@ -141,6 +144,115 @@ describe('TabBar', () => {
     useAppStore.setState({ tabLimitWarning: false });
     render(<TabBar {...defaultProps} />);
     expect(screen.queryByTestId('tab-limit-warning')).toBeNull();
+  });
+
+  // --- Context menu ---
+  describe('Context menu', () => {
+    it('should open context menu on right-click and suppress default', () => {
+      const tabId = openTabAndGetId('conv-1', 'Chat 1');
+      const onDeleteTabConversation = vi.fn();
+      render(<TabBar {...defaultProps} onDeleteTabConversation={onDeleteTabConversation} />);
+      const tabContainer = screen.getByTestId(`tab-${tabId}`).parentElement!;
+      const prevented = fireEvent.contextMenu(tabContainer, { clientX: 100, clientY: 50 });
+      // fireEvent returns false if preventDefault was called
+      expect(prevented).toBe(false);
+      // Context menu should now be visible — look for Close tab text
+      expect(screen.getByText(/Close tab|關閉頁籤/i)).toBeTruthy();
+    });
+
+    it('should show delete option for tab with conversationId', () => {
+      const tabId = openTabAndGetId('conv-1', 'Chat 1');
+      const onDeleteTabConversation = vi.fn();
+      render(<TabBar {...defaultProps} onDeleteTabConversation={onDeleteTabConversation} />);
+      const tabEl = screen.getByTestId(`tab-${tabId}`).parentElement!;
+      fireEvent.contextMenu(tabEl, { clientX: 100, clientY: 50 });
+      expect(screen.getByText(/Delete conversation|刪除對話/i)).toBeTruthy();
+    });
+
+    it('should hide delete option for draft tab (null conversationId)', () => {
+      useAppStore.getState().openTab(null, 'Draft');
+      render(<TabBar {...defaultProps} />);
+      const tabEl = screen.getByText('Draft').closest('[class*="relative"]')!;
+      fireEvent.contextMenu(tabEl, { clientX: 100, clientY: 50 });
+      expect(screen.getByText(/Close tab|關閉頁籤/i)).toBeTruthy();
+      expect(screen.queryByText(/Delete conversation|刪除對話/i)).toBeNull();
+    });
+
+    it('should call onDeleteTabConversation on confirm', () => {
+      const tabId = openTabAndGetId('conv-1', 'Chat 1');
+      const onDeleteTabConversation = vi.fn();
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      render(<TabBar {...defaultProps} onDeleteTabConversation={onDeleteTabConversation} />);
+      const tabEl = screen.getByTestId(`tab-${tabId}`).parentElement!;
+      fireEvent.contextMenu(tabEl, { clientX: 100, clientY: 50 });
+      fireEvent.click(screen.getByText(/Delete conversation|刪除對話/i));
+      expect(window.confirm).toHaveBeenCalled();
+      expect(onDeleteTabConversation).toHaveBeenCalledWith(tabId);
+      vi.restoreAllMocks();
+    });
+
+    it('should NOT call onDeleteTabConversation when user cancels confirm', () => {
+      const tabId = openTabAndGetId('conv-1', 'Chat 1');
+      const onDeleteTabConversation = vi.fn();
+      vi.spyOn(window, 'confirm').mockReturnValue(false);
+      render(<TabBar {...defaultProps} onDeleteTabConversation={onDeleteTabConversation} />);
+      const tabEl = screen.getByTestId(`tab-${tabId}`).parentElement!;
+      fireEvent.contextMenu(tabEl, { clientX: 100, clientY: 50 });
+      fireEvent.click(screen.getByText(/Delete conversation|刪除對話/i));
+      expect(window.confirm).toHaveBeenCalled();
+      expect(onDeleteTabConversation).not.toHaveBeenCalled();
+      vi.restoreAllMocks();
+    });
+
+    it('should close context menu on Escape key', () => {
+      openTabAndGetId('conv-1', 'Chat 1');
+      render(<TabBar {...defaultProps} />);
+      const tabEl = screen.getByText('Chat 1').closest('[class*="relative"]')!;
+      fireEvent.contextMenu(tabEl, { clientX: 100, clientY: 50 });
+      expect(screen.getByText(/Close tab|關閉頁籤/i)).toBeTruthy();
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(screen.queryByText(/Close tab|關閉頁籤/i)).toBeNull();
+    });
+  });
+
+  // --- Long-press on mobile ---
+  describe('Long-press (mobile)', () => {
+    it('should open context menu after 500ms touch', () => {
+      vi.useFakeTimers();
+      openTabAndGetId('conv-1', 'Chat 1');
+      render(<TabBar {...defaultProps} />);
+      const tabEl = screen.getByText('Chat 1').closest('[class*="relative"]')!;
+      fireEvent.touchStart(tabEl, { touches: [{ clientX: 100, clientY: 50 }] });
+      act(() => { vi.advanceTimersByTime(500); });
+      expect(screen.getByText(/Close tab|關閉頁籤/i)).toBeTruthy();
+      vi.useRealTimers();
+    });
+
+    it('should NOT open context menu if touch ends before 500ms', () => {
+      vi.useFakeTimers();
+      openTabAndGetId('conv-1', 'Chat 1');
+      render(<TabBar {...defaultProps} />);
+      const tabEl = screen.getByText('Chat 1').closest('[class*="relative"]')!;
+      fireEvent.touchStart(tabEl, { touches: [{ clientX: 100, clientY: 50 }] });
+      act(() => { vi.advanceTimersByTime(300); });
+      fireEvent.touchEnd(tabEl);
+      act(() => { vi.advanceTimersByTime(300); });
+      expect(screen.queryByText(/Close tab|關閉頁籤/i)).toBeNull();
+      vi.useRealTimers();
+    });
+
+    it('should NOT open context menu if touch moves (cancel long-press)', () => {
+      vi.useFakeTimers();
+      openTabAndGetId('conv-1', 'Chat 1');
+      render(<TabBar {...defaultProps} />);
+      const tabEl = screen.getByText('Chat 1').closest('[class*="relative"]')!;
+      fireEvent.touchStart(tabEl, { touches: [{ clientX: 100, clientY: 50 }] });
+      act(() => { vi.advanceTimersByTime(200); });
+      fireEvent.touchMove(tabEl);
+      act(() => { vi.advanceTimersByTime(400); });
+      expect(screen.queryByText(/Close tab|關閉頁籤/i)).toBeNull();
+      vi.useRealTimers();
+    });
   });
 
   // --- ConversationPopover integration ---

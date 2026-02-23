@@ -1,13 +1,11 @@
 import { useTranslation } from 'react-i18next';
-import { BookOpen, RefreshCw, X } from 'lucide-react';
+import { BookOpen, X } from 'lucide-react';
 
 interface OpenSpecHeaderProps {
   onClose: () => void;
-  onRefresh: () => void;
-  loading: boolean;
 }
 
-export function OpenSpecHeader({ onClose, onRefresh, loading }: OpenSpecHeaderProps) {
+export function OpenSpecHeader({ onClose }: OpenSpecHeaderProps) {
   const { t } = useTranslation();
 
   return (
@@ -16,14 +14,6 @@ export function OpenSpecHeader({ onClose, onRefresh, loading }: OpenSpecHeaderPr
       <h2 className="text-sm font-semibold text-text-primary flex-1">
         {t('openspecPanel.title', 'OpenSpec')}
       </h2>
-      <button
-        onClick={onRefresh}
-        disabled={loading}
-        className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-secondary disabled:opacity-40 transition-colors"
-        aria-label={t('openspecPanel.refresh', 'Refresh')}
-      >
-        <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-      </button>
       <button
         onClick={onClose}
         className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-secondary transition-colors"

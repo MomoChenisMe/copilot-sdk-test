@@ -16,6 +16,7 @@ import { AccountLockout } from './auth/lockout.js';
 import { ActivityLog } from './auth/activity-log.js';
 import { createCsrfMiddleware } from './auth/csrf.js';
 import { createOpenSpecRoutes } from './openspec/openspec-routes.js';
+import { OpenSpecWatcher } from './openspec/openspec-watcher.js';
 import { createConversationRoutes } from './conversation/routes.js';
 import { ClientManager } from './copilot/client-manager.js';
 import { SessionManager } from './copilot/session-manager.js';
@@ -294,7 +295,7 @@ export function createApp() {
 
   // HTTP + WebSocket server
   const httpServer = createServer(app);
-  const wss = createWsServer(httpServer, sessionStore);
+  const { wss, broadcast } = createWsServer(httpServer, sessionStore);
 
   // StreamManager for background streaming
   const promptComposer = new PromptComposer(promptStore, config.maxPromptLength, memoryStore);
@@ -526,8 +527,19 @@ export function createApp() {
     }
   });
 
+  // OpenSpec file watcher
+  const openspecWatcher = new OpenSpecWatcher(() => {
+    broadcast({ type: 'openspec:changed', data: { timestamp: Date.now() } });
+  });
+  if (fs.existsSync(openspecDefaultBasePath)) {
+    openspecWatcher.watch(openspecDefaultBasePath);
+  }
+
   // Graceful shutdown
   setupGracefulShutdown([
+    async () => {
+      openspecWatcher.stop();
+    },
     async () => {
       await convCronScheduler.shutdown();
     },

@@ -12,6 +12,7 @@ import type { MemoryConfig, MemoryStats } from '../../lib/api';
 import { useAppStore } from '../../store';
 import type { ModelInfo } from '../../store';
 import { Markdown } from '../shared/Markdown';
+import { CustomSelect } from '../shared/CustomSelect';
 import { ApiKeysTab } from './ApiKeysTab';
 import { McpTab } from './McpTab';
 const INVALID_NAME_RE = /[.]{2}|[/\\]|\0/;
@@ -322,6 +323,9 @@ function GeneralTab({
         </button>
       </section>
 
+      {/* LLM Language */}
+      <LlmLanguageSection />
+
       {/* Notifications */}
       <NotificationsSection />
 
@@ -337,6 +341,74 @@ function GeneralTab({
         </button>
       </section>
     </div>
+  );
+}
+
+const LLM_LANGUAGE_OPTIONS = [
+  { value: '', label: 'llmLangAuto' },
+  { value: 'zh-TW', label: '繁體中文（台灣）' },
+  { value: 'en', label: 'English' },
+  { value: 'ja', label: '日本語' },
+  { value: 'zh-CN', label: '简体中文' },
+  { value: 'ko', label: '한국어' },
+  { value: 'es', label: 'Español' },
+  { value: 'fr', label: 'Français' },
+  { value: 'de', label: 'Deutsch' },
+  { value: 'pt', label: 'Português' },
+  { value: '__custom', label: 'llmLangCustom' },
+];
+
+function LlmLanguageSection() {
+  const { t } = useTranslation();
+  const llmLanguage = useAppStore((s) => s.llmLanguage);
+  const setLlmLanguage = useAppStore((s) => s.setLlmLanguage);
+  const [customValue, setCustomValue] = useState('');
+
+  const isCustom = llmLanguage !== null && !LLM_LANGUAGE_OPTIONS.some(
+    (o) => o.value === llmLanguage && o.value !== '__custom' && o.value !== '',
+  );
+  const selectValue = llmLanguage === null ? '' : isCustom ? '__custom' : llmLanguage;
+
+  return (
+    <section>
+      <h3 className="text-xs font-semibold text-text-secondary uppercase mb-1">
+        {t('settings.general.llmLanguage', 'LLM Response Language')}
+      </h3>
+      <p className="text-xs text-text-muted mb-2">
+        {t('settings.general.llmLanguageDesc', 'Set the language for AI responses, independent from the UI language.')}
+      </p>
+      <CustomSelect
+        value={selectValue}
+        options={LLM_LANGUAGE_OPTIONS.map((opt) => ({
+          value: opt.value,
+          label:
+            opt.value === '' || opt.value === '__custom'
+              ? t(`settings.general.${opt.label}`, opt.label)
+              : opt.label,
+        }))}
+        onChange={(val) => {
+          if (val === '') {
+            setLlmLanguage(null);
+          } else if (val === '__custom') {
+            setLlmLanguage(customValue || 'en');
+          } else {
+            setLlmLanguage(val);
+          }
+        }}
+      />
+      {selectValue === '__custom' && (
+        <input
+          type="text"
+          value={isCustom && llmLanguage ? llmLanguage : customValue}
+          onChange={(e) => {
+            setCustomValue(e.target.value);
+            if (e.target.value) setLlmLanguage(e.target.value);
+          }}
+          placeholder={t('settings.general.llmLangCustomPlaceholder', 'e.g. Bahasa Indonesia')}
+          className="mt-2 w-full px-3 py-2 rounded-lg border border-border bg-bg-primary text-text-primary text-sm"
+        />
+      )}
+    </section>
   );
 }
 
@@ -595,6 +667,7 @@ function OpenSpecTab() {
       const { configApi } = await import('../../lib/api');
       await configApi.putOpenspecSdd(newEnabled);
       setOpenspecEnabled(newEnabled);
+      useAppStore.getState().setSettings({ openspecEnabled: newEnabled });
       if (newEnabled) {
         promptsApi.getOpenspecSdd().then((r) => setOpenspecContent(r.content)).catch(() => {});
       }

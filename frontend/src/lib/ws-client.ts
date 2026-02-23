@@ -77,6 +77,11 @@ export class WsClient {
           // Listeners can handle redirect to login
         }
 
+        // Dispatch openspec:changed as CustomEvent for panel subscription
+        if (message.type === 'openspec:changed') {
+          window.dispatchEvent(new CustomEvent('openspec:changed', { detail: message.data }));
+        }
+
         // Handle pong — clear visibility check timeout
         if (message.type === 'pong') {
           if (this.pongTimeout) {

@@ -90,7 +90,16 @@ export function createWsServer(httpServer: HttpServer, sessionStore: SessionStor
     });
   });
 
-  return wss;
+  function broadcast(message: WsMessage) {
+    const data = JSON.stringify(message);
+    for (const client of wss.clients) {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(data);
+      }
+    }
+  }
+
+  return { wss, broadcast };
 }
 
 function send(ws: WebSocket, message: WsMessage) {

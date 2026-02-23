@@ -458,8 +458,8 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
         createdAt: new Date().toISOString(),
       });
 
-      const { disabledSkills, language } = state;
-      const data: Record<string, unknown> = { conversationId, prompt, disabledSkills, locale: language };
+      const { disabledSkills, language, llmLanguage } = state;
+      const data: Record<string, unknown> = { conversationId, prompt, disabledSkills, locale: llmLanguage || language };
       if (files && files.length > 0) {
         data.files = files;
       }

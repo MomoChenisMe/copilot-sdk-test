@@ -58,15 +58,19 @@ describe('Tab management', () => {
       expect(state.activeTabId).toBe(tab1Id);
     });
 
-    it('should persist open tabs to localStorage', () => {
+    it('should persist open tabs to localStorage in wrapper format with activeTabId', () => {
       const tab1Id = openTabAndGetId('conv-1', 'Chat 1');
       const tab2Id = openTabAndGetId('conv-2', 'Chat 2');
-      const stored = JSON.parse(localStorage.getItem('codeforge:openTabs') ?? '[]');
-      expect(stored).toHaveLength(2);
-      expect(stored[0].id).toBe(tab1Id);
-      expect(stored[0].conversationId).toBe('conv-1');
-      expect(stored[1].id).toBe(tab2Id);
-      expect(stored[1].conversationId).toBe('conv-2');
+      const stored = JSON.parse(localStorage.getItem('codeforge:openTabs') ?? '{}');
+      // New wrapper format: { tabs: [...], activeTabId }
+      expect(stored).toHaveProperty('tabs');
+      expect(stored).toHaveProperty('activeTabId');
+      expect(stored.tabs).toHaveLength(2);
+      expect(stored.tabs[0].id).toBe(tab1Id);
+      expect(stored.tabs[0].conversationId).toBe('conv-1');
+      expect(stored.tabs[1].id).toBe(tab2Id);
+      expect(stored.tabs[1].conversationId).toBe('conv-2');
+      expect(stored.activeTabId).toBe(tab2Id); // last opened tab is active
     });
   });
 
@@ -96,13 +100,13 @@ describe('Tab management', () => {
       expect(useAppStore.getState().tabOrder).toEqual([]);
     });
 
-    it('should persist after close', () => {
+    it('should persist after close in wrapper format', () => {
       const tab1Id = openTabAndGetId('conv-1', 'Chat 1');
       const tab2Id = openTabAndGetId('conv-2', 'Chat 2');
       useAppStore.getState().closeTab(tab1Id);
-      const stored = JSON.parse(localStorage.getItem('codeforge:openTabs') ?? '[]');
-      expect(stored).toHaveLength(1);
-      expect(stored[0].id).toBe(tab2Id);
+      const stored = JSON.parse(localStorage.getItem('codeforge:openTabs') ?? '{}');
+      expect(stored.tabs).toHaveLength(1);
+      expect(stored.tabs[0].id).toBe(tab2Id);
     });
   });
 
@@ -113,6 +117,15 @@ describe('Tab management', () => {
       openTabAndGetId('conv-2', 'Chat 2');
       useAppStore.getState().setActiveTab(tab1Id);
       expect(useAppStore.getState().activeTabId).toBe(tab1Id);
+    });
+
+    it('should persist activeTabId to localStorage on switch', () => {
+      const tab1Id = openTabAndGetId('conv-1', 'Chat 1');
+      const tab2Id = openTabAndGetId('conv-2', 'Chat 2');
+      // After opening two tabs, activeTabId is tab2
+      useAppStore.getState().setActiveTab(tab1Id);
+      const stored = JSON.parse(localStorage.getItem('codeforge:openTabs') ?? '{}');
+      expect(stored.activeTabId).toBe(tab1Id);
     });
 
     it('should not clear streaming state of the previous tab', () => {
@@ -295,7 +308,7 @@ describe('Per-tab streaming actions', () => {
 });
 
 describe('Tab localStorage restore', () => {
-  it('should restore tabs from localStorage on restoreOpenTabs call', () => {
+  it('should restore tabs from old format (plain array) on restoreOpenTabs call', () => {
     const saved = [
       { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
       { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
@@ -312,10 +325,52 @@ describe('Tab localStorage restore', () => {
     expect(state.tabs['tab-b'].title).toBe('Chat B');
   });
 
-  it('should set activeTabId to the first restored tab', () => {
+  it('should fallback activeTabId to tabOrder[0] for old format (plain array)', () => {
     const saved = [
       { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+      { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
     ];
+    localStorage.setItem('codeforge:openTabs', JSON.stringify(saved));
+    useAppStore.getState().restoreOpenTabs();
+    expect(useAppStore.getState().activeTabId).toBe('tab-a');
+  });
+
+  it('should restore new wrapper format with activeTabId', () => {
+    const saved = {
+      tabs: [
+        { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+        { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+      ],
+      activeTabId: 'tab-b',
+    };
+    localStorage.setItem('codeforge:openTabs', JSON.stringify(saved));
+    useAppStore.getState().restoreOpenTabs();
+    const state = useAppStore.getState();
+    expect(state.tabOrder).toEqual(['tab-a', 'tab-b']);
+    expect(state.activeTabId).toBe('tab-b');
+    expect(state.tabs['tab-a'].title).toBe('Chat A');
+    expect(state.tabs['tab-b'].title).toBe('Chat B');
+  });
+
+  it('should fallback to tabOrder[0] when saved activeTabId is not in restored tabs', () => {
+    const saved = {
+      tabs: [
+        { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+      ],
+      activeTabId: 'tab-nonexistent',
+    };
+    localStorage.setItem('codeforge:openTabs', JSON.stringify(saved));
+    useAppStore.getState().restoreOpenTabs();
+    expect(useAppStore.getState().activeTabId).toBe('tab-a');
+  });
+
+  it('should fallback to tabOrder[0] when activeTabId is null in new format', () => {
+    const saved = {
+      tabs: [
+        { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+      ],
+      activeTabId: null,
+    };
     localStorage.setItem('codeforge:openTabs', JSON.stringify(saved));
     useAppStore.getState().restoreOpenTabs();
     expect(useAppStore.getState().activeTabId).toBe('tab-a');
@@ -461,9 +516,9 @@ describe('Draft tabs (lazy conversation creation)', () => {
   it('draft tabs should NOT be persisted to localStorage', () => {
     useAppStore.getState().openTab(null, 'Draft 1');
     useAppStore.getState().openTab('conv-1', 'Saved Chat');
-    const stored = JSON.parse(localStorage.getItem('codeforge:openTabs') ?? '[]');
-    expect(stored).toHaveLength(1);
-    expect(stored[0].conversationId).toBe('conv-1');
+    const stored = JSON.parse(localStorage.getItem('codeforge:openTabs') ?? '{}');
+    expect(stored.tabs).toHaveLength(1);
+    expect(stored.tabs[0].conversationId).toBe('conv-1');
   });
 
   it('materializeTabConversation should set conversationId on a draft tab', () => {
@@ -478,9 +533,9 @@ describe('Draft tabs (lazy conversation creation)', () => {
     useAppStore.getState().openTab(null, 'Draft');
     const tabId = useAppStore.getState().tabOrder[0];
     useAppStore.getState().materializeTabConversation(tabId, 'conv-new');
-    const stored = JSON.parse(localStorage.getItem('codeforge:openTabs') ?? '[]');
-    expect(stored).toHaveLength(1);
-    expect(stored[0].conversationId).toBe('conv-new');
+    const stored = JSON.parse(localStorage.getItem('codeforge:openTabs') ?? '{}');
+    expect(stored.tabs).toHaveLength(1);
+    expect(stored.tabs[0].conversationId).toBe('conv-new');
   });
 
   it('materializeTabConversation should set messagesLoaded to true', () => {
