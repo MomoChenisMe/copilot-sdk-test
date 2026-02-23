@@ -60,7 +60,7 @@ export const openspecApi = {
     apiGet<OverviewData>('/api/openspec/overview'),
 
   listChanges: () =>
-    apiGet<ChangeListItem[]>('/api/openspec/changes'),
+    apiGet<{ changes: ChangeListItem[] }>('/api/openspec/changes').then((r) => r.changes),
 
   getChange: (name: string) =>
     apiGet<ChangeDetail>(`/api/openspec/changes/${encodeURIComponent(name)}`),
@@ -82,11 +82,11 @@ export const openspecApi = {
     ),
 
   listSpecs: () =>
-    apiGet<SpecListItem[]>('/api/openspec/specs'),
+    apiGet<{ specs: SpecListItem[] }>('/api/openspec/specs').then((r) => r.specs),
 
   getSpecFile: (name: string) =>
     apiGet<SpecFileContent>(`/api/openspec/specs/${encodeURIComponent(name)}`),
 
   listArchived: () =>
-    apiGet<ArchivedItem[]>('/api/openspec/archived'),
+    apiGet<{ archived: ArchivedItem[] }>('/api/openspec/archived').then((r) => r.archived),
 };

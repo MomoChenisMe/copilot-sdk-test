@@ -506,27 +506,47 @@
   "openspecPanel": {
     "title": "OpenSpec",
     "refresh": "重新整理",
-    "overview": "總覽",
-    "changes": "變更",
-    "specs": "規格",
-    "archived": "已封存",
-    "activeChanges": "進行中變更",
-    "specsCount": "規格數量",
-    "archivedCount": "已封存",
-    "noChanges": "沒有進行中的變更",
-    "noSpecs": "沒有規格文件",
-    "noArchived": "沒有已封存的變更",
-    "tasks": "任務",
-    "proposal": "提案",
-    "design": "設計",
-    "deltaSpecs": "差異規格",
-    "archive": "封存",
-    "delete": "刪除",
-    "confirmDelete": "再點一次確認刪除",
+    "close": "關閉",
     "back": "返回",
     "loading": "載入中...",
     "noContent": "無內容",
-    "taskProgress": "{{completed}}/{{total}} 任務"
+    "tabs": {
+      "overview": "總覽",
+      "changes": "變更",
+      "specs": "規格",
+      "archived": "已封存"
+    },
+    "overview": {
+      "title": "專案概覽",
+      "activeChanges": "進行中變更",
+      "specs": "規格數量",
+      "archived": "已封存"
+    },
+    "changes": {
+      "empty": "沒有進行中的變更",
+      "progress": "{{completed}}/{{total}} 項任務"
+    },
+    "specs": {
+      "empty": "沒有規格文件"
+    },
+    "archived": {
+      "empty": "沒有已封存的變更"
+    },
+    "detail": {
+      "tabs": {
+        "tasks": "任務",
+        "proposal": "提案",
+        "design": "設計",
+        "specs": "差異規格"
+      },
+      "archive": "封存",
+      "delete": "刪除",
+      "confirmDelete": "再點一次確認刪除",
+      "noTasks": "尚未定義任務",
+      "noSpecs": "沒有差異規格",
+      "noProposal": "沒有提案文件",
+      "noDesign": "沒有設計文件"
+    }
   },
   "common": {
     "close": "關閉",

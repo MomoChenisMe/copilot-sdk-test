@@ -1,50 +1,50 @@
 ## ADDED Requirements
 
-### Requirement: 全域快捷鍵 Hook
-系統 SHALL 透過單一 document keydown listener 提供全域快捷鍵支援。
+### Requirement: Plan/Act 模式切換快捷鍵
+系統 SHALL 提供 Shift+Tab 全域快捷鍵來切換 Plan/Act 模式。
 
-#### Scenario: Tab 管理快捷鍵
-- **WHEN** 使用者按 Cmd+T（或 Alt+T）
-- **THEN** 系統 SHALL 建立新 tab
+#### Scenario: 切換到 Plan 模式
+- **WHEN** 使用者在 Act 模式下按 Shift+Tab
+- **THEN** active tab 的 `planMode` MUST 切換為 `true`
 
-#### Scenario: 關閉 Tab
-- **WHEN** 使用者按 Cmd+W（或 Alt+W）
-- **THEN** 系統 SHALL 關閉目前 active tab
+#### Scenario: 切換到 Act 模式
+- **WHEN** 使用者在 Plan 模式下按 Shift+Tab
+- **THEN** active tab 的 `planMode` MUST 切換為 `false`
 
-#### Scenario: 數字鍵切換 Tab
-- **WHEN** 使用者按 Cmd+1 到 Cmd+9
-- **THEN** 系統 SHALL 切換到對應序號的 tab
+#### Scenario: Streaming 中不可切換
+- **WHEN** 對話正在 streaming 且使用者按 Shift+Tab
+- **THEN** 系統 MUST 忽略該快捷鍵，`planMode` 不變
 
-#### Scenario: 前後 Tab 切換
-- **WHEN** 使用者按 Cmd+Shift+[ 或 Cmd+Shift+]
-- **THEN** 系統 SHALL 切換到前一個或後一個 tab
+#### Scenario: 無 active tab 時不執行
+- **WHEN** 沒有 active tab（如歡迎畫面）且使用者按 Shift+Tab
+- **THEN** 系統 MUST 不執行任何操作
 
-#### Scenario: 模式切換
-- **WHEN** 使用者按 Cmd+Shift+A 或 Cmd+Shift+B
-- **THEN** active tab SHALL 切換到 AI mode 或 Bash mode
+#### Scenario: 阻止瀏覽器預設行為
+- **WHEN** 使用者按 Shift+Tab
+- **THEN** 系統 MUST 呼叫 `e.preventDefault()` 阻止瀏覽器焦點導航
 
-#### Scenario: 設定開啟
-- **WHEN** 使用者按 Cmd+,
-- **THEN** Settings panel SHALL 開啟
+### Requirement: OpenSpec 面板切換快捷鍵
+系統 SHALL 提供 Alt+O 全域快捷鍵來切換 OpenSpec 面板。
 
-#### Scenario: 主題切換
-- **WHEN** 使用者按 Cmd+Shift+D
-- **THEN** 系統 SHALL toggle dark/light theme
+#### Scenario: 開啟面板
+- **WHEN** OpenSpec 已啟用且面板關閉時使用者按 Alt+O
+- **THEN** 面板 MUST 開啟
 
-#### Scenario: Input focus 中的快捷鍵
-- **WHEN** 使用者 focus 在 textarea 中按快捷鍵
-- **THEN** 全域 override 快捷鍵（如 Cmd+T）SHALL 仍然生效
+#### Scenario: 關閉面板
+- **WHEN** 面板已開啟且使用者按 Alt+O
+- **THEN** 面板 MUST 關閉
 
-### Requirement: 快捷鍵提示
-UI 元素 SHALL 顯示對應的快捷鍵提示。
+#### Scenario: OpenSpec 未啟用時不動作
+- **WHEN** OpenSpec 未啟用且使用者按 Alt+O
+- **THEN** 系統 MUST 不執行任何操作
 
-#### Scenario: Tooltip 顯示
-- **WHEN** 使用者 hover 在有快捷鍵的按鈕上
-- **THEN** tooltip SHALL 包含快捷鍵標示（如 "Cmd+T"）
+### Requirement: 快捷鍵列表更新
+SHORTCUT_DEFINITIONS SHALL 包含新增的快捷鍵。
 
-### Requirement: 快捷鍵列表面板
-系統 SHALL 提供可查閱的快捷鍵列表。
+#### Scenario: 快捷鍵面板顯示 Shift+Tab
+- **WHEN** 使用者開啟快捷鍵面板
+- **THEN** 列表 MUST 包含 `⇧ Tab` — "Toggle Plan/Act Mode"
 
-#### Scenario: 開啟快捷鍵面板
-- **WHEN** 使用者按 ? 鍵（非在 input focus 中）
-- **THEN** 系統 SHALL 顯示完整快捷鍵列表面板
+#### Scenario: 快捷鍵面板顯示 Alt+O
+- **WHEN** 使用者開啟快捷鍵面板
+- **THEN** 列表 MUST 包含 `⌥ O` — "Toggle OpenSpec Panel"

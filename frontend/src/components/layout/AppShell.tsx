@@ -60,8 +60,11 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const switchTabConversation = useAppStore((s) => s.switchTabConversation);
 
-  const openspecPanelOpen = useAppStore((s) => s.openspecPanelOpen);
-  const setOpenspecPanelOpen = useAppStore((s) => s.setOpenspecPanelOpen);
+  const openspecPanelOpen = useAppStore((s) => {
+    const tid = s.activeTabId;
+    return tid ? s.tabs[tid]?.openspecPanelOpen ?? false : false;
+  });
+  const setTabOpenspecPanelOpen = useAppStore((s) => s.setTabOpenspecPanelOpen);
 
   const { sendMessage, abortMessage, sendUserInputResponse, cleanupDedup } = useTabCopilot({ subscribe, send });
 
@@ -609,13 +612,10 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     onToggleOpenSpec: () => {
       const { openspecEnabled } = useAppStore.getState().settings ?? {};
       if (!openspecEnabled) return;
-      const next = !useAppStore.getState().openspecPanelOpen;
-      if (next) {
-        // Mutual exclusion: close ArtifactsPanel when opening OpenSpec
-        const tid = useAppStore.getState().activeTabId;
-        if (tid) useAppStore.getState().setTabArtifactsPanelOpen(tid, false);
-      }
-      useAppStore.getState().setOpenspecPanelOpen(next);
+      const tid = useAppStore.getState().activeTabId;
+      if (!tid) return;
+      const current = useAppStore.getState().tabs[tid]?.openspecPanelOpen ?? false;
+      useAppStore.getState().setTabOpenspecPanelOpen(tid, !current);
     },
   });
 
@@ -630,11 +630,8 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         onSettingsClick={() => setSettingsOpen(!settingsOpen)}
         onShortcutsClick={() => setShortcutsOpen(true)}
         onOpenSpecClick={(useAppStore.getState().settings as any)?.openspecEnabled ? () => {
-          const next = !openspecPanelOpen;
-          if (next && activeTabId) {
-            useAppStore.getState().setTabArtifactsPanelOpen(activeTabId, false);
-          }
-          setOpenspecPanelOpen(next);
+          if (!activeTabId) return;
+          setTabOpenspecPanelOpen(activeTabId, !openspecPanelOpen);
         } : undefined}
         onMenuClick={() => setDrawerOpen(true)}
       />
@@ -858,7 +855,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
           {/* OpenSpec panel — sliding right panel */}
           <OpenSpecPanel
             open={openspecPanelOpen}
-            onClose={() => setOpenspecPanelOpen(false)}
+            onClose={() => { if (activeTabId) setTabOpenspecPanelOpen(activeTabId, false); }}
           />
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { flushSync } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Plus, X, AlertTriangle, ChevronDown, History, Clock } from 'lucide-react';
 import { useAppStore } from '../../store';
@@ -30,49 +31,86 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
 
   // Drag state
   const [dragTabId, setDragTabId] = useState<string | null>(null);
-  const [dragOverTabId, setDragOverTabId] = useState<string | null>(null);
-  const [dragSide, setDragSide] = useState<'left' | 'right'>('left');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const tabElsRef = useRef<Record<string, HTMLDivElement | null>>({});
+  const dragInfoRef = useRef<{ tabId: string; startX: number; active: boolean } | null>(null);
+  const wasDraggingRef = useRef(false);
 
-  const handleDragStart = useCallback((e: React.DragEvent, tabId: string) => {
-    setDragTabId(tabId);
-    setPopoverTabId(null); // Close any open popover
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', tabId);
+  const handlePointerDown = useCallback((e: React.PointerEvent, tabId: string) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-testid^="tab-close-"]') || target.closest('[data-testid^="tab-chevron-"]')) return;
+    dragInfoRef.current = { tabId, startX: e.clientX, active: false };
   }, []);
 
-  const handleDragOver = useCallback((e: React.DragEvent, tabId: string) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (!dragTabId || dragTabId === tabId) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const midX = rect.left + rect.width / 2;
-    setDragOverTabId(tabId);
-    setDragSide(e.clientX < midX ? 'left' : 'right');
-  }, [dragTabId]);
-
-  const handleDragLeave = useCallback(() => {
-    setDragOverTabId(null);
-  }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent, targetTabId: string) => {
-    e.preventDefault();
-    if (!dragTabId || dragTabId === targetTabId) {
-      setDragTabId(null);
-      setDragOverTabId(null);
-      return;
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    const info = dragInfoRef.current;
+    if (!info) return;
+    const dx = e.clientX - info.startX;
+    if (!info.active) {
+      if (Math.abs(dx) < 5) return;
+      info.active = true;
+      containerRef.current?.setPointerCapture(e.pointerId);
+      setDragTabId(info.tabId);
+      setPopoverTabId(null);
     }
-    const newOrder = tabOrder.filter((id) => id !== dragTabId);
-    const targetIndex = newOrder.indexOf(targetTabId);
-    const insertIndex = dragSide === 'left' ? targetIndex : targetIndex + 1;
-    newOrder.splice(insertIndex, 0, dragTabId);
-    reorderTabs(newOrder);
-    setDragTabId(null);
-    setDragOverTabId(null);
-  }, [dragTabId, dragSide, tabOrder, reorderTabs]);
+    // Immediate swap: when pointer crosses another tab's midpoint, reorder instantly
+    for (const [id, el] of Object.entries(tabElsRef.current)) {
+      if (!el || id === info.tabId) continue;
+      const rect = el.getBoundingClientRect();
+      if (e.clientX < rect.left || e.clientX > rect.right) continue;
+      const mid = rect.left + rect.width / 2;
+      const order = useAppStore.getState().tabOrder;
+      const dragIdx = order.indexOf(info.tabId);
+      const targetIdx = order.indexOf(id);
+      if (dragIdx === -1 || targetIdx === -1) break;
+      if ((dragIdx < targetIdx && e.clientX > mid) || (dragIdx > targetIdx && e.clientX < mid)) {
+        // Measure layout position before swap (offsetLeft ignores CSS transforms)
+        const dragEl = tabElsRef.current[info.tabId];
+        const prevOffset = dragEl?.offsetLeft ?? 0;
+        const next = [...order];
+        next.splice(dragIdx, 1);
+        next.splice(targetIdx, 0, info.tabId);
+        flushSync(() => { reorderTabs(next); });
+        // Adjust startX so translateX stays visually consistent
+        const newOffset = dragEl?.offsetLeft ?? 0;
+        info.startX += (newOffset - prevOffset);
+      }
+      break;
+    }
+    // Imperatively update transform for smooth cursor-following (no React re-render)
+    const dragEl = tabElsRef.current[info.tabId];
+    if (dragEl) {
+      dragEl.style.transform = `translateX(${e.clientX - info.startX}px)`;
+    }
+  }, [reorderTabs]);
 
-  const handleDragEnd = useCallback(() => {
-    setDragTabId(null);
-    setDragOverTabId(null);
+  const handlePointerUp = useCallback(() => {
+    const info = dragInfoRef.current;
+    if (!info) return;
+    // Null out immediately to stop handlePointerMove from processing
+    dragInfoRef.current = null;
+    if (info.active) {
+      wasDraggingRef.current = true;
+      requestAnimationFrame(() => { wasDraggingRef.current = false; });
+      const dragEl = tabElsRef.current[info.tabId];
+      if (dragEl) {
+        // Animate back to 0, then clean up styles + React state together
+        dragEl.style.transition = 'transform 120ms ease-out';
+        dragEl.style.transform = 'translateX(0)';
+        const cleanup = () => {
+          dragEl.style.transition = '';
+          dragEl.style.transform = '';
+          setDragTabId(null);
+        };
+        dragEl.addEventListener('transitionend', cleanup, { once: true });
+        setTimeout(cleanup, 150);
+      } else {
+        setDragTabId(null);
+      }
+    } else {
+      setDragTabId(null);
+    }
   }, []);
 
   // Keyboard tab reordering: Ctrl+Shift+Arrow
@@ -97,7 +135,12 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
   }, [tabOrder, activeTabId, reorderTabs]);
 
   return (
-    <div className="h-10 flex items-center gap-1 px-2 bg-bg-primary border-b border-border-subtle shrink-0 overflow-x-auto flex-nowrap">
+    <div
+      ref={containerRef}
+      className={`h-10 flex items-center gap-1 px-2 bg-bg-primary border-b border-border-subtle shrink-0 overflow-x-auto flex-nowrap ${dragTabId ? 'select-none cursor-grabbing' : ''}`}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+    >
       {tabOrder.map((tabId) => {
         const tab = tabs[tabId];
         if (!tab) return null;
@@ -105,32 +148,19 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
         const isStreaming = tab.conversationId ? !!activeStreams[tab.conversationId] : false;
 
         const isDragging = dragTabId === tabId;
-        const isDropTarget = dragOverTabId === tabId && dragTabId !== tabId;
 
         return (
           <div
             key={tabId}
-            className={`relative ${isDragging ? 'opacity-30' : ''}`}
-            draggable
-            onDragStart={(e) => handleDragStart(e, tabId)}
-            onDragOver={(e) => handleDragOver(e, tabId)}
-            onDragLeave={handleDragLeave}
-            onDrop={(e) => handleDrop(e, tabId)}
-            onDragEnd={handleDragEnd}
+            ref={(el) => { tabElsRef.current[tabId] = el; }}
+            className={`relative ${isDragging ? 'z-50 shadow-lg opacity-90' : 'cursor-grab'}`}
+            onPointerDown={(e) => handlePointerDown(e, tabId)}
           >
-            {/* Left drop indicator */}
-            {isDropTarget && dragSide === 'left' && (
-              <div className="absolute left-0 top-1 bottom-1 w-0.5 bg-accent rounded-full z-10" />
-            )}
-            {/* Right drop indicator */}
-            {isDropTarget && dragSide === 'right' && (
-              <div className="absolute right-0 top-1 bottom-1 w-0.5 bg-accent rounded-full z-10" />
-            )}
             <button
               data-testid={`tab-${tabId}`}
-              onClick={() => { if (!dragTabId) onSelectTab(tabId); }}
+              onClick={() => { if (!wasDraggingRef.current) onSelectTab(tabId); }}
               onAuxClick={(e) => {
-                if (e.button === 1 && !dragTabId) onCloseTab(tabId);
+                if (e.button === 1 && !wasDraggingRef.current) onCloseTab(tabId);
               }}
               className={`group flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors shrink-0 ${
                 isActive
@@ -161,7 +191,7 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
                 className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (dragTabId) return;
+                  if (wasDraggingRef.current) return;
                   setPopoverTabId(popoverTabId === tabId ? null : tabId);
                 }}
               >
@@ -173,7 +203,7 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
                 tabIndex={-1}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (dragTabId) return;
+                  if (wasDraggingRef.current) return;
                   onCloseTab(tabId);
                 }}
                 className="shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-bg-tertiary transition-opacity"

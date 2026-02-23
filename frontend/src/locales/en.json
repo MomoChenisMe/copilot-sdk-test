@@ -506,27 +506,47 @@
   "openspecPanel": {
     "title": "OpenSpec",
     "refresh": "Refresh",
-    "overview": "Overview",
-    "changes": "Changes",
-    "specs": "Specs",
-    "archived": "Archived",
-    "activeChanges": "Active Changes",
-    "specsCount": "Specifications",
-    "archivedCount": "Archived",
-    "noChanges": "No active changes",
-    "noSpecs": "No specifications",
-    "noArchived": "No archived changes",
-    "tasks": "Tasks",
-    "proposal": "Proposal",
-    "design": "Design",
-    "deltaSpecs": "Delta Specs",
-    "archive": "Archive",
-    "delete": "Delete",
-    "confirmDelete": "Click again to confirm",
+    "close": "Close",
     "back": "Back",
     "loading": "Loading...",
     "noContent": "No content",
-    "taskProgress": "{{completed}}/{{total}} tasks"
+    "tabs": {
+      "overview": "Overview",
+      "changes": "Changes",
+      "specs": "Specs",
+      "archived": "Archived"
+    },
+    "overview": {
+      "title": "Project Overview",
+      "activeChanges": "Active Changes",
+      "specs": "Specs",
+      "archived": "Archived"
+    },
+    "changes": {
+      "empty": "No active changes",
+      "progress": "{{completed}}/{{total}} tasks"
+    },
+    "specs": {
+      "empty": "No spec files found"
+    },
+    "archived": {
+      "empty": "No archived changes"
+    },
+    "detail": {
+      "tabs": {
+        "tasks": "Tasks",
+        "proposal": "Proposal",
+        "design": "Design",
+        "specs": "Delta Specs"
+      },
+      "archive": "Archive",
+      "delete": "Delete",
+      "confirmDelete": "Click again to confirm",
+      "noTasks": "No tasks defined",
+      "noSpecs": "No delta specs",
+      "noProposal": "No proposal",
+      "noDesign": "No design document"
+    }
   },
   "common": {
     "close": "Close",

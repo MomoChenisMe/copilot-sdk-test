@@ -79,6 +79,7 @@ export interface TabState {
   artifacts: ParsedArtifact[];
   activeArtifactId: string | null;
   artifactsPanelOpen: boolean;
+  openspecPanelOpen: boolean;
   tasks: TaskItem[];
   cronConfigOpen: boolean;
   webSearchForced: boolean;
@@ -266,9 +267,8 @@ export interface AppState {
   premiumQuota: { used: number; total: number; resetDate: string | null; unlimited: boolean } | null;
   setPremiumQuota: (quota: { used: number; total: number; resetDate: string | null; unlimited: boolean } | null) => void;
 
-  // OpenSpec panel
-  openspecPanelOpen: boolean;
-  setOpenspecPanelOpen: (open: boolean) => void;
+  // OpenSpec panel (per-tab)
+  setTabOpenspecPanelOpen: (tabId: string, open: boolean) => void;
 
   // Settings cache (synced from backend)
   settings: { openspecEnabled?: boolean } | null;
@@ -556,6 +556,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       artifacts: [],
       activeArtifactId: null,
       artifactsPanelOpen: false,
+      openspecPanelOpen: false,
       tasks: [],
       cronConfigOpen: false,
       webSearchForced: false,
@@ -628,6 +629,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       artifacts: [],
       activeArtifactId: null,
       artifactsPanelOpen: false,
+      openspecPanelOpen: false,
       tasks: [],
       cronConfigOpen: false,
       webSearchForced: false,
@@ -678,6 +680,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           artifacts: [],
           activeArtifactId: null,
           artifactsPanelOpen: false,
+          openspecPanelOpen: false,
           cronConfigOpen: false,
           webSearchForced: false,
           tasks: [],
@@ -1014,11 +1017,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       const tab = state.tabs[tabId];
       if (!tab) return state;
       return {
-        // Mutual exclusion: close OpenSpec panel when opening ArtifactsPanel
-        ...(open ? { openspecPanelOpen: false } : {}),
         tabs: {
           ...state.tabs,
-          [tabId]: { ...tab, artifactsPanelOpen: open },
+          // Mutual exclusion: close OpenSpec panel when opening ArtifactsPanel
+          [tabId]: { ...tab, artifactsPanelOpen: open, ...(open ? { openspecPanelOpen: false } : {}) },
         },
       };
     }),
@@ -1060,9 +1062,19 @@ export const useAppStore = create<AppState>((set, get) => ({
   premiumQuota: null,
   setPremiumQuota: (quota) => set({ premiumQuota: quota }),
 
-  // OpenSpec panel
-  openspecPanelOpen: false,
-  setOpenspecPanelOpen: (open) => set({ openspecPanelOpen: open }),
+  // OpenSpec panel (per-tab)
+  setTabOpenspecPanelOpen: (tabId, open) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return {
+        tabs: {
+          ...state.tabs,
+          // Mutual exclusion: close ArtifactsPanel when opening OpenSpec
+          [tabId]: { ...tab, openspecPanelOpen: open, ...(open ? { artifactsPanelOpen: false } : {}) },
+        },
+      };
+    }),
 
   // Settings cache
   settings: null,
