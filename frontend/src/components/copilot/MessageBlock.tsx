@@ -2,6 +2,7 @@ import { useMemo, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Message, MessageMetadata, AttachmentMeta, TurnSegment } from '../../lib/api';
 import { useAppStore } from '../../store';
+import { useSkillsQuery } from '../../hooks/queries/useSkillsQuery';
 import { Markdown } from '../shared/Markdown';
 import { useLightbox } from '../shared/LightboxContext';
 import { BashPrompt } from './BashPrompt';
@@ -57,7 +58,7 @@ interface MessageBlockProps {
 
 export function MessageBlock({ message }: MessageBlockProps) {
   const { t } = useTranslation();
-  const skills = useAppStore((s) => s.skills);
+  const { data: skills = [] } = useSkillsQuery();
   const { openLightbox } = useLightbox();
   const isUser = message.role === 'user';
 

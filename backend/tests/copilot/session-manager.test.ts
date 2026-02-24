@@ -26,6 +26,7 @@ const { mockSession, mockClient, MockCopilotClient } = vi.hoisted(() => {
 
 vi.mock('@github/copilot-sdk', () => ({
   CopilotClient: MockCopilotClient,
+  approveAll: () => ({ kind: 'approved' as const }),
 }));
 
 import { SessionManager } from '../../src/copilot/session-manager.js';
@@ -86,6 +87,16 @@ describe('SessionManager', () => {
       expect(config.systemMessage).toBeUndefined();
     });
 
+    it('should include clientName in session config', async () => {
+      await sessionManager.createSession({
+        model: 'gpt-5',
+        workingDirectory: '/home/user',
+      });
+
+      const config = mockClient.createSession.mock.calls[0][0];
+      expect(config.clientName).toBe('codeforge');
+    });
+
     it('should set onPermissionRequest to auto-approve', async () => {
       await sessionManager.createSession({
         model: 'gpt-5',
@@ -116,6 +127,13 @@ describe('SessionManager', () => {
 
       const resumeConfig = mockClient.resumeSession.mock.calls[0][1];
       expect(resumeConfig.systemMessage).toEqual({ mode: 'append', content: 'Resume prompt' });
+    });
+
+    it('should include clientName in resume config', async () => {
+      await sessionManager.resumeSession('sdk-session-123');
+
+      const resumeConfig = mockClient.resumeSession.mock.calls[0][1];
+      expect(resumeConfig.clientName).toBe('codeforge');
     });
   });
 
@@ -307,14 +325,14 @@ describe('SessionManager', () => {
       expect(config.onPermissionRequest).toBe(customHandler);
     });
 
-    it('should fallback to autoApprovePermission in createSession when no custom handler', async () => {
+    it('should fallback to approveAll in createSession when no custom handler', async () => {
       await sessionManager.createSession({
         model: 'gpt-5',
         workingDirectory: '/tmp',
       });
 
       const config = mockClient.createSession.mock.calls[0][0];
-      // Should be autoApprovePermission (always approves)
+      // Should be approveAll (always approves)
       const result = config.onPermissionRequest({ kind: 'shell' }, { sessionId: 's-1' });
       expect(result).toEqual({ kind: 'approved' });
     });
@@ -330,7 +348,7 @@ describe('SessionManager', () => {
       expect(resumeConfig.onPermissionRequest).toBe(customHandler);
     });
 
-    it('should fallback to autoApprovePermission in resumeSession when no custom handler', async () => {
+    it('should fallback to approveAll in resumeSession when no custom handler', async () => {
       await sessionManager.resumeSession('sdk-session-123');
 
       const resumeConfig = mockClient.resumeSession.mock.calls[0][1];
@@ -364,6 +382,64 @@ describe('SessionManager', () => {
 
       const resumeConfig = mockClient.resumeSession.mock.calls[0][1];
       expect(resumeConfig.onPermissionRequest).toBe(customHandler);
+    });
+  });
+
+  describe('hooks config', () => {
+    const fakeHooks = { onPostToolUse: vi.fn() };
+
+    it('should pass hooks to session config on createSession', async () => {
+      await sessionManager.createSession({
+        model: 'gpt-5',
+        workingDirectory: '/tmp',
+        hooks: fakeHooks,
+      });
+
+      const config = mockClient.createSession.mock.calls[0][0];
+      expect(config.hooks).toBe(fakeHooks);
+    });
+
+    it('should pass hooks to resume config on resumeSession', async () => {
+      await sessionManager.resumeSession('sdk-session-123', {
+        hooks: fakeHooks,
+      });
+
+      const resumeConfig = mockClient.resumeSession.mock.calls[0][1];
+      expect(resumeConfig.hooks).toBe(fakeHooks);
+    });
+
+    it('should not include hooks when not provided', async () => {
+      await sessionManager.createSession({
+        model: 'gpt-5',
+        workingDirectory: '/tmp',
+      });
+
+      const config = mockClient.createSession.mock.calls[0][0];
+      expect(config.hooks).toBeUndefined();
+    });
+
+    it('should pass hooks through getOrCreateSession (create path)', async () => {
+      await sessionManager.getOrCreateSession({
+        sdkSessionId: null,
+        model: 'gpt-5',
+        workingDirectory: '/tmp',
+        hooks: fakeHooks,
+      });
+
+      const config = mockClient.createSession.mock.calls[0][0];
+      expect(config.hooks).toBe(fakeHooks);
+    });
+
+    it('should pass hooks through getOrCreateSession (resume path)', async () => {
+      await sessionManager.getOrCreateSession({
+        sdkSessionId: 'existing-session',
+        model: 'gpt-5',
+        workingDirectory: '/tmp',
+        hooks: fakeHooks,
+      });
+
+      const resumeConfig = mockClient.resumeSession.mock.calls[0][1];
+      expect(resumeConfig.hooks).toBe(fakeHooks);
     });
   });
 

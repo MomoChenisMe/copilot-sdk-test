@@ -341,7 +341,8 @@
     "empty": "No tasks",
     "pending": "Pending",
     "inProgress": "In Progress",
-    "completed": "Completed"
+    "done": "Done",
+    "blocked": "Blocked"
   },
   "sidebar": {
     "conversations": "Conversations",

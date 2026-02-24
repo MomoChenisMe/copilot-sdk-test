@@ -2,6 +2,7 @@ import { useEffect, useCallback, useRef } from 'react';
 import { useAppStore } from '../store';
 import { conversationApi } from '../lib/api';
 import type { MessageMetadata, TurnSegment } from '../lib/api';
+import { setMessagesInCache, setQuotaInCache, updateConversationInCache } from '../lib/ws-query-bridge';
 import type { WsMessage, WsStatus } from '../lib/ws-types';
 import type { ParsedArtifact } from '../lib/artifact-parser';
 
@@ -120,10 +121,10 @@ export function useTabCopilot({ subscribe, send, status }: UseTabCopilotOptions)
             // Fetch latest messages from DB for this tab
             conversationApi.getMessages(tab.conversationId).then((msgs) => {
               const s = useAppStore.getState();
-              // Only update if the tab still exists and is not actively streaming new content
-              // (active streams will get their content via live events + DB fetch on idle)
               const currentTab = s.tabs[tid];
               if (currentTab) {
+                setMessagesInCache(tab.conversationId!, msgs);
+                s.clearPendingMessages(tid);
                 s.setTabMessages(tid, msgs);
               }
             }).catch(() => {
@@ -302,37 +303,20 @@ export function useTabCopilot({ subscribe, send, status }: UseTabCopilotOptions)
 
           state.updateTabToolRecord(tabId, toolCallId, updates);
           state.updateTabToolInTurnSegments(tabId, toolCallId, updates);
+          break;
+        }
 
-          // Parse task tool results to update tab tasks
-          if (toolName?.startsWith('task_') && data.success && data.result) {
-            try {
-              const result = (typeof data.result === 'string' ? JSON.parse(data.result) : data.result) as Record<string, unknown>;
-              if (toolName === 'task_list' && Array.isArray(result.tasks)) {
-                const tasks = (result.tasks as Array<Record<string, unknown>>).map((t) => ({
-                  id: t.id as string,
-                  subject: t.subject as string,
-                  description: (t.description as string) ?? '',
-                  activeForm: (t.activeForm as string) ?? '',
-                  status: t.status as 'pending' | 'in_progress' | 'completed',
-                  owner: t.owner as string | undefined,
-                  blockedBy: (t.blockedBy as string[]) ?? [],
-                }));
-                state.setTabTasks(tabId, tasks);
-              } else if (result.task && typeof result.task === 'object') {
-                const t = result.task as Record<string, unknown>;
-                state.upsertTabTask(tabId, {
-                  id: t.id as string,
-                  subject: t.subject as string,
-                  description: (t.description as string) ?? '',
-                  activeForm: (t.activeForm as string) ?? '',
-                  status: t.status as 'pending' | 'in_progress' | 'completed',
-                  owner: t.owner as string | undefined,
-                  blockedBy: (t.blockedBy as string[]) ?? [],
-                });
-              }
-            } catch {
-              // Ignore parse errors
-            }
+        case 'copilot:todos_updated': {
+          const todos = data.todos as Array<Record<string, unknown>> | undefined;
+          if (Array.isArray(todos)) {
+            state.setTabTasks(tabId, todos.map((t) => ({
+              id: t.id as string,
+              title: t.title as string,
+              description: (t.description as string | null) ?? null,
+              status: t.status as 'pending' | 'in_progress' | 'done' | 'blocked',
+              created_at: t.created_at as string,
+              updated_at: t.updated_at as string,
+            })));
           }
           break;
         }
@@ -415,9 +399,13 @@ export function useTabCopilot({ subscribe, send, status }: UseTabCopilotOptions)
           state.setTabIsStreaming(tabId, false);
 
           // 3. DB-as-Source-of-Truth: fetch authoritative message list from the database
-          // This eliminates all race conditions related to event buffer replay / state management.
+          // Update both TanStack Query cache and tab store.
           conversationApi.getMessages(conversationId).then((msgs) => {
             const s = useAppStore.getState();
+            // Update TanStack Query cache (primary source for ChatView)
+            setMessagesInCache(conversationId, msgs);
+            // Clear pending messages since DB now has everything
+            s.clearPendingMessages(tabId);
             s.setTabMessages(tabId, msgs);
             s.clearTabStreaming(tabId);
             // Show plan-complete prompt if we just finished in plan mode
@@ -447,14 +435,16 @@ export function useTabCopilot({ subscribe, send, status }: UseTabCopilotOptions)
 
             if (content || metadata) {
               const s = useAppStore.getState();
-              s.addTabMessage(tabId, {
+              const assistantMsg = {
                 id: crypto.randomUUID(),
                 conversationId,
-                role: 'assistant',
+                role: 'assistant' as const,
                 content,
                 metadata,
                 createdAt: new Date().toISOString(),
-              });
+              };
+              s.addTabMessage(tabId, assistantMsg);
+              s.addPendingMessage(tabId, assistantMsg);
             }
 
             useAppStore.getState().clearTabStreaming(tabId);
@@ -498,8 +488,8 @@ export function useTabCopilot({ subscribe, send, status }: UseTabCopilotOptions)
                 snap.resetDate ?? null,
                 unlimited,
               );
-              // Dual-write to global store for cross-tab premium badge
-              state.setPremiumQuota({
+              // Update TanStack Query cache for cross-tab premium badge
+              setQuotaInCache({
                 used: snap.usedRequests ?? 0,
                 total: snap.entitlementRequests ?? 0,
                 resetDate: snap.resetDate ?? null,
@@ -615,15 +605,17 @@ export function useTabCopilot({ subscribe, send, status }: UseTabCopilotOptions)
         }
       }
 
-      // Add user message to tab
-      state.addTabMessage(tabId, {
+      // Add user message to pending (optimistic) and query cache
+      const userMsg = {
         id: crypto.randomUUID(),
         conversationId,
-        role: 'user',
+        role: 'user' as const,
         content: prompt,
         metadata: userMetadata,
         createdAt: new Date().toISOString(),
-      });
+      };
+      state.addPendingMessage(tabId, userMsg);
+      state.addTabMessage(tabId, userMsg);
 
       const { disabledSkills, language, llmLanguage } = state;
       const data: Record<string, unknown> = { conversationId, prompt, disabledSkills, locale: llmLanguage || language };
@@ -648,6 +640,7 @@ export function useTabCopilot({ subscribe, send, status }: UseTabCopilotOptions)
       if (isFirstMessage) {
         const title = prompt.slice(0, 50).trim() || 'New Chat';
         useAppStore.getState().updateTabTitle(tabId, title);
+        updateConversationInCache(conversationId, { title });
         conversationApi.update(conversationId, { title }).catch(() => {/* ignore */});
       }
     },

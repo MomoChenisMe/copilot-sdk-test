@@ -103,6 +103,33 @@ vi.mock('../../../src/components/copilot/ModelSelector', () => ({
   ),
 }));
 
+vi.mock('../../../src/hooks/queries/useSkillsQuery', () => ({
+  useSkillsQuery: () => ({ data: [], isLoading: false, error: null }),
+}));
+
+vi.mock('../../../src/hooks/queries/useSdkCommandsQuery', () => ({
+  useSdkCommandsQuery: () => ({ data: [], isLoading: false, error: null }),
+}));
+
+const mockUseBraveApiKeyQuery = vi.fn().mockReturnValue({ data: { hasKey: false, maskedKey: '' }, isLoading: false, error: null });
+vi.mock('../../../src/hooks/queries/useConfigQuery', () => ({
+  useBraveApiKeyQuery: (...args: unknown[]) => mockUseBraveApiKeyQuery(...args),
+}));
+
+vi.mock('../../../src/hooks/queries/useQuotaQuery', () => ({
+  useQuotaQuery: () => ({ data: null, isLoading: false, error: null }),
+}));
+
+const mockUseConversationsQuery = vi.fn().mockReturnValue({ data: [], isLoading: false, error: null });
+vi.mock('../../../src/hooks/queries/useConversationsQuery', () => ({
+  useConversationsQuery: (...args: unknown[]) => mockUseConversationsQuery(...args),
+}));
+
+const mockUseMessagesQuery = vi.fn().mockReturnValue({ data: [], isLoading: false, error: null });
+vi.mock('../../../src/hooks/queries/useMessagesQuery', () => ({
+  useMessagesQuery: (...args: unknown[]) => mockUseMessagesQuery(...args),
+}));
+
 import { ChatView } from '../../../src/components/copilot/ChatView';
 
 describe('ChatView', () => {
@@ -110,17 +137,31 @@ describe('ChatView', () => {
     onNewConversation: vi.fn(),
   };
 
+  const testTabId = 'tab-test';
+  const makeTab = (overrides: Record<string, unknown> = {}) => ({
+    id: testTabId,
+    conversationId: 'conv-1',
+    title: 'Test Tab',
+    mode: 'copilot' as const,
+    messages: [] as any[],
+    streamingText: '',
+    isStreaming: false,
+    toolRecords: [] as any[],
+    reasoningText: '',
+    turnContentSegments: [] as string[],
+    turnSegments: [] as any[],
+    copilotError: null,
+    createdAt: Date.now(),
+    ...overrides,
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseBraveApiKeyQuery.mockReturnValue({ data: { hasKey: false, maskedKey: '' }, isLoading: false, error: null });
+    mockUseConversationsQuery.mockReturnValue({ data: [], isLoading: false, error: null });
+    mockUseMessagesQuery.mockReturnValue({ data: [], isLoading: false, error: null });
     useAppStore.setState({
       activeConversationId: null,
-      messages: [],
-      streamingText: '',
-      isStreaming: false,
-      toolRecords: [],
-      reasoningText: '',
-      turnSegments: [],
-      copilotError: null,
     });
   });
 
@@ -148,14 +189,21 @@ describe('ChatView', () => {
   });
 
   it('renders messages in centered column', () => {
-    useAppStore.setState({
-      activeConversationId: 'conv-1',
-      messages: [
+    mockUseMessagesQuery.mockReturnValue({
+      data: [
         { id: 'msg-1', conversationId: 'conv-1', role: 'user', content: 'Hello', metadata: null, createdAt: '' },
         { id: 'msg-2', conversationId: 'conv-1', role: 'assistant', content: 'Hi there', metadata: null, createdAt: '' },
       ],
+      isLoading: false,
+      error: null,
     });
-    render(<ChatView {...defaultProps} />);
+    useAppStore.setState({
+      activeConversationId: 'conv-1',
+      tabs: { [testTabId]: makeTab() },
+      tabOrder: [testTabId],
+      activeTabId: testTabId,
+    });
+    render(<ChatView {...defaultProps} tabId={testTabId} />);
     expect(screen.getByTestId('message-msg-1')).toBeTruthy();
     expect(screen.getByTestId('message-msg-2')).toBeTruthy();
   });
@@ -163,42 +211,51 @@ describe('ChatView', () => {
   it('shows streaming block with streaming text', () => {
     useAppStore.setState({
       activeConversationId: 'conv-1',
-      streamingText: 'Generating...',
-      isStreaming: true,
+      tabs: { [testTabId]: makeTab({ streamingText: 'Generating...' }) },
+      tabOrder: [testTabId],
+      activeTabId: testTabId,
     });
-    render(<ChatView {...defaultProps} />);
+    render(<ChatView {...defaultProps} tabId={testTabId} isStreaming={true} />);
     expect(screen.getByTestId('streaming-text')).toBeTruthy();
   });
 
   it('shows error message when copilotError exists', () => {
     useAppStore.setState({
       activeConversationId: 'conv-1',
-      copilotError: 'Something went wrong',
+      tabs: { [testTabId]: makeTab({ copilotError: 'Something went wrong' }) },
+      tabOrder: [testTabId],
+      activeTabId: testTabId,
     });
-    render(<ChatView {...defaultProps} />);
+    render(<ChatView {...defaultProps} tabId={testTabId} />);
     expect(screen.getByText('Something went wrong')).toBeTruthy();
   });
 
   it('shows error even when streamingText is empty (bug fix)', () => {
     useAppStore.setState({
       activeConversationId: 'conv-1',
-      streamingText: '',
-      isStreaming: false,
-      toolRecords: [],
-      copilotError: 'Error before streaming',
+      tabs: { [testTabId]: makeTab({ copilotError: 'Error before streaming' }) },
+      tabOrder: [testTabId],
+      activeTabId: testTabId,
     });
-    render(<ChatView {...defaultProps} />);
+    render(<ChatView {...defaultProps} tabId={testTabId} />);
     expect(screen.getByText('Error before streaming')).toBeTruthy();
   });
 
   it('has centered conversation column with max-w-3xl', () => {
-    useAppStore.setState({
-      activeConversationId: 'conv-1',
-      messages: [
+    mockUseMessagesQuery.mockReturnValue({
+      data: [
         { id: 'msg-1', conversationId: 'conv-1', role: 'user', content: 'Test', metadata: null, createdAt: '' },
       ],
+      isLoading: false,
+      error: null,
     });
-    const { container } = render(<ChatView {...defaultProps} />);
+    useAppStore.setState({
+      activeConversationId: 'conv-1',
+      tabs: { [testTabId]: makeTab() },
+      tabOrder: [testTabId],
+      activeTabId: testTabId,
+    });
+    const { container } = render(<ChatView {...defaultProps} tabId={testTabId} />);
     const centeredCol = container.querySelector('.max-w-3xl');
     expect(centeredCol).toBeTruthy();
   });
@@ -208,15 +265,18 @@ describe('ChatView', () => {
   it('renders turnSegments in streaming block in order', () => {
     useAppStore.setState({
       activeConversationId: 'conv-1',
-      isStreaming: true,
-      turnSegments: [
-        { type: 'reasoning', content: 'Thinking...' },
-        { type: 'tool', toolCallId: 'tc1', toolName: 'bash', status: 'success', result: 'output' },
-        { type: 'text', content: 'First part' },
-      ],
-      streamingText: 'More text...',
+      tabs: { [testTabId]: makeTab({
+        turnSegments: [
+          { type: 'reasoning', content: 'Thinking...' },
+          { type: 'tool', toolCallId: 'tc1', toolName: 'bash', status: 'success', result: 'output' },
+          { type: 'text', content: 'First part' },
+        ],
+        streamingText: 'More text...',
+      }) },
+      tabOrder: [testTabId],
+      activeTabId: testTabId,
     });
-    render(<ChatView {...defaultProps} />);
+    render(<ChatView {...defaultProps} tabId={testTabId} isStreaming={true} />);
 
     // Should render reasoning from turnSegments
     expect(screen.getByTestId('reasoning')).toBeTruthy();
@@ -235,14 +295,16 @@ describe('ChatView', () => {
   it('renders reasoning during streaming when turnSegments has no reasoning entry yet', () => {
     useAppStore.setState({
       activeConversationId: 'conv-1',
-      isStreaming: true,
-      reasoningText: 'Mid-stream thinking...',
-      turnSegments: [
-        { type: 'tool', toolCallId: 'tc1', toolName: 'bash', status: 'running' },
-      ],
-      streamingText: '',
+      tabs: { [testTabId]: makeTab({
+        reasoningText: 'Mid-stream thinking...',
+        turnSegments: [
+          { type: 'tool', toolCallId: 'tc1', toolName: 'bash', status: 'running' },
+        ],
+      }) },
+      tabOrder: [testTabId],
+      activeTabId: testTabId,
     });
-    render(<ChatView {...defaultProps} />);
+    render(<ChatView {...defaultProps} tabId={testTabId} isStreaming={true} />);
 
     // Should render reasoning from reasoningText even though turnSegments has no reasoning entry
     expect(screen.getByTestId('reasoning')).toBeTruthy();
@@ -255,15 +317,18 @@ describe('ChatView', () => {
   it('renders streaming block without turnSegments (fallback to old rendering)', () => {
     useAppStore.setState({
       activeConversationId: 'conv-1',
-      isStreaming: true,
-      reasoningText: 'Old reasoning',
-      toolRecords: [
-        { toolCallId: 'tc1', toolName: 'bash', status: 'running' },
-      ],
-      turnSegments: [],
-      streamingText: 'Streaming...',
+      tabs: { [testTabId]: makeTab({
+        reasoningText: 'Old reasoning',
+        toolRecords: [
+          { toolCallId: 'tc1', toolName: 'bash', status: 'running' },
+        ],
+        turnSegments: [],
+        streamingText: 'Streaming...',
+      }) },
+      tabOrder: [testTabId],
+      activeTabId: testTabId,
     });
-    render(<ChatView {...defaultProps} />);
+    render(<ChatView {...defaultProps} tabId={testTabId} isStreaming={true} />);
 
     // Should render reasoning from reasoningText
     expect(screen.getByTestId('reasoning')).toBeTruthy();
@@ -278,8 +343,9 @@ describe('ChatView', () => {
 
   // === Tab switch loading state ===
   describe('tab switch loading', () => {
-    it('shows loading indicator when messagesLoaded is false on an existing conversation tab', () => {
+    it('shows loading indicator when messages are loading on an existing conversation tab', () => {
       const tabId = 'tab-loading';
+      mockUseMessagesQuery.mockReturnValue({ data: [], isLoading: true, error: null });
       useAppStore.setState({
         activeConversationId: 'conv-1',
         tabs: {
@@ -296,7 +362,7 @@ describe('ChatView', () => {
             turnContentSegments: [],
             turnSegments: [],
             copilotError: null,
-            messagesLoaded: false,
+
             createdAt: Date.now(),
           },
         },
@@ -307,7 +373,7 @@ describe('ChatView', () => {
       expect(screen.getByTestId('messages-loading')).toBeTruthy();
     });
 
-    it('shows empty prompt when messagesLoaded is true and messages are empty', () => {
+    it('shows empty prompt when messages are loaded and empty', () => {
       const tabId = 'tab-loaded';
       useAppStore.setState({
         activeConversationId: 'conv-1',
@@ -325,7 +391,7 @@ describe('ChatView', () => {
             turnContentSegments: [],
             turnSegments: [],
             copilotError: null,
-            messagesLoaded: true,
+
             createdAt: Date.now(),
           },
         },
@@ -354,7 +420,7 @@ describe('ChatView', () => {
             turnContentSegments: [],
             turnSegments: [],
             copilotError: null,
-            messagesLoaded: false,
+
             createdAt: Date.now(),
           },
         },
@@ -385,7 +451,7 @@ describe('ChatView', () => {
       turnContentSegments: [] as string[],
       turnSegments: [] as any[],
       copilotError: null,
-      messagesLoaded: true,
+
       createdAt: Date.now(),
       usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, contextWindowUsed: 0, contextWindowMax: 0, premiumRequestsUsed: 0, premiumRequestsTotal: 0, premiumResetDate: null, model: null },
       planMode,
@@ -586,7 +652,7 @@ describe('ChatView', () => {
       turnContentSegments: [] as string[],
       turnSegments: [] as any[],
       copilotError: null,
-      messagesLoaded: true,
+
       createdAt: Date.now(),
       userInputRequest,
     });
@@ -688,7 +754,7 @@ describe('ChatView', () => {
       turnContentSegments: [] as any[],
       turnSegments: [] as any[],
       copilotError: null,
-      messagesLoaded: true,
+
       createdAt: Date.now(),
     };
 
@@ -785,7 +851,7 @@ describe('ChatView', () => {
       turnContentSegments: [] as string[],
       turnSegments: [] as any[],
       copilotError: null,
-      messagesLoaded: true,
+
       createdAt: Date.now(),
       tasks,
     });
@@ -838,7 +904,7 @@ describe('ChatView', () => {
       turnContentSegments: [] as string[],
       turnSegments: [] as any[],
       copilotError: null,
-      messagesLoaded: true,
+
       createdAt: Date.now(),
     });
 
@@ -875,7 +941,7 @@ describe('ChatView', () => {
       turnContentSegments: [] as string[],
       turnSegments: [] as any[],
       copilotError: null,
-      messagesLoaded: true,
+
       createdAt: Date.now(),
       ...overrides,
     });
@@ -934,13 +1000,15 @@ describe('ChatView', () => {
   // --- Recent conversations on welcome page ---
   describe('welcome page recent conversations', () => {
     it('shows recent conversations when available', () => {
-      useAppStore.setState({
-        activeConversationId: null,
-        conversations: [
+      mockUseConversationsQuery.mockReturnValue({
+        data: [
           { id: 'c1', title: 'First chat', model: 'gpt-4o', cwd: '~', pinned: false, sdkSessionId: null, createdAt: '', updatedAt: '' },
           { id: 'c2', title: 'Second chat', model: 'claude-sonnet-4-5-20250929', cwd: '~', pinned: false, sdkSessionId: null, createdAt: '', updatedAt: '' },
         ],
+        isLoading: false,
+        error: null,
       });
+      useAppStore.setState({ activeConversationId: null });
       render(<ChatView {...defaultProps} />);
       expect(screen.getByTestId('recent-conversations')).toBeTruthy();
       expect(screen.getByText('First chat')).toBeTruthy();
@@ -948,22 +1016,21 @@ describe('ChatView', () => {
     });
 
     it('does not show recent conversations section when empty', () => {
-      useAppStore.setState({
-        activeConversationId: null,
-        conversations: [],
-      });
+      useAppStore.setState({ activeConversationId: null });
       render(<ChatView {...defaultProps} />);
       expect(screen.queryByTestId('recent-conversations')).toBeNull();
     });
 
     it('calls onOpenConversation when clicking a recent conversation', () => {
       const onOpenConversation = vi.fn();
-      useAppStore.setState({
-        activeConversationId: null,
-        conversations: [
+      mockUseConversationsQuery.mockReturnValue({
+        data: [
           { id: 'c1', title: 'First chat', model: 'gpt-4o', cwd: '~', pinned: false, sdkSessionId: null, createdAt: '', updatedAt: '' },
         ],
+        isLoading: false,
+        error: null,
       });
+      useAppStore.setState({ activeConversationId: null });
       render(<ChatView {...defaultProps} onOpenConversation={onOpenConversation} />);
       fireEvent.click(screen.getByTestId('recent-conv-c1'));
       expect(onOpenConversation).toHaveBeenCalledWith('c1');
@@ -974,10 +1041,8 @@ describe('ChatView', () => {
         id: `c${i}`, title: `Chat ${i}`, model: 'gpt-4o', cwd: '~',
         pinned: false, sdkSessionId: null, createdAt: '', updatedAt: '',
       }));
-      useAppStore.setState({
-        activeConversationId: null,
-        conversations: convs,
-      });
+      mockUseConversationsQuery.mockReturnValue({ data: convs, isLoading: false, error: null });
+      useAppStore.setState({ activeConversationId: null });
       render(<ChatView {...defaultProps} />);
       const items = screen.getAllByTestId(/^recent-conv-/);
       expect(items).toHaveLength(10);
@@ -1009,7 +1074,7 @@ describe('ChatView', () => {
             turnContentSegments: [] as string[],
             turnSegments: [] as any[],
             copilotError: null,
-            messagesLoaded: true,
+
             createdAt: Date.now(),
           },
         },
@@ -1052,7 +1117,7 @@ describe('ChatView', () => {
             turnContentSegments: [] as string[],
             turnSegments: [] as any[],
             copilotError: null,
-            messagesLoaded: true,
+
             createdAt: Date.now(),
           },
         },
@@ -1096,7 +1161,7 @@ describe('ChatView', () => {
             turnContentSegments: [] as string[],
             turnSegments: [] as any[],
             copilotError: null,
-            messagesLoaded: true,
+
             createdAt: Date.now(),
           },
         },
@@ -1152,7 +1217,7 @@ describe('ChatView', () => {
             turnContentSegments: [],
             turnSegments: [],
             copilotError: null,
-            messagesLoaded: true,
+
             createdAt: Date.now(),
           },
         },
@@ -1181,7 +1246,7 @@ describe('ChatView', () => {
       turnContentSegments: [] as string[],
       turnSegments: [] as any[],
       copilotError: null,
-      messagesLoaded: true,
+
       createdAt: Date.now(),
       ...extra,
     });
@@ -1203,12 +1268,12 @@ describe('ChatView', () => {
     });
 
     it('desktop toolbar does not contain WebSearchToggle', () => {
+      mockUseBraveApiKeyQuery.mockReturnValue({ data: { hasKey: true, maskedKey: '' }, isLoading: false, error: null });
       useAppStore.setState({
         activeConversationId: 'conv-1',
         tabs: { [tabId]: makeToolbarTab() },
         tabOrder: [tabId],
         activeTabId: tabId,
-        webSearchAvailable: true,
       });
       const { container } = render(<ChatView {...defaultProps} tabId={tabId} />);
       const toolbar = container.querySelector('[data-testid="bottom-toolbar-row"]');
@@ -1236,12 +1301,12 @@ describe('ChatView', () => {
     });
 
     it('WebSearchToggle exists in input leftActions when webSearchAvailable', () => {
+      mockUseBraveApiKeyQuery.mockReturnValue({ data: { hasKey: true, maskedKey: '' }, isLoading: false, error: null });
       useAppStore.setState({
         activeConversationId: 'conv-1',
         tabs: { [tabId]: makeToolbarTab() },
         tabOrder: [tabId],
         activeTabId: tabId,
-        webSearchAvailable: true,
       });
       const { container } = render(<ChatView {...defaultProps} tabId={tabId} />);
       // WebSearchToggle should exist somewhere in the DOM

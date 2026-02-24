@@ -5,6 +5,12 @@ import { CodeForgeLogo } from '../shared/CodeForgeLogo';
 import { Tooltip } from '../shared/Tooltip';
 import { useAppStore } from '../../store';
 import { apiGet } from '../../lib/api';
+import { useSkillsQuery } from '../../hooks/queries/useSkillsQuery';
+import { useSdkCommandsQuery } from '../../hooks/queries/useSdkCommandsQuery';
+import { useQuotaQuery } from '../../hooks/queries/useQuotaQuery';
+import { useBraveApiKeyQuery } from '../../hooks/queries/useConfigQuery';
+import { useConversationsQuery } from '../../hooks/queries/useConversationsQuery';
+import { useMessagesQuery } from '../../hooks/queries/useMessagesQuery';
 import { modelSupportsAttachments } from '../../lib/model-capabilities';
 import { MessageBlock } from './MessageBlock';
 import { StreamingText } from './StreamingText';
@@ -75,22 +81,26 @@ export function ChatView({
 
   // Always call all hooks unconditionally (Rules of Hooks), then pick the right value
   const tab = useAppStore((s) => tabId ? s.tabs[tabId] : null);
-  const globalMessages = useAppStore((s) => s.messages);
-  const globalStreamingText = useAppStore((s) => s.streamingText);
-  const globalToolRecords = useAppStore((s) => s.toolRecords);
-  const globalReasoningText = useAppStore((s) => s.reasoningText);
-  const globalTurnSegments = useAppStore((s) => s.turnSegments);
-  const globalCopilotError = useAppStore((s) => s.copilotError);
 
-  const messages = tab?.messages ?? globalMessages;
-  const streamingText = tab?.streamingText ?? globalStreamingText;
-  const toolRecords = tab?.toolRecords ?? globalToolRecords;
-  const reasoningText = tab?.reasoningText ?? globalReasoningText;
-  const turnSegments = tab?.turnSegments ?? globalTurnSegments;
-  const copilotError = tab?.copilotError ?? globalCopilotError;
-  const skills = useAppStore((s) => s.skills);
+  // Messages from TanStack Query (committed history from DB)
+  const { data: queryMessages = [], isLoading: messagesLoading } = useMessagesQuery(tab?.conversationId);
+  // Use query data when available, fallback to tab.messages (kept in sync by idle handler)
+  const baseMessages = queryMessages.length > 0 ? queryMessages : (tab?.messages ?? []);
+  // Optimistic user messages appended during streaming (not yet in DB)
+  const pendingMessages = tab?.pendingMessages ?? [];
+  const messages = pendingMessages.length > 0
+    ? [...baseMessages, ...pendingMessages.filter((pm) => !baseMessages.some((qm) => qm.id === pm.id))]
+    : baseMessages;
+
+  // Streaming state from Zustand (high-frequency, per-tab)
+  const streamingText = tab?.streamingText ?? '';
+  const toolRecords = tab?.toolRecords ?? [];
+  const reasoningText = tab?.reasoningText ?? '';
+  const turnSegments = tab?.turnSegments ?? [];
+  const copilotError = tab?.copilotError ?? null;
+  const { data: skills = [] } = useSkillsQuery();
   const disabledSkills = useAppStore((s) => s.disabledSkills);
-  const sdkCommands = useAppStore((s) => s.sdkCommands);
+  const { data: sdkCommands = [] } = useSdkCommandsQuery();
   const setTabMode = useAppStore((s) => s.setTabMode);
   const setTabPlanMode = useAppStore((s) => s.setTabPlanMode);
   const setTabUserInputRequest = useAppStore((s) => s.setTabUserInputRequest);
@@ -98,7 +108,8 @@ export function ChatView({
   const setTabWebSearchForced = useAppStore((s) => s.setTabWebSearchForced);
   const cronConfigOpen = tab?.cronConfigOpen ?? false;
   const webSearchForced = tab?.webSearchForced ?? false;
-  const webSearchAvailable = useAppStore((s) => s.webSearchAvailable);
+  const { data: braveApiKeyData } = useBraveApiKeyQuery();
+  const webSearchAvailable = braveApiKeyData?.hasKey ?? false;
   const userInputRequest = tab?.userInputRequest ?? null;
   const tabMode = tab?.mode ?? 'copilot';
   const isTerminalMode = tabMode === 'terminal';
@@ -106,7 +117,7 @@ export function ChatView({
   const showPlanCompletePrompt = tab?.showPlanCompletePrompt ?? false;
   const planFilePath = tab?.planFilePath ?? null;
   const tasks = tab?.tasks ?? [];
-  const premiumQuota = useAppStore((s) => s.premiumQuota);
+  const { data: premiumQuota } = useQuotaQuery();
   const setTabShowPlanCompletePrompt = useAppStore((s) => s.setTabShowPlanCompletePrompt);
 
   const handleModeChange = useCallback(
@@ -187,7 +198,6 @@ export function ChatView({
   }, [messages, streamingText, toolRecords]);
 
   // Auto-focus input on tab switch, conversation switch, or after messages finish loading
-  const messagesLoaded = tab?.messagesLoaded ?? false;
   useEffect(() => {
     if (tabId) {
       const raf = requestAnimationFrame(() => {
@@ -195,7 +205,7 @@ export function ChatView({
       });
       return () => cancelAnimationFrame(raf);
     }
-  }, [tabId, activeConversationId, messagesLoaded]);
+  }, [tabId, activeConversationId, messagesLoading]);
 
   const scrollToBottom = useCallback(() => {
     scrollRef.current?.scrollTo({
@@ -279,7 +289,7 @@ export function ChatView({
   );
 
   // Recent conversations for welcome page
-  const conversations = useAppStore((s) => s.conversations);
+  const { data: conversations = [] } = useConversationsQuery();
   const recentConversations = useMemo(() => conversations.slice(0, 10), [conversations]);
 
   // Show streaming block when there's active content to display.
@@ -363,7 +373,7 @@ export function ChatView({
   }
 
   // Loading state — tab has a conversation but messages haven't loaded yet
-  if (tab && tab.conversationId && !tab.messagesLoaded && messages.length === 0 && !showStreamingBlock) {
+  if (tab && tab.conversationId && messagesLoading && messages.length === 0 && !showStreamingBlock) {
     return (
       <div className="flex flex-col h-full">
         <div className="flex-1 overflow-y-auto flex items-center justify-center">

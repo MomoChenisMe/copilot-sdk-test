@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, FolderOpen } from 'lucide-react';
 import { useAppStore } from '../../store';
+import { useConversationsQuery } from '../../hooks/queries/useConversationsQuery';
 import { openspecApi } from '../../lib/openspec-api';
 import type {
   OverviewData,
@@ -34,7 +35,7 @@ export function OpenSpecPanel({ open, onClose }: OpenSpecPanelProps) {
   // ── Active tab CWD ────────────────────────────────────────────────────────
   const activeTabId = useAppStore((s) => s.activeTabId);
   const tabs = useAppStore((s) => s.tabs);
-  const conversations = useAppStore((s) => s.conversations);
+  const { data: conversations = [] } = useConversationsQuery();
 
   const activeCwd = useMemo(() => {
     if (!activeTabId) return undefined;

@@ -11,6 +11,7 @@ import type { WsMessage, SendFn } from '../ws/types.js';
 import type { PromptComposer } from '../prompts/composer.js';
 import { createPermissionHandler } from './permission.js';
 import { writePlanFile, extractTopicFromContent } from './plan-writer.js';
+import { createTodoSyncHook } from './todo-sync.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('stream-manager');
@@ -141,6 +142,8 @@ interface ConversationStream {
   pendingIdleExtra: Record<string, unknown> | null;
   /** Cleanup function for SDK session.plan_changed listener (plan mode only) */
   planChangedUnsub: (() => void) | null;
+  /** Accumulated plan content across idles — fallback when SDK plan_changed doesn't fire */
+  planContentAccumulator: string;
   /** Timestamp of last event received — used for health monitoring */
   lastEventAt: number;
   /** Interval handle for health monitoring */
@@ -269,6 +272,7 @@ export class StreamManager extends EventEmitter {
       sendComplete: false,
       pendingIdleExtra: null,
       planChangedUnsub: null,
+      planContentAccumulator: '',
       lastEventAt: Date.now(),
       healthCheckInterval: null,
     };
@@ -422,7 +426,23 @@ export class StreamManager extends EventEmitter {
         sessionOpts.tools = allTools;
       }
 
+      // Inject todo sync hook (lazy sessionRef — hook only fires during session.send())
+      let sessionRef: CopilotSession | null = null;
+      const todoHook = createTodoSyncHook({
+        getWorkspacePath: () => (sessionRef as any)?.workspacePath,
+        getConversationId: (sid) => StreamManager.sessionConversationMap.get(sid),
+        broadcast: (convId, msg) => {
+          const s = this.streams.get(convId);
+          if (s) {
+            s.eventBuffer.push(msg);
+            this.broadcast(s, msg);
+          }
+        },
+      });
+      sessionOpts.hooks = { onPostToolUse: todoHook };
+
       const session = await this.sessionManager.getOrCreateSession(sessionOpts);
+      sessionRef = session;
 
       // Persist the SDK session ID so future messages resume the same session
       if (!options.sdkSessionId && session.sessionId) {
@@ -461,7 +481,7 @@ export class StreamManager extends EventEmitter {
       // session.send() resolved — mark send as complete and clean up if idle was already received
       stream.sendComplete = true;
       if (stream.idleReceived) {
-        this.finishStream(conversationId);
+        this.finishStream(conversationId).catch((e) => log.error({ err: e, conversationId }, 'finishStream error'));
       }
     } catch (err) {
       log.error({ err, conversationId }, 'Failed to start stream');
@@ -474,7 +494,7 @@ export class StreamManager extends EventEmitter {
 
       // Clean up on error
       stream.sendComplete = true;
-      this.finishStream(conversationId);
+      this.finishStream(conversationId).catch((e) => log.error({ err: e, conversationId }, 'finishStream error'));
       throw err;
     }
   }
@@ -529,15 +549,20 @@ export class StreamManager extends EventEmitter {
    * Final cleanup: detach relay and remove stream from map.
    * Called only when BOTH idleReceived and sendComplete are true.
    */
-  private finishStream(conversationId: string): void {
+  private async finishStream(conversationId: string): Promise<void> {
     const stream = this.streams.get(conversationId);
     if (!stream || stream.status === 'idle') return; // Already cleaned up
+
+    // Re-entry guard: prevent concurrent finishStream calls (both idle+sendComplete paths)
+    if ((stream as any)._finishing) return;
+    (stream as any)._finishing = true;
 
     // Safety: do NOT finish the stream while there are still pending user input requests.
     // The SDK should resolve all tool calls before session.send() resolves, but guard
     // against edge cases where idleReceived + sendComplete are both true prematurely.
     if (stream.pendingUserInputRequests.size > 0) {
       log.warn({ conversationId, pending: stream.pendingUserInputRequests.size }, 'finishStream called while user input requests are pending — deferring');
+      (stream as any)._finishing = false;
       return;
     }
 
@@ -547,6 +572,41 @@ export class StreamManager extends EventEmitter {
     if (stream.healthCheckInterval) {
       clearInterval(stream.healthCheckInterval);
       stream.healthCheckInterval = null;
+    }
+
+    // Plan mode: sync accumulated content to SDK plan.md via rpc.plan.update(),
+    // then write locally to .codeforge/plans/.
+    // This keeps the SDK's plan system in sync and triggers plan_changed for other consumers.
+    if (stream.mode === 'plan' && !(stream.pendingIdleExtra as any)?.planFilePath) {
+      // Capture any remaining content from the final accumulation
+      const remaining = stream.accumulation.contentSegments.join('');
+      if (remaining) stream.planContentAccumulator += remaining;
+
+      const planContent = stream.planContentAccumulator.trim();
+      if (planContent.length > 0) {
+        // 1. Sync to SDK's plan.md
+        try {
+          await this.sessionManager.updatePlan(stream.session, planContent);
+          log.info({ conversationId }, 'Plan content synced to SDK plan.md via rpc.plan.update()');
+        } catch (err) {
+          log.warn({ err, conversationId }, 'Failed to sync plan to SDK — continuing with local write');
+        }
+
+        // 2. Write locally to .codeforge/plans/
+        const topic = extractTopicFromContent(planContent);
+        const planFilePath = writePlanFile(stream.cwd, planContent, topic);
+        this.repo.update(stream.conversationId, { planFilePath });
+        stream.pendingIdleExtra = {
+          ...(stream.pendingIdleExtra ?? {}),
+          planFilePath,
+          planArtifact: {
+            title: topic || 'Implementation Plan',
+            content: planContent,
+            filePath: planFilePath,
+          },
+        };
+        log.info({ conversationId, planFilePath }, 'Plan written to local file');
+      }
     }
 
     // Safety persist: ensure any remaining accumulated data is saved before cleanup
@@ -1017,8 +1077,12 @@ export class StreamManager extends EventEmitter {
         break;
       }
       case 'copilot:idle': {
-        // Plan data is now managed by the SDK's plan mode via session.plan_changed listener
-        // (registered in startStream / setMode). pendingIdleExtra is populated there.
+        // Plan mode fallback: accumulate content before it's persisted/reset.
+        // If SDK plan_changed never fires, finishStream will use this to create the plan file.
+        if (stream.mode === 'plan' && !(stream.pendingIdleExtra as any)?.planFilePath) {
+          const planSegment = stream.accumulation.contentSegments.join('');
+          if (planSegment) stream.planContentAccumulator += planSegment;
+        }
 
         persistAccumulated(this.repo, stream.conversationId, stream.accumulation);
         stream.accumulation = createEmptyAccumulation();
@@ -1037,7 +1101,7 @@ export class StreamManager extends EventEmitter {
         // 2. session.send() has resolved (sendComplete = true)
         // This prevents premature cleanup when session.idle fires mid-turn (e.g., before ask_user).
         if (stream.sendComplete) {
-          this.finishStream(stream.conversationId);
+          this.finishStream(stream.conversationId).catch((e) => log.error({ err: e, conversationId: stream.conversationId }, 'finishStream error'));
         }
 
         // CRITICAL: Do NOT broadcast copilot:idle to the frontend here.

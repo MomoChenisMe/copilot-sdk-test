@@ -3,14 +3,20 @@ import { Plus, X, Clock as ClockIcon, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { useWebSocket } from '../../hooks/useWebSocket';
-import { useConversations } from '../../hooks/useConversations';
+import { useConversationsQuery, useCreateConversation, useUpdateConversation, useDeleteConversation } from '../../hooks/queries/useConversationsQuery';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../../lib/query-keys';
+import { clearMessagesCache, invalidateConversations } from '../../lib/ws-query-bridge';
 import { useTabCopilot } from '../../hooks/useTabCopilot';
 import { useTerminal } from '../../hooks/useTerminal';
 import { useBashMode } from '../../hooks/useBashMode';
 import { useModelsQuery } from '../../hooks/queries/useModelsQuery';
-import { useSkills } from '../../hooks/useSkills';
+import { useSkillsQuery } from '../../hooks/queries/useSkillsQuery';
+import { useSdkCommandsQuery } from '../../hooks/queries/useSdkCommandsQuery';
+import { useSettingsQuery } from '../../hooks/queries/useSettingsQuery';
+import { useQuotaQuery } from '../../hooks/queries/useQuotaQuery';
+import { useBraveApiKeyQuery } from '../../hooks/queries/useConfigQuery';
 import { useGlobalShortcuts } from '../../hooks/useGlobalShortcuts';
-import { useQuota } from '../../hooks/useQuota';
 import { conversationApi, configApi } from '../../lib/api';
 import { openspecApi } from '../../lib/openspec-api';
 import { skillsApi } from '../../lib/prompts-api';
@@ -33,25 +39,19 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   const [cwd, setCwd] = useState('~');
 
   const { status, send, subscribe } = useWebSocket(onLogout);
-  const {
-    conversations,
-    refresh: refreshConversations,
-    create: createConversation,
-    update: updateConversation,
-    remove: removeConversation,
-    search: searchConversations,
-  } = useConversations();
+  const queryClient = useQueryClient();
+  const { data: conversations = [] } = useConversationsQuery();
+  const createConversationMutation = useCreateConversation();
+  const updateConversationMutation = useUpdateConversation();
+  const deleteConversationMutation = useDeleteConversation();
 
-  // Sync conversations to zustand store so cross-component consumers
-  // (e.g. OpenSpecPanel) can access conversation data including CWD
-  useEffect(() => {
-    useAppStore.getState().setConversations(conversations);
-  }, [conversations]);
-
-  // Load models, skills, and quota from API
+  // Load models, skills, SDK commands, settings, and quota from API
   const { data: models = [] } = useModelsQuery();
-  useSkills();
-  useQuota();
+  useSkillsQuery();
+  useSdkCommandsQuery();
+  const { data: backendSettings } = useSettingsQuery();
+  useQuotaQuery();
+  useBraveApiKeyQuery();
 
   const activeConversationId = useAppStore((s) => s.activeConversationId);
   const setActiveConversationId = useAppStore((s) => s.setActiveConversationId);
@@ -70,20 +70,20 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     return tid ? s.tabs[tid]?.openspecPanelOpen ?? false : false;
   });
   const setTabOpenspecPanelOpen = useAppStore((s) => s.setTabOpenspecPanelOpen);
-  const openspecEnabled = useAppStore((s) => s.settings?.openspecEnabled ?? false);
+  const openspecEnabled = useAppStore((s) => s.openspecEnabled);
   const [openSpecDirExists, setOpenSpecDirExists] = useState(false);
   const openSpecActive = openspecEnabled && openSpecDirExists;
 
   // Check if openspec directory exists for current tab's CWD
   const checkOpenSpecDirExists = useCallback(() => {
     const tab = activeTabId ? useAppStore.getState().tabs[activeTabId] : null;
-    const conv = tab?.conversationId ? useAppStore.getState().conversations.find((c) => c.id === tab.conversationId) : null;
+    const conv = tab?.conversationId ? conversations.find((c) => c.id === tab.conversationId) : null;
     const tabCwd = conv?.cwd || cwd;
     if (!tabCwd) { setOpenSpecDirExists(false); return; }
     openspecApi.getOverview(tabCwd).then((data) => {
       setOpenSpecDirExists(data.resolvedPath !== null);
     }).catch(() => setOpenSpecDirExists(false));
-  }, [activeTabId, cwd]);
+  }, [activeTabId, cwd, conversations]);
 
   useEffect(() => { checkOpenSpecDirExists(); }, [checkOpenSpecDirExists]);
 
@@ -109,9 +109,9 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       if (!tabId) return;
       const tab = useAppStore.getState().tabs[tabId];
       if (!tab?.conversationId) return;
-      await updateConversation(tab.conversationId, { cwd: newCwd, sdkSessionId: null });
+      await updateConversationMutation.mutateAsync({ id: tab.conversationId, updates: { cwd: newCwd, sdkSessionId: null } });
     },
-    [updateConversation],
+    [updateConversationMutation],
   );
 
   const { sendBashCommand } = useBashMode({
@@ -162,59 +162,48 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     });
   }, []);
 
-  // Detect Brave API key availability on mount
-  useEffect(() => {
-    configApi.getBraveApiKey().then((res) => {
-      useAppStore.getState().setWebSearchAvailable(res.hasKey);
-    }).catch(() => {
-      // No Brave API key available
-    });
-  }, []);
 
-  // Load persisted settings from backend on mount (overrides localStorage if present)
-  useEffect(() => {
-    settingsApi.get().then((settings) => {
-      const state = useAppStore.getState();
-      const hasBackendData = settings.theme || settings.language || settings.lastSelectedModel || settings.disabledSkills;
 
-      if (hasBackendData) {
-        // Apply backend settings to store
-        if (settings.theme && settings.theme !== state.theme) {
-          useAppStore.setState({ theme: settings.theme as 'light' | 'dark' });
-          document.documentElement.dataset.theme = settings.theme;
-          try { localStorage.setItem('theme', settings.theme); } catch { /* noop */ }
-        }
-        if (settings.language && settings.language !== state.language) {
-          useAppStore.setState({ language: settings.language });
-          i18n.changeLanguage(settings.language);
-          try { localStorage.setItem('i18nextLng', settings.language); } catch { /* noop */ }
-        }
-        if (settings.lastSelectedModel) {
-          useAppStore.setState({ lastSelectedModel: settings.lastSelectedModel });
-          try { localStorage.setItem('codeforge:lastSelectedModel', settings.lastSelectedModel); } catch { /* noop */ }
-        }
-        if (settings.disabledSkills) {
-          useAppStore.setState({ disabledSkills: settings.disabledSkills });
-          try { localStorage.setItem('codeforge:disabledSkills', JSON.stringify(settings.disabledSkills)); } catch { /* noop */ }
-        }
-        if (settings.llmLanguage !== undefined) {
-          useAppStore.setState({ llmLanguage: settings.llmLanguage ?? null });
-        }
-      } else {
-        // One-time migration: push localStorage settings to backend
-        const migrationData: Record<string, unknown> = {};
-        if (state.theme) migrationData.theme = state.theme;
-        if (state.language) migrationData.language = state.language;
-        if (state.lastSelectedModel) migrationData.lastSelectedModel = state.lastSelectedModel;
-        if (state.disabledSkills.length > 0) migrationData.disabledSkills = state.disabledSkills;
-        if (Object.keys(migrationData).length > 0) {
-          settingsApi.patch(migrationData).catch(() => {});
-        }
+  // Apply persisted settings from backend when query resolves (overrides localStorage if present)
+  useEffect(() => {
+    if (!backendSettings) return;
+    const state = useAppStore.getState();
+    const hasBackendData = backendSettings.theme || backendSettings.language || backendSettings.lastSelectedModel || backendSettings.disabledSkills;
+
+    if (hasBackendData) {
+      if (backendSettings.theme && backendSettings.theme !== state.theme) {
+        useAppStore.setState({ theme: backendSettings.theme as 'light' | 'dark' });
+        document.documentElement.dataset.theme = backendSettings.theme;
+        try { localStorage.setItem('theme', backendSettings.theme); } catch { /* noop */ }
       }
-    }).catch(() => {
-      // Backend unreachable — fallback to localStorage (already initialized)
-    });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+      if (backendSettings.language && backendSettings.language !== state.language) {
+        useAppStore.setState({ language: backendSettings.language });
+        i18n.changeLanguage(backendSettings.language);
+        try { localStorage.setItem('i18nextLng', backendSettings.language); } catch { /* noop */ }
+      }
+      if (backendSettings.lastSelectedModel) {
+        useAppStore.setState({ lastSelectedModel: backendSettings.lastSelectedModel });
+        try { localStorage.setItem('codeforge:lastSelectedModel', backendSettings.lastSelectedModel); } catch { /* noop */ }
+      }
+      if (backendSettings.disabledSkills) {
+        useAppStore.setState({ disabledSkills: backendSettings.disabledSkills });
+        try { localStorage.setItem('codeforge:disabledSkills', JSON.stringify(backendSettings.disabledSkills)); } catch { /* noop */ }
+      }
+      if (backendSettings.llmLanguage !== undefined) {
+        useAppStore.setState({ llmLanguage: backendSettings.llmLanguage ?? null });
+      }
+    } else {
+      // One-time migration: push localStorage settings to backend
+      const migrationData: Record<string, unknown> = {};
+      if (state.theme) migrationData.theme = state.theme;
+      if (state.language) migrationData.language = state.language;
+      if (state.lastSelectedModel) migrationData.lastSelectedModel = state.lastSelectedModel;
+      if (state.disabledSkills.length > 0) migrationData.disabledSkills = state.disabledSkills;
+      if (Object.keys(migrationData).length > 0) {
+        settingsApi.patch(migrationData).catch(() => {});
+      }
+    }
+  }, [backendSettings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Initialize language from i18n on mount
   const { i18n } = useTranslation();
@@ -232,7 +221,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     useAppStore.getState().restoreDisabledSkills();
     // Sync openspec skills disabled state based on toggle
     configApi.getOpenspecSdd().then(({ enabled }) => {
-      useAppStore.getState().setSettings({ openspecEnabled: enabled });
+      useAppStore.getState().setOpenspecEnabled(enabled);
       skillsApi.list().then(({ skills }) => {
         const names = skills.filter((s: { name: string }) => s.name.startsWith('openspec-')).map((s: { name: string }) => s.name);
         useAppStore.getState().batchSetSkillsDisabled(names, !enabled);
@@ -243,19 +232,17 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     if (restoredTabId) {
       const restoredTab = useAppStore.getState().tabs[restoredTabId];
       setActiveConversationId(restoredTab?.conversationId ?? null);
-      // Load messages for the restored active tab to exit loading state
-      if (restoredTab?.conversationId && !restoredTab.messagesLoaded) {
-        conversationApi.getMessages(restoredTab.conversationId).then((msgs) => {
-          useAppStore.getState().setTabMessages(restoredTabId, msgs);
-          // Restore usage from message metadata
+      // Prefetch messages into TanStack Query cache and restore usage
+      if (restoredTab?.conversationId) {
+        queryClient.fetchQuery({
+          queryKey: queryKeys.conversations.messages(restoredTab.conversationId),
+          queryFn: () => conversationApi.getMessages(restoredTab.conversationId!),
+        }).then((msgs) => {
           const usage = sumUsageFromMessages(msgs);
           if (usage.inputTokens > 0 || usage.outputTokens > 0) {
             useAppStore.getState().updateTabUsage(restoredTabId, usage.inputTokens, usage.outputTokens, usage.cacheReadTokens || undefined, usage.cacheWriteTokens || undefined);
           }
-        }).catch(() => {
-          // Mark as loaded even on error to exit the loading spinner
-          useAppStore.getState().setTabMessages(restoredTabId, []);
-        });
+        }).catch(() => {});
       }
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -316,20 +303,19 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       // Draft tab — no messages to load
       if (!conversationId) return;
 
-      // Lazy-load messages if not yet loaded
-      if (!tab.messagesLoaded) {
-        try {
-          const msgs = await conversationApi.getMessages(conversationId);
-          useAppStore.getState().setTabMessages(tabId, msgs);
-          // Restore usage from message metadata
+      // Prefetch messages into TanStack Query cache (ChatView reads from query)
+      queryClient.prefetchQuery({
+        queryKey: queryKeys.conversations.messages(conversationId),
+        queryFn: () => conversationApi.getMessages(conversationId),
+      }).then(() => {
+        const msgs = queryClient.getQueryData<import('../../lib/api').Message[]>(queryKeys.conversations.messages(conversationId));
+        if (msgs) {
           const usage = sumUsageFromMessages(msgs);
           if (usage.inputTokens > 0 || usage.outputTokens > 0) {
             useAppStore.getState().updateTabUsage(tabId, usage.inputTokens, usage.outputTokens, usage.cacheReadTokens || undefined, usage.cacheWriteTokens || undefined);
           }
-        } catch {
-          // ignore
         }
-      }
+      }).catch(() => {});
 
       // Subscribe to active stream if exists
       const activeStreams = useAppStore.getState().activeStreams;
@@ -369,7 +355,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         closeTab(tabId);
       }
       // Remove the conversation from the list and API
-      removeConversation(conversationId);
+      deleteConversationMutation.mutate(conversationId);
       // Trigger lazy-load for the newly activated tab
       const newActiveTabId = useAppStore.getState().activeTabId;
       if (newActiveTabId) {
@@ -378,7 +364,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         setActiveConversationId(null);
       }
     },
-    [abortMessage, cleanupDedup, closeTab, removeConversation, setActiveConversationId, handleSelectTab],
+    [abortMessage, cleanupDedup, closeTab, deleteConversationMutation, setActiveConversationId, handleSelectTab],
   );
 
   // Switch conversation within an existing tab
@@ -410,18 +396,19 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         setActiveConversationId(newConversationId);
       }
 
-      // Lazy-load messages
-      try {
-        const msgs = await conversationApi.getMessages(newConversationId);
-        useAppStore.getState().setTabMessages(tabId, msgs);
-        // Restore usage from message metadata
-        const usage = sumUsageFromMessages(msgs);
-        if (usage.inputTokens > 0 || usage.outputTokens > 0) {
-          useAppStore.getState().updateTabUsage(tabId, usage.inputTokens, usage.outputTokens, usage.cacheReadTokens || undefined, usage.cacheWriteTokens || undefined);
+      // Prefetch messages into TanStack Query cache
+      queryClient.prefetchQuery({
+        queryKey: queryKeys.conversations.messages(newConversationId),
+        queryFn: () => conversationApi.getMessages(newConversationId),
+      }).then(() => {
+        const msgs = queryClient.getQueryData<import('../../lib/api').Message[]>(queryKeys.conversations.messages(newConversationId));
+        if (msgs) {
+          const usage = sumUsageFromMessages(msgs);
+          if (usage.inputTokens > 0 || usage.outputTokens > 0) {
+            useAppStore.getState().updateTabUsage(tabId, usage.inputTokens, usage.outputTokens, usage.cacheReadTokens || undefined, usage.cacheWriteTokens || undefined);
+          }
         }
-      } catch {
-        // ignore
-      }
+      }).catch(() => {});
 
       // Subscribe to active stream if exists
       const activeStreams = useAppStore.getState().activeStreams;
@@ -444,10 +431,9 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
           let tab = useAppStore.getState().tabs[activeTabId];
           if (tab && tab.conversationId === null) {
             const model = lastSelectedModel || models[0]?.id || 'gpt-4o';
-            const conv = await createConversation(model, cwd);
+            const conv = await createConversationMutation.mutateAsync({ model, cwd });
             useAppStore.getState().materializeTabConversation(activeTabId, conv.id);
             setActiveConversationId(conv.id);
-            useAppStore.getState().addConversation(conv);
             tab = useAppStore.getState().tabs[activeTabId];
           }
           const conv = conversations.find(
@@ -464,10 +450,9 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       // Lazy creation: if this is a draft tab, create the conversation first
       if (tab.conversationId === null) {
         const model = lastSelectedModel || models[0]?.id || 'gpt-4o';
-        const conv = await createConversation(model, cwd);
+        const conv = await createConversationMutation.mutateAsync({ model, cwd });
         useAppStore.getState().materializeTabConversation(activeTabId, conv.id);
         setActiveConversationId(conv.id);
-        useAppStore.getState().addConversation(conv);
       }
 
       let fileRefs: Array<{ id: string; originalName: string; mimeType: string; size: number; path: string }> | undefined;
@@ -481,7 +466,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
 
       sendMessage(activeTabId, text, fileRefs, contextFiles);
     },
-    [activeTabId, sendMessage, lastSelectedModel, models, createConversation, cwd, setActiveConversationId, sendBashCommand, conversations],
+    [activeTabId, sendMessage, lastSelectedModel, models, createConversationMutation, cwd, setActiveConversationId, sendBashCommand, conversations],
   );
 
   const handleBashSend = useCallback(
@@ -492,10 +477,9 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       let tab = useAppStore.getState().tabs[activeTabId];
       if (tab && tab.conversationId === null) {
         const model = lastSelectedModel || models[0]?.id || 'gpt-4o';
-        const conv = await createConversation(model, cwd);
+        const conv = await createConversationMutation.mutateAsync({ model, cwd });
         useAppStore.getState().materializeTabConversation(activeTabId, conv.id);
         setActiveConversationId(conv.id);
-        useAppStore.getState().addConversation(conv);
         tab = useAppStore.getState().tabs[activeTabId];
       }
 
@@ -504,7 +488,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       );
       sendBashCommand(command, conv?.cwd || cwd, tab?.conversationId || undefined);
     },
-    [activeTabId, sendBashCommand, conversations, cwd, lastSelectedModel, models, createConversation, setActiveConversationId],
+    [activeTabId, sendBashCommand, conversations, cwd, lastSelectedModel, models, createConversationMutation, setActiveConversationId],
   );
 
   const handleAbort = useCallback(() => {
@@ -525,10 +509,10 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       setLastSelectedModel(modelId);
       const convId = getActiveConversationId();
       if (convId) {
-        updateConversation(convId, { model: modelId });
+        updateConversationMutation.mutate({ id: convId, updates: { model: modelId } });
       }
     },
-    [getActiveConversationId, updateConversation, setLastSelectedModel],
+    [getActiveConversationId, updateConversationMutation, setLastSelectedModel],
   );
 
   const handleExecutePlan = useCallback(
@@ -556,9 +540,9 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       setCwd(newCwd);
       const convId = getActiveConversationId();
       if (!convId) return;
-      await updateConversation(convId, { cwd: newCwd, sdkSessionId: null });
+      await updateConversationMutation.mutateAsync({ id: convId, updates: { cwd: newCwd, sdkSessionId: null } });
     },
-    [getActiveConversationId, updateConversation],
+    [getActiveConversationId, updateConversationMutation],
   );
 
   // WebSocket reconnect: re-subscribe to all active streams
@@ -586,6 +570,12 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     if (activeTabId) {
       useAppStore.getState().clearTabStreaming(activeTabId);
       useAppStore.getState().setTabMessages(activeTabId, []);
+      useAppStore.getState().clearPendingMessages(activeTabId);
+      // Also clear the TanStack Query cache for this conversation
+      const tab = useAppStore.getState().tabs[activeTabId];
+      if (tab?.conversationId) {
+        clearMessagesCache(tab.conversationId);
+      }
     }
   }, [activeTabId]);
 
@@ -638,7 +628,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       useAppStore.getState().setTabPlanMode(tabId, !tab.planMode);
     },
     onToggleOpenSpec: () => {
-      if (!useAppStore.getState().settings?.openspecEnabled) return;
+      if (!useAppStore.getState().openspecEnabled) return;
       const tid = useAppStore.getState().activeTabId;
       if (!tid) return;
       const current = useAppStore.getState().tabs[tid]?.openspecPanelOpen ?? false;
@@ -882,7 +872,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
                 }
               }}
               onExecutePlan={handleExecutePlan}
-              onCronSaved={refreshConversations}
+              onCronSaved={() => invalidateConversations()}
             />
           </div>
 

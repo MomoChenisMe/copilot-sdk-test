@@ -37,6 +37,7 @@ const { mockSession, mockSessionManager, mockRepo } = vi.hoisted(() => {
     abortMessage: vi.fn().mockResolvedValue(undefined),
     setMode: vi.fn().mockResolvedValue(undefined),
     readPlan: vi.fn().mockResolvedValue({ exists: false, content: null }),
+    updatePlan: vi.fn().mockResolvedValue(undefined),
   };
 
   const _mockRepo = {
@@ -85,6 +86,7 @@ function clearMocks() {
   mockSessionManager.abortMessage.mockClear().mockResolvedValue(undefined);
   mockSessionManager.setMode.mockClear().mockResolvedValue(undefined);
   mockSessionManager.readPlan.mockClear().mockResolvedValue({ exists: false, content: null });
+  mockSessionManager.updatePlan.mockClear().mockResolvedValue(undefined);
   mockRepo.getById.mockClear();
   mockRepo.update.mockClear();
   mockRepo.addMessage.mockClear();
@@ -161,6 +163,19 @@ describe('StreamManager', () => {
         undefined,
       );
       expect(sm.getActiveStreamIds()).toContain('conv-1');
+    });
+
+    it('should inject onPostToolUse hook into session options', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+      });
+
+      const sessionOpts = mockSessionManager.getOrCreateSession.mock.calls[0][0];
+      expect(sessionOpts.hooks).toBeDefined();
+      expect(typeof sessionOpts.hooks.onPostToolUse).toBe('function');
     });
 
     it('should throw if stream already exists for conversation', async () => {
@@ -2236,6 +2251,175 @@ describe('StreamManager', () => {
       fireEvent('session.plan_changed', { data: { operation: 'create' } });
       await tick();
 
+      expect(mockWritePlanFile).not.toHaveBeenCalled();
+    });
+
+    it('should sync accumulated content to SDK via updatePlan and write locally (plan mode)', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'plan something',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+        mode: 'plan',
+      });
+      await tick();
+
+      const received: WsMessage[] = [];
+      sm.subscribe('conv-1', (msg) => received.push(msg));
+
+      // Simulate the model outputting plan content (no plan_changed event from SDK)
+      fireEvent('assistant.message', {
+        messageId: 'msg-plan-1',
+        content: '# Refactor Plan\n\n## Context\nNeed to refactor the auth module.',
+      });
+
+      // Idle fires — triggers finishStream since sendComplete is already true
+      fireEvent('session.idle', {});
+      await tick();
+
+      // Should have called updatePlan to sync content to SDK's plan.md
+      expect(mockSessionManager.updatePlan).toHaveBeenCalledWith(
+        mockSession,
+        '# Refactor Plan\n\n## Context\nNeed to refactor the auth module.',
+      );
+
+      // Should also write locally via writePlanFile
+      expect(mockWritePlanFile).toHaveBeenCalledWith(
+        '/tmp',
+        '# Refactor Plan\n\n## Context\nNeed to refactor the auth module.',
+        'test-topic',
+      );
+
+      // The idle event should include planArtifact
+      const idleMsg = received.find((m) => m.type === 'copilot:idle');
+      expect(idleMsg).toBeDefined();
+      const idleData = idleMsg!.data as any;
+      expect(idleData.planFilePath).toBe('/tmp/.codeforge/plans/2026-02-19-plan.md');
+      expect(idleData.planArtifact).toBeDefined();
+      expect(idleData.planArtifact.content).toBe('# Refactor Plan\n\n## Context\nNeed to refactor the auth module.');
+    });
+
+    it('should still write locally even when updatePlan fails', async () => {
+      mockSessionManager.updatePlan.mockRejectedValue(new Error('RPC error'));
+
+      await sm.startStream('conv-1', {
+        prompt: 'plan something',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+        mode: 'plan',
+      });
+      await tick();
+
+      const received: WsMessage[] = [];
+      sm.subscribe('conv-1', (msg) => received.push(msg));
+
+      fireEvent('assistant.message', {
+        messageId: 'msg-plan-1',
+        content: '# Plan content',
+      });
+
+      fireEvent('session.idle', {});
+      await tick();
+
+      // updatePlan was attempted
+      expect(mockSessionManager.updatePlan).toHaveBeenCalled();
+
+      // Local write still happens despite RPC failure
+      expect(mockWritePlanFile).toHaveBeenCalledWith('/tmp', '# Plan content', 'test-topic');
+
+      const idleMsg = received.find((m) => m.type === 'copilot:idle');
+      expect(idleMsg).toBeDefined();
+      expect((idleMsg!.data as any).planArtifact).toBeDefined();
+    });
+
+    it('should NOT sync/write when plan_changed already provided plan data', async () => {
+      mockSessionManager.readPlan.mockResolvedValue({
+        exists: true,
+        content: '# SDK Plan\nFrom SDK',
+      });
+
+      await sm.startStream('conv-1', {
+        prompt: 'plan something',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+        mode: 'plan',
+      });
+      await tick();
+
+      const received: WsMessage[] = [];
+      sm.subscribe('conv-1', (msg) => received.push(msg));
+
+      // SDK plan_changed fires first
+      fireEvent('session.plan_changed', { data: { operation: 'create' } });
+      await tick();
+
+      // Model also outputs content
+      fireEvent('assistant.message', {
+        messageId: 'msg-plan-2',
+        content: 'Here is my plan...',
+      });
+
+      fireEvent('session.idle', {});
+      await tick();
+
+      // updatePlan should NOT be called (plan_changed already handled it)
+      expect(mockSessionManager.updatePlan).not.toHaveBeenCalled();
+
+      // writePlanFile called only ONCE (from plan_changed listener), not from finishStream
+      expect(mockWritePlanFile).toHaveBeenCalledTimes(1);
+      expect(mockWritePlanFile).toHaveBeenCalledWith(
+        '/tmp',
+        '# SDK Plan\nFrom SDK',
+        'test-topic',
+      );
+    });
+
+    it('should NOT sync/write when accumulated content is empty', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'plan something',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+        mode: 'plan',
+      });
+      await tick();
+
+      const received: WsMessage[] = [];
+      sm.subscribe('conv-1', (msg) => received.push(msg));
+
+      // No content messages, just idle
+      fireEvent('session.idle', {});
+      await tick();
+
+      expect(mockSessionManager.updatePlan).not.toHaveBeenCalled();
+      expect(mockWritePlanFile).not.toHaveBeenCalled();
+
+      const idleMsg = received.find((m) => m.type === 'copilot:idle');
+      expect(idleMsg).toBeDefined();
+      expect((idleMsg!.data as any).planArtifact).toBeUndefined();
+    });
+
+    it('should NOT sync/write in act mode even with accumulated content', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'do something',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+        mode: 'act',
+      });
+      await tick();
+
+      fireEvent('assistant.message', {
+        messageId: 'msg-act-1',
+        content: '# Some output that looks like a plan',
+      });
+
+      fireEvent('session.idle', {});
+      await tick();
+
+      expect(mockSessionManager.updatePlan).not.toHaveBeenCalled();
       expect(mockWritePlanFile).not.toHaveBeenCalled();
     });
   });

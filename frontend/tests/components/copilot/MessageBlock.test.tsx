@@ -48,6 +48,12 @@ vi.mock('../../../src/components/copilot/ToolResultBlock', () => ({
   ),
 }));
 
+// Mock useSkillsQuery
+const mockUseSkillsQuery = vi.fn().mockReturnValue({ data: [], isLoading: false, error: null });
+vi.mock('../../../src/hooks/queries/useSkillsQuery', () => ({
+  useSkillsQuery: (...args: unknown[]) => mockUseSkillsQuery(...args),
+}));
+
 const makeMessage = (overrides: Partial<Message> = {}): Message => ({
   id: 'msg-1',
   conversationId: 'conv-1',
@@ -601,10 +607,12 @@ describe('MessageBlock', () => {
   // --- Collapsible skill description (F8) ---
 
   it('renders collapsible skill description when command matches a skill', () => {
-    useAppStore.setState({
-      skills: [
+    mockUseSkillsQuery.mockReturnValue({
+      data: [
         { name: 'brainstorming', description: 'Brainstorm ideas collaboratively', content: '...', builtin: false },
       ],
+      isLoading: false,
+      error: null,
     });
 
     render(
@@ -622,10 +630,12 @@ describe('MessageBlock', () => {
   });
 
   it('does NOT render skill details when command does not match any skill', () => {
-    useAppStore.setState({
-      skills: [
+    mockUseSkillsQuery.mockReturnValue({
+      data: [
         { name: 'brainstorming', description: 'Brainstorm ideas', content: '...', builtin: false },
       ],
+      isLoading: false,
+      error: null,
     });
 
     render(
@@ -641,10 +651,12 @@ describe('MessageBlock', () => {
   });
 
   it('skill details is collapsed by default', () => {
-    useAppStore.setState({
-      skills: [
+    mockUseSkillsQuery.mockReturnValue({
+      data: [
         { name: 'brainstorming', description: 'Brainstorm ideas', content: '...', builtin: false },
       ],
+      isLoading: false,
+      error: null,
     });
 
     render(

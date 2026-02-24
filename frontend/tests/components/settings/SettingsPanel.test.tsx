@@ -68,6 +68,12 @@ vi.mock('../../../src/lib/settings-api', () => ({
   },
 }));
 
+const mockUseModelsQuery = vi.fn().mockReturnValue({ data: [], isLoading: false, error: null });
+vi.mock('../../../src/hooks/queries/useModelsQuery', () => ({
+  useModelsQuery: (...args: unknown[]) => mockUseModelsQuery(...args),
+}));
+
+import { createWrapper } from '../../../src/test-utils/query-wrapper';
 import { apiGet, configApi, memoryApi as autoMemoryApi } from '../../../src/lib/api';
 import { promptsApi, skillsApi } from '../../../src/lib/prompts-api';
 import { settingsApi } from '../../../src/lib/settings-api';
@@ -132,6 +138,8 @@ function setupMockDefaults() {
   (settingsApi.patch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
 }
 
+const QueryWrapper = createWrapper();
+
 describe('SettingsPanel', () => {
   const defaultProps = {
     open: true,
@@ -144,22 +152,23 @@ describe('SettingsPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setupMockDefaults();
+    mockUseModelsQuery.mockReturnValue({ data: [], isLoading: false, error: null });
   });
 
   // === Structure ===
   describe('structure', () => {
     it('should render when open is true', () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       expect(screen.getByTestId('settings-panel')).toBeTruthy();
     });
 
     it('should not render when open is false', () => {
-      render(<SettingsPanel {...defaultProps} open={false} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} open={false} /></QueryWrapper>);
       expect(screen.queryByTestId('settings-panel')).toBeNull();
     });
 
     it('should render all category tabs using i18n keys (no presets)', () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       // Tab names should come from t('settings.tabs.*') — en.json values
       expect(screen.getByRole('tab', { name: /general/i })).toBeTruthy();
       expect(screen.getByRole('tab', { name: /system prompt/i })).toBeTruthy();
@@ -173,40 +182,40 @@ describe('SettingsPanel', () => {
     });
 
     it('should default to System Prompt tab', () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       const systemPromptTab = screen.getByRole('tab', { name: /system prompt/i });
       expect(systemPromptTab.getAttribute('aria-selected')).toBe('true');
     });
 
     it('should render panel title using i18n key', () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       // Title should be t('settings.title') = "Settings"
       expect(screen.getByText('Settings')).toBeTruthy();
     });
 
     it('should call onClose when back button is clicked', () => {
       const onClose = vi.fn();
-      render(<SettingsPanel {...defaultProps} onClose={onClose} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} onClose={onClose} /></QueryWrapper>);
       fireEvent.click(screen.getByTestId('settings-back-button'));
       expect(onClose).toHaveBeenCalledOnce();
     });
 
     it('should call onClose when Escape key is pressed', () => {
       const onClose = vi.fn();
-      render(<SettingsPanel {...defaultProps} onClose={onClose} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} onClose={onClose} /></QueryWrapper>);
       fireEvent.keyDown(document, { key: 'Escape' });
       expect(onClose).toHaveBeenCalledOnce();
     });
 
     it('should render full-page overlay with fixed positioning', () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       const panel = screen.getByTestId('settings-panel');
       expect(panel.className).toContain('fixed');
       expect(panel.className).toContain('inset-0');
     });
 
     it('should render left sidebar navigation', () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       expect(screen.getByTestId('settings-sidebar')).toBeTruthy();
     });
   });
@@ -214,7 +223,7 @@ describe('SettingsPanel', () => {
   // === i18n ===
   describe('i18n', () => {
     it('should use translated text for Save buttons (not hardcoded)', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       // Click Profile tab to see Save button
       fireEvent.click(screen.getByRole('tab', { name: /profile/i }));
       await waitFor(() => {
@@ -225,7 +234,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should show translated toast on save success', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /profile/i }));
 
       await waitFor(() => {
@@ -244,7 +253,7 @@ describe('SettingsPanel', () => {
       const { promptsApi } = await import('../../../src/lib/prompts-api');
       (promptsApi.putProfile as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('fail'));
 
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /profile/i }));
 
       await waitFor(() => {
@@ -260,14 +269,14 @@ describe('SettingsPanel', () => {
     });
 
     it('should show translated loading text', () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       // During initial load, t('settings.loading') = "Loading..."
       fireEvent.click(screen.getByRole('tab', { name: /profile/i }));
       expect(screen.getByText('Loading...')).toBeTruthy();
     });
 
     it('should show translated Memory section with Auto Memory', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
 
       await waitFor(() => {
@@ -281,7 +290,7 @@ describe('SettingsPanel', () => {
   // === General Tab ===
   describe('General tab', () => {
     it('should render language toggle button showing current language', () => {
-      render(<SettingsPanel {...defaultProps} language="en" />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} language="en" /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /general/i }));
       expect(screen.getByTestId('language-toggle')).toBeTruthy();
       expect(screen.getByTestId('language-toggle').textContent).toContain('English');
@@ -289,28 +298,28 @@ describe('SettingsPanel', () => {
 
     it('should call onLanguageToggle when language button is clicked', () => {
       const onLanguageToggle = vi.fn();
-      render(<SettingsPanel {...defaultProps} onLanguageToggle={onLanguageToggle} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} onLanguageToggle={onLanguageToggle} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /general/i }));
       fireEvent.click(screen.getByTestId('language-toggle'));
       expect(onLanguageToggle).toHaveBeenCalledOnce();
     });
 
     it('should render logout button', () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /general/i }));
       expect(screen.getByTestId('logout-button')).toBeTruthy();
     });
 
     it('should call onLogout when logout button is clicked', () => {
       const onLogout = vi.fn();
-      render(<SettingsPanel {...defaultProps} onLogout={onLogout} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} onLogout={onLogout} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /general/i }));
       fireEvent.click(screen.getByTestId('logout-button'));
       expect(onLogout).toHaveBeenCalledOnce();
     });
 
     it('should display zh-TW label when language is zh-TW', () => {
-      render(<SettingsPanel {...defaultProps} language="zh-TW" />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} language="zh-TW" /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /general/i }));
       expect(screen.getByTestId('language-toggle').textContent).toContain('繁體中文');
     });
@@ -321,7 +330,7 @@ describe('SettingsPanel', () => {
   describe('SDK version display (General tab)', () => {
     it('should display SDK version when available', async () => {
       (apiGet as ReturnType<typeof vi.fn>).mockResolvedValue({ currentVersion: '1.2.3' });
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /general/i }));
       await waitFor(() => {
         expect(screen.getByTestId('sdk-version').textContent).toBe('v1.2.3');
@@ -330,7 +339,7 @@ describe('SettingsPanel', () => {
 
     it('should display fallback text when version is null', async () => {
       (apiGet as ReturnType<typeof vi.fn>).mockResolvedValue({ currentVersion: null });
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /general/i }));
       await waitFor(() => {
         expect(screen.getByTestId('sdk-version').textContent).toBe('Unknown');
@@ -339,7 +348,7 @@ describe('SettingsPanel', () => {
 
     it('should not crash when API call fails', async () => {
       (apiGet as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Network error'));
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /general/i }));
       // Should show fallback, not crash
       await waitFor(() => {
@@ -351,7 +360,7 @@ describe('SettingsPanel', () => {
   // === System Prompt Tab ===
   describe('System Prompt tab', () => {
     it('should load and display system prompt content', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       // System Prompt is the default tab
       await waitFor(() => {
         expect(screen.getByDisplayValue('# System Prompt')).toBeTruthy();
@@ -360,7 +369,7 @@ describe('SettingsPanel', () => {
 
     it('should save system prompt content on save button click', async () => {
       const { promptsApi } = await import('../../../src/lib/prompts-api');
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
 
       await waitFor(() => {
         expect(screen.getByDisplayValue('# System Prompt')).toBeTruthy();
@@ -377,7 +386,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should show saved toast after successful save', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
 
       await waitFor(() => {
         expect(screen.getByDisplayValue('# System Prompt')).toBeTruthy();
@@ -391,7 +400,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should render Reset to Default button', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
 
       await waitFor(() => {
         expect(screen.getByTestId('reset-system-prompt')).toBeTruthy();
@@ -402,7 +411,7 @@ describe('SettingsPanel', () => {
 
     it('should open ConfirmDialog when reset is clicked and execute reset on confirm', async () => {
       const { promptsApi } = await import('../../../src/lib/prompts-api');
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
 
       await waitFor(() => {
         expect(screen.getByTestId('reset-system-prompt')).toBeTruthy();
@@ -423,7 +432,7 @@ describe('SettingsPanel', () => {
 
     it('should NOT reset system prompt when ConfirmDialog is cancelled', async () => {
       const { promptsApi } = await import('../../../src/lib/prompts-api');
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
 
       await waitFor(() => {
         expect(screen.getByTestId('reset-system-prompt')).toBeTruthy();
@@ -439,7 +448,7 @@ describe('SettingsPanel', () => {
 
     it('should NOT use window.confirm for system prompt reset', async () => {
       const confirmSpy = vi.spyOn(window, 'confirm');
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
 
       await waitFor(() => {
         expect(screen.getByTestId('reset-system-prompt')).toBeTruthy();
@@ -452,7 +461,7 @@ describe('SettingsPanel', () => {
 
     // --- Act Mode Prompt section ---
     it('should display Act Mode Prompt section with heading and textarea', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       await waitFor(() => {
         expect(screen.getByTestId('act-mode-heading')).toBeTruthy();
         expect(screen.getByTestId('act-prompt-textarea')).toBeTruthy();
@@ -461,7 +470,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should load act prompt content', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       await waitFor(() => {
         expect(screen.getByDisplayValue('# Act Prompt')).toBeTruthy();
       });
@@ -469,7 +478,7 @@ describe('SettingsPanel', () => {
 
     it('should save act prompt on save button click', async () => {
       const { promptsApi } = await import('../../../src/lib/prompts-api');
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
 
       await waitFor(() => {
         expect(screen.getByDisplayValue('# Act Prompt')).toBeTruthy();
@@ -487,7 +496,7 @@ describe('SettingsPanel', () => {
 
     it('should reset act prompt when confirmed', async () => {
       const { promptsApi } = await import('../../../src/lib/prompts-api');
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
 
       await waitFor(() => {
         expect(screen.getByTestId('reset-act-prompt')).toBeTruthy();
@@ -506,7 +515,7 @@ describe('SettingsPanel', () => {
 
     // --- Plan Mode Prompt section ---
     it('should display Plan Mode Prompt section with heading and textarea', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       await waitFor(() => {
         expect(screen.getByTestId('plan-mode-heading')).toBeTruthy();
         expect(screen.getByTestId('plan-prompt-textarea')).toBeTruthy();
@@ -515,7 +524,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should load plan prompt content', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       await waitFor(() => {
         expect(screen.getByDisplayValue('# Plan Prompt')).toBeTruthy();
       });
@@ -523,7 +532,7 @@ describe('SettingsPanel', () => {
 
     it('should save plan prompt on save button click', async () => {
       const { promptsApi } = await import('../../../src/lib/prompts-api');
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
 
       await waitFor(() => {
         expect(screen.getByDisplayValue('# Plan Prompt')).toBeTruthy();
@@ -541,7 +550,7 @@ describe('SettingsPanel', () => {
 
     it('should reset plan prompt when confirmed', async () => {
       const { promptsApi } = await import('../../../src/lib/prompts-api');
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
 
       await waitFor(() => {
         expect(screen.getByTestId('reset-plan-prompt')).toBeTruthy();
@@ -562,7 +571,7 @@ describe('SettingsPanel', () => {
   // === Profile Tab ===
   describe('Profile tab', () => {
     it('should load and display profile content', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /profile/i }));
       await waitFor(() => {
         expect(screen.getByDisplayValue('# Profile content')).toBeTruthy();
@@ -571,7 +580,7 @@ describe('SettingsPanel', () => {
 
     it('should save profile content on save button click', async () => {
       const { promptsApi } = await import('../../../src/lib/prompts-api');
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /profile/i }));
 
       await waitFor(() => {
@@ -593,7 +602,7 @@ describe('SettingsPanel', () => {
   // === OpenSpec Tab ===
   describe('OpenSpec tab', () => {
     it('should render OpenSpec SDD toggle when tab is clicked', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /openspec/i }));
 
       await waitFor(() => {
@@ -602,7 +611,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should show OpenSpec SDD toggle as OFF by default', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /openspec/i }));
 
       await waitFor(() => {
@@ -612,7 +621,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should call configApi.putOpenspecSdd when toggle is clicked', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /openspec/i }));
 
       await waitFor(() => {
@@ -629,7 +638,7 @@ describe('SettingsPanel', () => {
     it('should show OpenSpec SDD textarea when toggle is enabled', async () => {
       (configApi.getOpenspecSdd as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ enabled: true });
 
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /openspec/i }));
 
       await waitFor(() => {
@@ -638,7 +647,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should NOT show OpenSpec SDD textarea when toggle is disabled', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /openspec/i }));
 
       await waitFor(() => {
@@ -662,7 +671,7 @@ describe('SettingsPanel', () => {
 
       const batchSpy = vi.spyOn(useAppStore.getState(), 'batchSetSkillsDisabled');
 
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /openspec/i }));
 
       await waitFor(() => {
@@ -704,7 +713,7 @@ describe('SettingsPanel', () => {
 
       const batchSpy = vi.spyOn(useAppStore.getState(), 'batchSetSkillsDisabled');
 
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /openspec/i }));
 
       await waitFor(() => {
@@ -730,7 +739,7 @@ describe('SettingsPanel', () => {
     it('should sync global store settings.openspecEnabled when toggle is clicked', async () => {
       (configApi.getOpenspecSdd as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ enabled: false });
 
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /openspec/i }));
 
       await waitFor(() => {
@@ -745,14 +754,14 @@ describe('SettingsPanel', () => {
       });
 
       // Global store should be updated
-      expect(useAppStore.getState().settings?.openspecEnabled).toBe(true);
+      expect(useAppStore.getState().openspecEnabled).toBe(true);
     });
 
     it('should save OpenSpec SDD content when save button is clicked', async () => {
       const { promptsApi } = await import('../../../src/lib/prompts-api');
       (configApi.getOpenspecSdd as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ enabled: true });
 
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /openspec/i }));
 
       await waitFor(() => {
@@ -778,7 +787,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should list skills with names and descriptions', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
       await waitFor(() => {
         expect(screen.getByTestId('skill-expand-code-review')).toBeTruthy();
@@ -790,7 +799,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should show toggle as enabled for skills not in disabledSkills', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
       await waitFor(() => {
         const toggle = screen.getByTestId('skill-toggle-code-review');
@@ -799,7 +808,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should show toggle as disabled for skills in disabledSkills', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
       await waitFor(() => {
         const toggle = screen.getByTestId('skill-toggle-debugging');
@@ -809,7 +818,7 @@ describe('SettingsPanel', () => {
 
 
     it('should expand skill for editing with description and content', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
       await waitFor(() => {
         expect(screen.getByTestId('skill-expand-code-review')).toBeTruthy();
@@ -825,7 +834,7 @@ describe('SettingsPanel', () => {
 
     it('should delete skill with confirmation dialog', async () => {
       const { skillsApi } = await import('../../../src/lib/prompts-api');
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
       await waitFor(() => {
         expect(screen.getByTestId('skill-delete-code-review')).toBeTruthy();
@@ -842,7 +851,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should toggle between Edit and Preview mode in expanded skill', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
       await waitFor(() => {
         expect(screen.getByTestId('skill-expand-code-review')).toBeTruthy();
@@ -876,7 +885,7 @@ describe('SettingsPanel', () => {
       const { skillsApi } = await import('../../../src/lib/prompts-api');
       (skillsApi.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ skills: [] });
 
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
       await waitFor(() => {
         expect(screen.getByText('No skills yet. Create one to get started.')).toBeTruthy();
@@ -887,7 +896,7 @@ describe('SettingsPanel', () => {
     // --- Builtin / User skill sections ---
 
     it('should show system skills section with System badge', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
       await waitFor(() => {
         expect(screen.getByTestId('system-skills-section')).toBeTruthy();
@@ -896,7 +905,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should NOT show edit/delete buttons for builtin skills', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
       await waitFor(() => {
         expect(screen.getByTestId('skill-expand-tdd-workflow')).toBeTruthy();
@@ -911,7 +920,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should show toggle for builtin skills', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
       await waitFor(() => {
         expect(screen.getByTestId('skill-toggle-tdd-workflow')).toBeTruthy();
@@ -923,7 +932,7 @@ describe('SettingsPanel', () => {
   describe('ToggleSwitch integration', () => {
     it('should render green toggle for enabled skill', async () => {
       useAppStore.setState({ disabledSkills: [] });
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
       await waitFor(() => {
         const toggle = screen.getByTestId('skill-toggle-code-review');
@@ -933,7 +942,7 @@ describe('SettingsPanel', () => {
 
     it('should render neutral toggle for disabled skill', async () => {
       useAppStore.setState({ disabledSkills: ['code-review'] });
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
       await waitFor(() => {
         const toggle = screen.getByTestId('skill-toggle-code-review');
@@ -945,7 +954,7 @@ describe('SettingsPanel', () => {
   // === API Keys Tab (integration) ===
   describe('API Keys tab', () => {
     it('should render API key input when API Keys tab is clicked', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /websearch/i }));
       await waitFor(() => {
         expect(screen.getByTestId('brave-api-key-input')).toBeTruthy();
@@ -955,7 +964,7 @@ describe('SettingsPanel', () => {
 
   describe('LLM Memory Intelligence (Memory tab)', () => {
     it('should show LLM quality gate toggle in Memory tab', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
       await waitFor(() => {
         expect(screen.getByTestId('llm-gating-toggle')).toBeTruthy();
@@ -963,7 +972,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should show LLM extraction toggle in Memory tab', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
       await waitFor(() => {
         expect(screen.getByTestId('llm-extraction-toggle')).toBeTruthy();
@@ -971,7 +980,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should show LLM compaction toggle in Memory tab', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
       await waitFor(() => {
         expect(screen.getByTestId('llm-compaction-toggle')).toBeTruthy();
@@ -979,7 +988,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should show compact button in Memory tab', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
       await waitFor(() => {
         expect(screen.getByTestId('compact-memory-button')).toBeTruthy();
@@ -987,7 +996,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should toggle LLM gating and update config', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
       await waitFor(() => {
         expect(screen.getByTestId('llm-gating-toggle')).toBeTruthy();
@@ -1005,7 +1014,7 @@ describe('SettingsPanel', () => {
 
   describe('LLM Memory UI Enhancement (Memory tab)', () => {
     it('should show description text under each LLM toggle', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
       await waitFor(() => {
         expect(screen.getByTestId('llm-gating-desc')).toBeTruthy();
@@ -1021,7 +1030,7 @@ describe('SettingsPanel', () => {
         llmExtractionEnabled: false, llmExtractionModel: 'gpt-4o-mini', llmExtractionMaxMessages: 20,
         llmCompactionEnabled: false, llmCompactionModel: 'gpt-4o-mini', llmCompactionFactThreshold: 30,
       });
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
       await waitFor(() => {
         expect(screen.getByTestId('llm-gating-model')).toBeTruthy();
@@ -1029,7 +1038,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should NOT show model selector when LLM gating is disabled', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
       await waitFor(() => {
         expect(screen.getByTestId('llm-gating-toggle')).toBeTruthy();
@@ -1038,9 +1047,12 @@ describe('SettingsPanel', () => {
     });
 
     it('should update config when model is changed', async () => {
-      // Set up store with models
-      const { useAppStore } = await import('../../../src/store/index');
-      useAppStore.setState({ models: [{ id: 'gpt-4o-mini', name: 'GPT-4o Mini' }, { id: 'gpt-4o', name: 'GPT-4o' }] });
+      // Set up models via useModelsQuery mock
+      mockUseModelsQuery.mockReturnValue({
+        data: [{ id: 'gpt-4o-mini', name: 'GPT-4o Mini' }, { id: 'gpt-4o', name: 'GPT-4o' }],
+        isLoading: false,
+        error: null,
+      });
 
       (autoMemoryApi.getConfig as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         enabled: true, autoExtract: true, flushThreshold: 0.75, extractIntervalSeconds: 60, minNewMessages: 4,
@@ -1048,7 +1060,7 @@ describe('SettingsPanel', () => {
         llmExtractionEnabled: false, llmExtractionModel: 'gpt-4o-mini', llmExtractionMaxMessages: 20,
         llmCompactionEnabled: false, llmCompactionModel: 'gpt-4o-mini', llmCompactionFactThreshold: 30,
       });
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
       await waitFor(() => {
         expect(screen.getByTestId('llm-gating-model')).toBeTruthy();
@@ -1070,7 +1082,7 @@ describe('SettingsPanel', () => {
         llmExtractionEnabled: true, llmExtractionModel: 'gpt-4o-mini', llmExtractionMaxMessages: 20,
         llmCompactionEnabled: true, llmCompactionModel: 'gpt-4o-mini', llmCompactionFactThreshold: 30,
       });
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
       await waitFor(() => {
         expect(screen.getByTestId('llm-gating-model')).toBeTruthy();
@@ -1083,13 +1095,13 @@ describe('SettingsPanel', () => {
   // === LLM Language Section ===
   describe('LLM Language Section (General tab)', () => {
     it('should render LLM language dropdown in General tab', () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /general/i }));
       expect(screen.getByText(/LLM Response Language|LLM 回應語言/i)).toBeTruthy();
     });
 
     it('should show custom input when "Custom..." is selected', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /general/i }));
 
       // Open the CustomSelect dropdown by clicking on it
@@ -1111,7 +1123,7 @@ describe('SettingsPanel', () => {
       // Pre-set a custom value so input shows (customMode initializes to true)
       useAppStore.setState({ llmLanguage: 'Bahasa Indonesia' });
 
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /general/i }));
 
       await waitFor(() => {
@@ -1129,7 +1141,7 @@ describe('SettingsPanel', () => {
     it('should show custom input when llmLanguage is a non-predefined value', () => {
       useAppStore.setState({ llmLanguage: 'Français custom' });
 
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /general/i }));
 
       // Custom input should be visible because 'Français custom' is not a predefined option
@@ -1141,7 +1153,7 @@ describe('SettingsPanel', () => {
     it('should hide custom input when switching from custom to predefined', async () => {
       useAppStore.setState({ llmLanguage: 'Some custom lang' });
 
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /general/i }));
 
       // Custom input should initially be visible
@@ -1163,7 +1175,7 @@ describe('SettingsPanel', () => {
 
   describe('Auto Memory (Memory tab)', () => {
     it('should show auto-memory section in Memory tab', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
       await waitFor(() => {
         expect(screen.getByTestId('auto-memory-section')).toBeTruthy();
@@ -1171,7 +1183,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should display MEMORY.md content in editor', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
       await waitFor(() => {
         expect(screen.getByTestId('auto-memory-editor')).toBeTruthy();
@@ -1180,7 +1192,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should save MEMORY.md on save button click', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
       await waitFor(() => {
         expect(screen.getByTestId('auto-memory-editor')).toBeTruthy();
@@ -1195,7 +1207,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should show auto-extract toggle', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
       await waitFor(() => {
         expect(screen.getByTestId('auto-extract-toggle')).toBeTruthy();
@@ -1203,7 +1215,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should show memory stats', async () => {
-      render(<SettingsPanel {...defaultProps} />);
+      render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
       await waitFor(() => {
         expect(screen.getByTestId('memory-stats')).toBeTruthy();

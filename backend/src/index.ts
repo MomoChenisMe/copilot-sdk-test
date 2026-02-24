@@ -45,8 +45,6 @@ import { BuiltinSkillStore } from './skills/builtin-store.js';
 import { createSkillsRoutes } from './skills/routes.js';
 import { createUploadRoutes } from './upload/routes.js';
 import { createSelfControlTools } from './copilot/self-control-tools.js';
-import { TaskRepository } from './task/repository.js';
-import { createTaskTools } from './copilot/tools/task-tools.js';
 import { createConfigRoutes, readBraveApiKey } from './config-routes.js';
 import { SettingsStore } from './settings/settings-store.js';
 import { createSettingsRoutes } from './settings/routes.js';
@@ -310,11 +308,6 @@ export function createApp() {
     skillStore,
     builtinSkillStore,
   });
-
-  // Add task tools
-  const taskRepo = new TaskRepository(db);
-  const taskTools = createTaskTools(taskRepo, StreamManager.sessionConversationMap);
-  selfControlTools.push(...taskTools);
 
   // Add memory tools
   if (memoryConfig.enabled) {

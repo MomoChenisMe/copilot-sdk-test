@@ -168,7 +168,7 @@ describe('prompts routes', () => {
       const res = await fetch(`${baseUrl}/api/prompts/plan-prompt`);
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.content).toContain('Phase 1');
+      expect(body.content).toContain('Plan Structure');
     });
   });
 
@@ -194,9 +194,9 @@ describe('prompts routes', () => {
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.content).toContain('Phase 1');
+      expect(body.content).toContain('Plan Structure');
       const fileContent = fs.readFileSync(path.join(tmpDir, 'PLAN_PROMPT.md'), 'utf-8');
-      expect(fileContent).toContain('Phase 1');
+      expect(fileContent).toContain('Plan Structure');
     });
   });
 

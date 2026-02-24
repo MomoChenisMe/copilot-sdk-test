@@ -12,6 +12,7 @@ import type { MemoryConfig, MemoryStats } from '../../lib/api';
 import { useAppStore } from '../../store';
 import type { ModelInfo } from '../../store';
 import { useModelsQuery } from '../../hooks/queries/useModelsQuery';
+import { invalidateSkills as invalidateSkillsCache } from '../../lib/ws-query-bridge';
 import { Markdown } from '../shared/Markdown';
 import { CustomSelect } from '../shared/CustomSelect';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
@@ -718,7 +719,7 @@ function OpenSpecTab() {
       const { configApi } = await import('../../lib/api');
       await configApi.putOpenspecSdd(newEnabled);
       setOpenspecEnabled(newEnabled);
-      useAppStore.getState().setSettings({ openspecEnabled: newEnabled });
+      useAppStore.getState().setOpenspecEnabled(newEnabled);
       if (newEnabled) {
         promptsApi.getOpenspecSdd().then((r) => setOpenspecContent(r.content)).catch(() => {});
       }
@@ -1058,7 +1059,7 @@ function SkillsTab({ onClose }: { onClose?: () => void }) {
     try {
       const r = await skillsApi.list();
       setSkills(r.skills);
-      useAppStore.getState().setSkills(r.skills);
+      invalidateSkillsCache();
     } catch { /* ignore */ }
   }, []);
 
@@ -1077,11 +1078,8 @@ function SkillsTab({ onClose }: { onClose?: () => void }) {
     if (!expandedSkill) return;
     try {
       await skillsApi.put(expandedSkill, editDescription, editContent);
-      setSkills((prev) => {
-        const updated = prev.map((s) => (s.name === expandedSkill ? { ...s, description: editDescription, content: editContent } : s));
-        useAppStore.getState().setSkills(updated);
-        return updated;
-      });
+      setSkills((prev) => prev.map((s) => (s.name === expandedSkill ? { ...s, description: editDescription, content: editContent } : s)));
+      invalidateSkillsCache();
       setToast(t('settings.toast.saved'));
       setTimeout(() => setToast(null), 2000);
     } catch {
@@ -1094,11 +1092,8 @@ function SkillsTab({ onClose }: { onClose?: () => void }) {
     if (!confirmDelete) return;
     try {
       await skillsApi.delete(confirmDelete);
-      setSkills((prev) => {
-        const updated = prev.filter((s) => s.name !== confirmDelete);
-        useAppStore.getState().setSkills(updated);
-        return updated;
-      });
+      setSkills((prev) => prev.filter((s) => s.name !== confirmDelete));
+      invalidateSkillsCache();
       setToast(t('settings.toast.deleted'));
       setTimeout(() => setToast(null), 2000);
     } catch {

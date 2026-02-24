@@ -81,6 +81,11 @@ vi.mock('../../../src/lib/api', () => ({
   },
 }));
 
+vi.mock('../../../src/hooks/queries/useModelsQuery', () => ({
+  useModelsQuery: () => ({ data: [], isLoading: false, error: null }),
+}));
+
+import { createWrapper } from '../../../src/test-utils/query-wrapper';
 import { SettingsPanel } from '../../../src/components/settings/SettingsPanel';
 
 describe('SkillsTab — Upload/URL/AI UI', () => {
@@ -105,8 +110,10 @@ describe('SkillsTab — Upload/URL/AI UI', () => {
     });
   });
 
+  const Wrapper = createWrapper();
+
   async function navigateToSkillsTab() {
-    render(<SettingsPanel {...defaultProps} />);
+    render(<Wrapper><SettingsPanel {...defaultProps} /></Wrapper>);
     fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
     await waitFor(() => {
       expect(screen.getByTestId('skill-install-section')).toBeTruthy();
@@ -194,7 +201,7 @@ describe('SkillsTab — Upload/URL/AI UI', () => {
 
     it('should close settings when AI create is clicked', async () => {
       const onClose = vi.fn();
-      render(<SettingsPanel {...defaultProps} onClose={onClose} />);
+      render(<Wrapper><SettingsPanel {...defaultProps} onClose={onClose} /></Wrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
 
       await waitFor(() => {
@@ -240,7 +247,7 @@ describe('SkillsTab — Upload/URL/AI UI', () => {
 
     it('should show install section when there are no skills (empty state)', async () => {
       mockSkillsApi.list.mockResolvedValueOnce({ skills: [] });
-      render(<SettingsPanel {...defaultProps} />);
+      render(<Wrapper><SettingsPanel {...defaultProps} /></Wrapper>);
       fireEvent.click(screen.getByRole('tab', { name: /skills/i }));
 
       await waitFor(() => {

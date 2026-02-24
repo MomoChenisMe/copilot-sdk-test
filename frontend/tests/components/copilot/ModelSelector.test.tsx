@@ -1,9 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { useAppStore } from '../../../src/store/index';
 import { ModelSelector } from '../../../src/components/copilot/ModelSelector';
 
+// Mock useModelsQuery hook
+const mockUseModelsQuery = vi.fn();
+vi.mock('../../../src/hooks/queries/useModelsQuery', () => ({
+  useModelsQuery: (...args: unknown[]) => mockUseModelsQuery(...args),
+}));
+
 describe('ModelSelector', () => {
+  const defaultModels = [
+    { id: 'gpt-4o', name: 'GPT-4o' },
+    { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5' },
+    { id: 'o4-mini', name: 'o4-mini' },
+  ];
+
   const defaultProps = {
     currentModel: 'gpt-4o',
     onSelect: vi.fn(),
@@ -11,14 +22,10 @@ describe('ModelSelector', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    useAppStore.setState({
-      models: [
-        { id: 'gpt-4o', name: 'GPT-4o' },
-        { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5' },
-        { id: 'o4-mini', name: 'o4-mini' },
-      ],
-      modelsLoading: false,
-      modelsError: null,
+    mockUseModelsQuery.mockReturnValue({
+      data: defaultModels,
+      isLoading: false,
+      error: null,
     });
   });
 
@@ -67,13 +74,13 @@ describe('ModelSelector', () => {
   });
 
   it('shows loading state when models are loading', () => {
-    useAppStore.setState({ models: [], modelsLoading: true });
+    mockUseModelsQuery.mockReturnValue({ data: [], isLoading: true, error: null });
     render(<ModelSelector {...defaultProps} />);
     expect(screen.getByText('Loading...')).toBeTruthy();
   });
 
   it('shows error state when models failed to load', () => {
-    useAppStore.setState({ models: [], modelsError: 'Network error' });
+    mockUseModelsQuery.mockReturnValue({ data: [], isLoading: false, error: new Error('Network error') });
     render(<ModelSelector {...defaultProps} />);
     expect(screen.getByText('Error')).toBeTruthy();
   });
@@ -110,7 +117,8 @@ describe('ModelSelector', () => {
     render(<ModelSelector {...defaultProps} />);
     const trigger = screen.getByRole('button', { name: /GPT-4o/i });
     expect(trigger.className).toContain('truncate');
-    expect(trigger.className).toContain('max-w-52');
+    // max-w can be max-w-32 or max-w-52 depending on responsive breakpoint
+    expect(trigger.className).toMatch(/max-w-/);
   });
 
   it('dropdown items have truncate and title attribute for tooltip', () => {
@@ -119,7 +127,6 @@ describe('ModelSelector', () => {
     const dropdown = container.querySelector('[data-testid="model-dropdown"]');
     const items = dropdown?.querySelectorAll('button');
     items?.forEach((item) => {
-      // The truncate class is on the inner span (model name text), not the button itself
       const nameSpan = item.querySelector('.truncate');
       expect(nameSpan).toBeTruthy();
       expect(item.getAttribute('title')).toBeTruthy();
@@ -148,29 +155,24 @@ describe('ModelSelector', () => {
 
   describe('premium multiplier badges', () => {
     it('shows green "0.33x" badge for discount tier models', () => {
-      useAppStore.setState({
-        models: [
-          { id: 'claude-haiku', name: 'Claude Haiku', premiumMultiplier: 0.33 },
-        ],
-        modelsLoading: false,
-        modelsError: null,
+      mockUseModelsQuery.mockReturnValue({
+        data: [{ id: 'claude-haiku', name: 'Claude Haiku', premiumMultiplier: 0.33 }],
+        isLoading: false,
+        error: null,
       });
       render(<ModelSelector currentModel="claude-haiku" onSelect={vi.fn()} />);
       fireEvent.click(screen.getByText('Claude Haiku'));
       const badge = screen.getAllByText('0.33x');
       expect(badge.length).toBeGreaterThan(0);
-      // Check at least one badge has green color
       const greenBadge = badge.find((el) => el.className.includes('text-green-500'));
       expect(greenBadge).toBeTruthy();
     });
 
     it('shows gray "1x" badge for standard tier models', () => {
-      useAppStore.setState({
-        models: [
-          { id: 'claude-sonnet', name: 'Claude Sonnet', premiumMultiplier: 1 },
-        ],
-        modelsLoading: false,
-        modelsError: null,
+      mockUseModelsQuery.mockReturnValue({
+        data: [{ id: 'claude-sonnet', name: 'Claude Sonnet', premiumMultiplier: 1 }],
+        isLoading: false,
+        error: null,
       });
       render(<ModelSelector currentModel="claude-sonnet" onSelect={vi.fn()} />);
       fireEvent.click(screen.getByText('Claude Sonnet'));
@@ -181,12 +183,10 @@ describe('ModelSelector', () => {
     });
 
     it('shows amber "3x" badge for premium tier models', () => {
-      useAppStore.setState({
-        models: [
-          { id: 'claude-opus', name: 'Claude Opus', premiumMultiplier: 3 },
-        ],
-        modelsLoading: false,
-        modelsError: null,
+      mockUseModelsQuery.mockReturnValue({
+        data: [{ id: 'claude-opus', name: 'Claude Opus', premiumMultiplier: 3 }],
+        isLoading: false,
+        error: null,
       });
       render(<ModelSelector currentModel="claude-opus" onSelect={vi.fn()} />);
       fireEvent.click(screen.getByText('Claude Opus'));
@@ -197,12 +197,10 @@ describe('ModelSelector', () => {
     });
 
     it('shows red "9x" badge for ultra tier models', () => {
-      useAppStore.setState({
-        models: [
-          { id: 'claude-opus-fast', name: 'Claude Opus Fast', premiumMultiplier: 9 },
-        ],
-        modelsLoading: false,
-        modelsError: null,
+      mockUseModelsQuery.mockReturnValue({
+        data: [{ id: 'claude-opus-fast', name: 'Claude Opus Fast', premiumMultiplier: 9 }],
+        isLoading: false,
+        error: null,
       });
       render(<ModelSelector currentModel="claude-opus-fast" onSelect={vi.fn()} />);
       fireEvent.click(screen.getByText('Claude Opus Fast'));
@@ -213,26 +211,21 @@ describe('ModelSelector', () => {
     });
 
     it('shows no badge when premiumMultiplier is null', () => {
-      useAppStore.setState({
-        models: [
-          { id: 'unknown', name: 'Unknown Model', premiumMultiplier: null },
-        ],
-        modelsLoading: false,
-        modelsError: null,
+      mockUseModelsQuery.mockReturnValue({
+        data: [{ id: 'unknown', name: 'Unknown Model', premiumMultiplier: null }],
+        isLoading: false,
+        error: null,
       });
       render(<ModelSelector currentModel="unknown" onSelect={vi.fn()} />);
       fireEvent.click(screen.getByText('Unknown Model'));
-      // No multiplier text should be present
       expect(screen.queryByText(/\dx$/)).toBeNull();
     });
 
     it('shows no badge when premiumMultiplier is undefined', () => {
-      useAppStore.setState({
-        models: [
-          { id: 'unknown', name: 'Unknown Model' },
-        ],
-        modelsLoading: false,
-        modelsError: null,
+      mockUseModelsQuery.mockReturnValue({
+        data: [{ id: 'unknown', name: 'Unknown Model' }],
+        isLoading: false,
+        error: null,
       });
       render(<ModelSelector currentModel="unknown" onSelect={vi.fn()} />);
       fireEvent.click(screen.getByText('Unknown Model'));
@@ -240,12 +233,10 @@ describe('ModelSelector', () => {
     });
 
     it('shows green "0x" badge for free tier models', () => {
-      useAppStore.setState({
-        models: [
-          { id: 'gpt-4o', name: 'GPT-4o', premiumMultiplier: 0 },
-        ],
-        modelsLoading: false,
-        modelsError: null,
+      mockUseModelsQuery.mockReturnValue({
+        data: [{ id: 'gpt-4o', name: 'GPT-4o', premiumMultiplier: 0 }],
+        isLoading: false,
+        error: null,
       });
       render(<ModelSelector currentModel="gpt-4o" onSelect={vi.fn()} />);
       fireEvent.click(screen.getByText('GPT-4o'));
@@ -256,28 +247,25 @@ describe('ModelSelector', () => {
     });
 
     it('shows multiplier badge in trigger button for selected model', () => {
-      useAppStore.setState({
-        models: [
-          { id: 'claude-opus', name: 'Claude Opus', premiumMultiplier: 3 },
-        ],
-        modelsLoading: false,
-        modelsError: null,
+      mockUseModelsQuery.mockReturnValue({
+        data: [{ id: 'claude-opus', name: 'Claude Opus', premiumMultiplier: 3 }],
+        isLoading: false,
+        error: null,
       });
       render(<ModelSelector currentModel="claude-opus" onSelect={vi.fn()} />);
-      // Trigger badge should be visible without opening dropdown
       const triggerBadge = screen.getByTestId('trigger-multiplier');
       expect(triggerBadge.textContent).toBe('3x');
       expect(triggerBadge.className).toContain('text-amber-500');
     });
 
     it('shows multiplier badges right-aligned in dropdown using ml-auto', () => {
-      useAppStore.setState({
-        models: [
+      mockUseModelsQuery.mockReturnValue({
+        data: [
           { id: 'gpt-5', name: 'GPT-5', premiumMultiplier: 1 },
           { id: 'claude-opus', name: 'Claude Opus', premiumMultiplier: 3 },
         ],
-        modelsLoading: false,
-        modelsError: null,
+        isLoading: false,
+        error: null,
       });
       const { container } = render(<ModelSelector currentModel="gpt-5" onSelect={vi.fn()} />);
       fireEvent.click(screen.getByText('GPT-5'));

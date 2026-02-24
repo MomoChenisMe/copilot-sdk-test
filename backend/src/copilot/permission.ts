@@ -1,9 +1,4 @@
-export function autoApprovePermission(
-  _request: { kind: string; [key: string]: unknown },
-  _invocation: { sessionId: string },
-) {
-  return { kind: 'approved' as const };
-}
+export { approveAll } from '@github/copilot-sdk';
 
 export function createPermissionHandler(getMode: () => 'plan' | 'act') {
   return (

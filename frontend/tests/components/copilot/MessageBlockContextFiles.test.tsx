@@ -11,11 +11,14 @@ vi.mock('react-i18next', () => ({
 vi.mock('../../../src/store', () => ({
   useAppStore: (selector: any) => {
     const state = {
-      skills: [],
       activeTabId: null,
     };
     return selector(state);
   },
+}));
+
+vi.mock('../../../src/hooks/queries/useSkillsQuery', () => ({
+  useSkillsQuery: () => ({ data: [], isLoading: false, error: null }),
 }));
 
 vi.mock('../../../src/components/shared/LightboxContext', () => ({

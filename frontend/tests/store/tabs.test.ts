@@ -36,7 +36,6 @@ describe('Tab management', () => {
       expect(tab.turnContentSegments).toEqual([]);
       expect(tab.turnSegments).toEqual([]);
       expect(tab.copilotError).toBeNull();
-      expect(tab.messagesLoaded).toBe(false);
     });
 
     it('should add tabId to tabOrder', () => {
@@ -181,7 +180,6 @@ describe('Tab ID independent from conversationId', () => {
     // Streaming state should be cleared
     expect(tab.streamingText).toBe('');
     expect(tab.messages).toEqual([]);
-    expect(tab.messagesLoaded).toBe(false);
   });
 
   it('getTabIdByConversationId should find the tab with given conversationId', () => {
@@ -219,7 +217,6 @@ describe('Per-tab streaming actions', () => {
     const msgs = [{ id: 'm1', conversationId: 'conv-1', role: 'user' as const, content: 'hi', metadata: null, createdAt: '' }];
     useAppStore.getState().setTabMessages(tabId, msgs);
     expect(useAppStore.getState().tabs[tabId].messages).toEqual(msgs);
-    expect(useAppStore.getState().tabs[tabId].messagesLoaded).toBe(true);
   });
 
   it('addTabMessage should append a message and dedup by id', () => {
@@ -320,7 +317,6 @@ describe('Tab localStorage restore', () => {
     expect(state.tabs['tab-a']).toBeTruthy();
     expect(state.tabs['tab-a'].title).toBe('Chat A');
     expect(state.tabs['tab-a'].conversationId).toBe('conv-a');
-    expect(state.tabs['tab-a'].messagesLoaded).toBe(false);
     expect(state.tabs['tab-b']).toBeTruthy();
     expect(state.tabs['tab-b'].title).toBe('Chat B');
   });
@@ -523,31 +519,6 @@ describe('disabledSkills localStorage restore', () => {
   });
 });
 
-describe('SDK commands store', () => {
-  beforeEach(() => {
-    useAppStore.setState({ sdkCommands: [], sdkCommandsLoaded: false });
-  });
-
-  it('should have empty sdkCommands by default', () => {
-    expect(useAppStore.getState().sdkCommands).toEqual([]);
-    expect(useAppStore.getState().sdkCommandsLoaded).toBe(false);
-  });
-
-  it('setSdkCommands should update sdkCommands', () => {
-    const cmds = [
-      { name: 'explain', description: 'Explain code' },
-      { name: 'fix', description: 'Fix code' },
-    ];
-    useAppStore.getState().setSdkCommands(cmds);
-    expect(useAppStore.getState().sdkCommands).toEqual(cmds);
-  });
-
-  it('setSdkCommandsLoaded should update loaded flag', () => {
-    useAppStore.getState().setSdkCommandsLoaded(true);
-    expect(useAppStore.getState().sdkCommandsLoaded).toBe(true);
-  });
-});
-
 describe('Tab mode (copilot/terminal)', () => {
   beforeEach(() => {
     useAppStore.setState({ tabs: {}, tabOrder: [], activeTabId: null });
@@ -624,14 +595,6 @@ describe('Draft tabs (lazy conversation creation)', () => {
     const stored = JSON.parse(localStorage.getItem('codeforge:openTabs') ?? '{}');
     expect(stored.tabs).toHaveLength(1);
     expect(stored.tabs[0].conversationId).toBe('conv-new');
-  });
-
-  it('materializeTabConversation should set messagesLoaded to true', () => {
-    useAppStore.getState().openTab(null, 'Draft');
-    const tabId = useAppStore.getState().tabOrder[0];
-    expect(useAppStore.getState().tabs[tabId].messagesLoaded).toBe(false);
-    useAppStore.getState().materializeTabConversation(tabId, 'conv-new');
-    expect(useAppStore.getState().tabs[tabId].messagesLoaded).toBe(true);
   });
 
   it('materializeTabConversation should not throw for non-existent tab', () => {

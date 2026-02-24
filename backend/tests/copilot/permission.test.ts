@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { autoApprovePermission, createPermissionHandler } from '../../src/copilot/permission.js';
+import { approveAll, createPermissionHandler } from '../../src/copilot/permission.js';
 
-describe('autoApprovePermission', () => {
+describe('approveAll', () => {
   it('should approve shell permission', () => {
-    const result = autoApprovePermission(
+    const result = approveAll(
       { kind: 'shell', toolCallId: 'tc-1' },
       { sessionId: 's-1' },
     );
@@ -11,7 +11,7 @@ describe('autoApprovePermission', () => {
   });
 
   it('should approve write permission', () => {
-    const result = autoApprovePermission(
+    const result = approveAll(
       { kind: 'write', toolCallId: 'tc-2' },
       { sessionId: 's-1' },
     );
@@ -19,7 +19,7 @@ describe('autoApprovePermission', () => {
   });
 
   it('should approve read permission', () => {
-    const result = autoApprovePermission(
+    const result = approveAll(
       { kind: 'read', toolCallId: 'tc-3' },
       { sessionId: 's-1' },
     );
@@ -27,7 +27,7 @@ describe('autoApprovePermission', () => {
   });
 
   it('should approve mcp permission', () => {
-    const result = autoApprovePermission(
+    const result = approveAll(
       { kind: 'mcp', toolCallId: 'tc-4' },
       { sessionId: 's-1' },
     );
@@ -35,7 +35,7 @@ describe('autoApprovePermission', () => {
   });
 
   it('should approve url permission', () => {
-    const result = autoApprovePermission(
+    const result = approveAll(
       { kind: 'url', toolCallId: 'tc-5' },
       { sessionId: 's-1' },
     );
@@ -43,7 +43,7 @@ describe('autoApprovePermission', () => {
   });
 
   it('should approve any unknown permission kind', () => {
-    const result = autoApprovePermission(
+    const result = approveAll(
       { kind: 'unknown-future-kind' as any },
       { sessionId: 's-1' },
     );

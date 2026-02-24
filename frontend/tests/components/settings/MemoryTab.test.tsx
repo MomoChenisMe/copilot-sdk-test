@@ -61,7 +61,14 @@ vi.mock('../../../src/lib/api', () => ({
   memoryApi: mockAutoMemoryApi,
 }));
 
+vi.mock('../../../src/hooks/queries/useModelsQuery', () => ({
+  useModelsQuery: () => ({ data: [], isLoading: false, error: null }),
+}));
+
+import { createWrapper } from '../../../src/test-utils/query-wrapper';
 import { SettingsPanel } from '../../../src/components/settings/SettingsPanel';
+
+const QueryWrapper = createWrapper();
 
 describe('SettingsPanel - Memory Tab (simplified)', () => {
   const defaultProps = {
@@ -85,7 +92,7 @@ describe('SettingsPanel - Memory Tab (simplified)', () => {
   });
 
   async function openMemoryTab() {
-    render(<SettingsPanel {...defaultProps} />);
+    render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
     fireEvent.click(screen.getByRole('tab', { name: /memory/i }));
     await waitFor(() => {
       expect(screen.getByTestId('auto-memory-section')).toBeTruthy();

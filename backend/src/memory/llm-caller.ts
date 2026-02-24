@@ -31,6 +31,7 @@ export class MemoryLlmCaller {
       const client = await this.clientManager.getClient();
       session = await client.createSession({
         model: this.model,
+        clientName: 'codeforge',
         systemMessage: { mode: 'replace', content: systemPrompt },
         tools: [],
       } as any);

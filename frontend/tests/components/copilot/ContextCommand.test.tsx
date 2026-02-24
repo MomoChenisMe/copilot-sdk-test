@@ -61,6 +61,40 @@ vi.mock('../../../src/components/copilot/UserInputDialog', () => ({
   UserInputDialog: () => null,
 }));
 
+vi.mock('../../../src/components/copilot/ModelSelector', () => ({
+  ModelSelector: ({ currentModel, onSelect }: { currentModel: string; onSelect: (id: string) => void }) => (
+    <button data-testid="model-selector" onClick={() => onSelect('test-model')}>{currentModel}</button>
+  ),
+}));
+
+vi.mock('../../../src/components/copilot/MobileToolbarPopup', () => ({
+  MobileToolbarPopup: () => <div data-testid="mobile-toolbar-popup" />,
+}));
+
+vi.mock('../../../src/hooks/queries/useSkillsQuery', () => ({
+  useSkillsQuery: () => ({ data: [], isLoading: false, error: null }),
+}));
+
+vi.mock('../../../src/hooks/queries/useSdkCommandsQuery', () => ({
+  useSdkCommandsQuery: () => ({ data: [], isLoading: false, error: null }),
+}));
+
+vi.mock('../../../src/hooks/queries/useConfigQuery', () => ({
+  useBraveApiKeyQuery: () => ({ data: { hasKey: false, maskedKey: '' }, isLoading: false, error: null }),
+}));
+
+vi.mock('../../../src/hooks/queries/useQuotaQuery', () => ({
+  useQuotaQuery: () => ({ data: null, isLoading: false, error: null }),
+}));
+
+vi.mock('../../../src/hooks/queries/useConversationsQuery', () => ({
+  useConversationsQuery: () => ({ data: [], isLoading: false, error: null }),
+}));
+
+vi.mock('../../../src/hooks/queries/useMessagesQuery', () => ({
+  useMessagesQuery: () => ({ data: [], isLoading: false, error: null }),
+}));
+
 import { ChatView } from '../../../src/components/copilot/ChatView';
 
 const contextResponse = {
@@ -106,7 +140,8 @@ describe('/context slash command', () => {
     turnContentSegments: [] as string[],
     turnSegments: [] as any[],
     copilotError: null,
-    messagesLoaded: true,
+
+
     createdAt: Date.now(),
   });
 
@@ -118,9 +153,7 @@ describe('/context slash command', () => {
       tabs: { [tabId]: makeTab() },
       tabOrder: [tabId],
       activeTabId: tabId,
-      skills: [],
       disabledSkills: [],
-      sdkCommands: [],
     });
   });
 

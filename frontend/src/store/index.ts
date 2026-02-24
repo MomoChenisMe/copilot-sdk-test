@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import type { Conversation, Message, ToolRecord, TurnSegment } from '../lib/api';
-import type { SkillItem } from '../lib/prompts-api';
+import type { Message, MessageMetadata, ToolRecord, TurnSegment } from '../lib/api';
 import type { ParsedArtifact } from '../lib/artifact-parser';
 import { settingsApi } from '../lib/settings-api';
 
@@ -40,12 +39,11 @@ export interface UserInputRequest {
 
 export interface TaskItem {
   id: string;
-  subject: string;
-  description: string;
-  activeForm: string;
-  status: 'pending' | 'in_progress' | 'completed';
-  owner?: string;
-  blockedBy: string[];
+  title: string;
+  description: string | null;
+  status: 'pending' | 'in_progress' | 'done' | 'blocked';
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ToastItem {
@@ -62,6 +60,7 @@ export interface TabState {
   title: string;
   mode: 'copilot' | 'terminal' | 'cron';
   messages: Message[];
+  pendingMessages: Message[];
   streamingText: string;
   isStreaming: boolean;
   toolRecords: ToolRecord[];
@@ -69,7 +68,6 @@ export interface TabState {
   turnContentSegments: string[];
   turnSegments: TurnSegment[];
   copilotError: string | null;
-  messagesLoaded: boolean;
   createdAt: number;
   usage: UsageInfo;
   planMode: boolean;
@@ -99,8 +97,7 @@ export interface AppState {
   llmLanguage: string | null;
   setLlmLanguage: (lang: string | null) => void;
 
-  // Conversations
-  conversations: Conversation[];
+  // Active conversation (UI state)
   activeConversationId: string | null;
 
   // Messages for the active conversation
@@ -125,29 +122,15 @@ export interface AppState {
   // Active streams (background streaming)
   activeStreams: Record<string, string>;
 
-  // Skills cache
-  skills: SkillItem[];
-  skillsLoaded: boolean;
-
-  // SDK commands cache
-  sdkCommands: Array<{ name: string; description: string }>;
-  sdkCommandsLoaded: boolean;
-
   // Settings
   disabledSkills: string[];
   settingsOpen: boolean;
-  webSearchAvailable: boolean;
-  setWebSearchAvailable: (available: boolean) => void;
 
   // Error
   copilotError: string | null;
 
-  // Actions — Conversations
-  setConversations: (conversations: Conversation[]) => void;
+  // Actions — Active conversation
   setActiveConversationId: (id: string | null) => void;
-  addConversation: (conversation: Conversation) => void;
-  updateConversation: (id: string, updates: Partial<Conversation>) => void;
-  removeConversation: (id: string) => void;
 
   // Actions — Messages
   setMessages: (messages: Message[]) => void;
@@ -182,14 +165,6 @@ export interface AppState {
   lastSelectedModel: string | null;
   setLastSelectedModel: (modelId: string) => void;
 
-  // Actions — Skills
-  setSkills: (skills: SkillItem[]) => void;
-  setSkillsLoaded: (loaded: boolean) => void;
-
-  // Actions — SDK commands
-  setSdkCommands: (commands: Array<{ name: string; description: string }>) => void;
-  setSdkCommandsLoaded: (loaded: boolean) => void;
-
   // Actions — Settings
   toggleSkill: (name: string) => void;
   batchSetSkillsDisabled: (names: string[], disabled: boolean) => void;
@@ -221,6 +196,8 @@ export interface AppState {
   // Actions — Per-tab streaming
   setTabMessages: (tabId: string, messages: Message[]) => void;
   addTabMessage: (tabId: string, message: Message) => void;
+  addPendingMessage: (tabId: string, message: Message) => void;
+  clearPendingMessages: (tabId: string) => void;
   appendTabStreamingText: (tabId: string, delta: string) => void;
   setTabIsStreaming: (tabId: string, streaming: boolean) => void;
   clearTabStreaming: (tabId: string) => void;
@@ -249,7 +226,6 @@ export interface AppState {
 
   // Actions — Per-tab tasks
   setTabTasks: (tabId: string, tasks: TaskItem[]) => void;
-  upsertTabTask: (tabId: string, task: TaskItem) => void;
 
   // Actions — Per-tab artifacts
   addTabArtifacts: (tabId: string, artifacts: ParsedArtifact[]) => void;
@@ -262,16 +238,12 @@ export interface AppState {
   addToast: (toast: Omit<ToastItem, 'id'>) => void;
   removeToast: (id: string) => void;
 
-  // Premium quota (global, not per-tab)
-  premiumQuota: { used: number; total: number; resetDate: string | null; unlimited: boolean } | null;
-  setPremiumQuota: (quota: { used: number; total: number; resetDate: string | null; unlimited: boolean } | null) => void;
-
   // OpenSpec panel (per-tab)
   setTabOpenspecPanelOpen: (tabId: string, open: boolean) => void;
 
   // Settings cache (synced from backend)
-  settings: { openspecEnabled?: boolean } | null;
-  setSettings: (settings: { openspecEnabled?: boolean } | null) => void;
+  openspecEnabled: boolean;
+  setOpenspecEnabled: (enabled: boolean) => void;
 }
 
 const MIGRATION_KEYS = [
@@ -336,7 +308,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   // State
-  conversations: [],
   activeConversationId: null,
   messages: [],
   streamingText: '',
@@ -346,23 +317,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   turnContentSegments: [],
   turnSegments: [],
   activeStreams: {},
-  skills: [],
-  skillsLoaded: false,
-  sdkCommands: [],
-  sdkCommandsLoaded: false,
   disabledSkills: [],
   settingsOpen: false,
-  webSearchAvailable: false,
-  setWebSearchAvailable: (available) => set({ webSearchAvailable: available }),
   lastSelectedModel: (() => {
     try { return localStorage.getItem('codeforge:lastSelectedModel'); }
     catch { return null; }
   })(),
   copilotError: null,
 
-  // Conversation actions
-  setConversations: (conversations) => set({ conversations }),
-
+  // Active conversation actions
   setActiveConversationId: (id) =>
     set({
       activeConversationId: id,
@@ -375,24 +338,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       turnSegments: [],
       copilotError: null,
     }),
-
-  addConversation: (conversation) =>
-    set((state) => ({ conversations: [conversation, ...state.conversations] })),
-
-  updateConversation: (id, updates) =>
-    set((state) => ({
-      conversations: state.conversations.map((c) =>
-        c.id === id ? { ...c, ...updates } : c,
-      ),
-    })),
-
-  removeConversation: (id) =>
-    set((state) => ({
-      conversations: state.conversations.filter((c) => c.id !== id),
-      activeConversationId:
-        state.activeConversationId === id ? null : state.activeConversationId,
-      messages: state.activeConversationId === id ? [] : state.messages,
-    })),
 
   // Message actions
   setMessages: (messages) => set({ messages }),
@@ -462,14 +407,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { activeStreams: rest };
     }),
 
-  // Skills actions
-  setSkills: (skills) => set({ skills }),
-  setSkillsLoaded: (loaded) => set({ skillsLoaded: loaded }),
-
-  // SDK commands actions
-  setSdkCommands: (commands) => set({ sdkCommands: commands }),
-  setSdkCommandsLoaded: (loaded) => set({ sdkCommandsLoaded: loaded }),
-
   // Settings actions
   toggleSkill: (name) => {
     const current = get().disabledSkills;
@@ -535,6 +472,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       title,
       mode: 'copilot',
       messages: [],
+      pendingMessages: [],
       streamingText: '',
       isStreaming: false,
       toolRecords: [],
@@ -542,7 +480,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       turnContentSegments: [],
       turnSegments: [],
       copilotError: null,
-      messagesLoaded: false,
       createdAt: Date.now(),
       usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, contextWindowUsed: 0, contextWindowMax: 0, premiumRequestsUsed: 0, premiumRequestsLocal: 0, premiumRequestsTotal: 0, premiumResetDate: null, premiumUnlimited: false, model: null },
       planMode: ephemeral?.planMode ?? false,
@@ -567,7 +504,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const state = get();
     const tab = state.tabs[tabId];
     if (!tab) return;
-    const newTabs = { ...state.tabs, [tabId]: { ...tab, conversationId, messagesLoaded: true } };
+    const newTabs = { ...state.tabs, [tabId]: { ...tab, conversationId } };
     set({ tabs: newTabs });
     persistOpenTabs(newTabs, state.tabOrder);
   },
@@ -638,6 +575,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       title,
       mode: 'copilot',
       messages: [],
+      pendingMessages: [],
       streamingText: '',
       isStreaming: false,
       toolRecords: [],
@@ -645,7 +583,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       turnContentSegments: [],
       turnSegments: [],
       copilotError: null,
-      messagesLoaded: false,
       usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, contextWindowUsed: 0, contextWindowMax: 0, premiumRequestsUsed: 0, premiumRequestsLocal: 0, premiumRequestsTotal: 0, premiumResetDate: null, premiumUnlimited: false, model: null },
       planMode: ephemeral?.planMode ?? false,
       showPlanCompletePrompt: ephemeral?.showPlanCompletePrompt ?? false,
@@ -705,6 +642,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           title: item.title,
           mode: 'copilot',
           messages: [],
+          pendingMessages: [],
           streamingText: '',
           isStreaming: false,
           toolRecords: [],
@@ -712,7 +650,6 @@ export const useAppStore = create<AppState>((set, get) => ({
           turnContentSegments: [],
           turnSegments: [],
           copilotError: null,
-          messagesLoaded: false,
           createdAt: Date.now(),
           usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, contextWindowUsed: 0, contextWindowMax: 0, premiumRequestsUsed: 0, premiumRequestsLocal: 0, premiumRequestsTotal: 0, premiumResetDate: null, premiumUnlimited: false, model: null },
           planMode: (ext.planMode as boolean) ?? false,
@@ -759,23 +696,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       // This handles the case where ask_user tools are persisted with
       // status "running" (before tool_end fires) and never updated.
       const fixed = messages.map((msg, i) => {
-        if (msg.role !== 'assistant' || !msg.metadata?.toolRecords) return msg;
+        const meta = msg.metadata as MessageMetadata | null;
+        if (msg.role !== 'assistant' || !meta?.toolRecords) return msg;
         const hasNext = i < messages.length - 1;
         if (!hasNext) return msg;
-        const hasRunning = (msg.metadata.toolRecords as ToolRecord[]).some(
+        const hasRunning = meta.toolRecords.some(
           (r) => r.status === 'running',
         );
         if (!hasRunning) return msg;
         return {
           ...msg,
           metadata: {
-            ...msg.metadata,
-            toolRecords: (msg.metadata.toolRecords as ToolRecord[]).map((r) =>
+            ...meta,
+            toolRecords: meta.toolRecords.map((r) =>
               r.status === 'running' ? { ...r, status: 'success' as const } : r,
             ),
-            ...(msg.metadata.turnSegments
+            ...(meta.turnSegments
               ? {
-                  turnSegments: (msg.metadata.turnSegments as TurnSegment[]).map((s) =>
+                  turnSegments: meta.turnSegments.map((s) =>
                     s.type === 'tool' && s.status === 'running'
                       ? { ...s, status: 'success' as const }
                       : s,
@@ -785,7 +723,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           },
         };
       });
-      return { tabs: { ...state.tabs, [tabId]: { ...tab, messages: fixed, messagesLoaded: true } } };
+      return { tabs: { ...state.tabs, [tabId]: { ...tab, messages: fixed } } };
     }),
 
   addTabMessage: (tabId, message) =>
@@ -794,6 +732,21 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (!tab) return state;
       if (tab.messages.some((m) => m.id === message.id)) return state;
       return { tabs: { ...state.tabs, [tabId]: { ...tab, messages: [...tab.messages, message] } } };
+    }),
+
+  addPendingMessage: (tabId, message) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      if (tab.pendingMessages.some((m) => m.id === message.id)) return state;
+      return { tabs: { ...state.tabs, [tabId]: { ...tab, pendingMessages: [...tab.pendingMessages, message] } } };
+    }),
+
+  clearPendingMessages: (tabId) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return { tabs: { ...state.tabs, [tabId]: { ...tab, pendingMessages: [] } } };
     }),
 
   appendTabStreamingText: (tabId, delta) =>
@@ -899,16 +852,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     // Search messages in reverse to find the tool in the most recent message first
     for (let i = tab.messages.length - 1; i >= 0; i--) {
       const msg = tab.messages[i];
-      if (msg.role !== 'assistant' || !msg.metadata?.toolRecords) continue;
-      const records = msg.metadata.toolRecords as ToolRecord[];
-      const idx = records.findIndex((r) => r.toolCallId === toolCallId);
+      const meta = msg.metadata as MessageMetadata | null;
+      if (msg.role !== 'assistant' || !meta?.toolRecords) continue;
+      const idx = meta.toolRecords.findIndex((r) => r.toolCallId === toolCallId);
       if (idx === -1) continue;
       // Found the tool in a DB-loaded message — update it
-      const updatedRecords = records.map((r) =>
+      const updatedRecords = meta.toolRecords.map((r) =>
         r.toolCallId === toolCallId ? { ...r, ...updates } : r,
       );
-      const updatedSegments = msg.metadata.turnSegments
-        ? (msg.metadata.turnSegments as TurnSegment[]).map((s) =>
+      const updatedSegments = meta.turnSegments
+        ? meta.turnSegments.map((s) =>
             s.type === 'tool' && s.toolCallId === toolCallId ? { ...s, ...updates } : s,
           )
         : undefined;
@@ -916,7 +869,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       updatedMessages[i] = {
         ...msg,
         metadata: {
-          ...msg.metadata,
+          ...meta,
           toolRecords: updatedRecords,
           ...(updatedSegments ? { turnSegments: updatedSegments } : {}),
         },
@@ -1186,20 +1139,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { tabs: { ...state.tabs, [tabId]: { ...tab, tasks } } };
     }),
 
-  upsertTabTask: (tabId, task) =>
-    set((state) => {
-      const tab = state.tabs[tabId];
-      if (!tab) return state;
-      const existingIndex = tab.tasks.findIndex((t) => t.id === task.id);
-      const updatedTasks = [...tab.tasks];
-      if (existingIndex >= 0) {
-        updatedTasks[existingIndex] = task;
-      } else {
-        updatedTasks.push(task);
-      }
-      return { tabs: { ...state.tabs, [tabId]: { ...tab, tasks: updatedTasks } } };
-    }),
-
   // Toast notifications
   toasts: [],
   addToast: (toast) =>
@@ -1210,10 +1149,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       toasts: state.toasts.filter((t) => t.id !== id),
     })),
-
-  // Premium quota (global)
-  premiumQuota: null,
-  setPremiumQuota: (quota) => set({ premiumQuota: quota }),
 
   // OpenSpec panel (per-tab)
   setTabOpenspecPanelOpen: (tabId, open) => {
@@ -1232,9 +1167,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     persistOpenTabs(s.tabs, s.tabOrder);
   },
 
-  // Settings cache
-  settings: null,
-  setSettings: (settings) => set({ settings }),
+  // OpenSpec enabled
+  openspecEnabled: false,
+  setOpenspecEnabled: (enabled) => set({ openspecEnabled: enabled }),
 }));
 
 /**

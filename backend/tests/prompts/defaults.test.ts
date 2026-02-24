@@ -155,11 +155,11 @@ describe('DEFAULT_ACT_PROMPT', () => {
     expect(DEFAULT_ACT_PROMPT).toMatch(/premature abstraction/i);
   });
 
-  it('should contain Task Management & Subagent Orchestration section', () => {
-    expect(DEFAULT_ACT_PROMPT).toContain('Task Management');
-    expect(DEFAULT_ACT_PROMPT).toMatch(/task_create/);
-    expect(DEFAULT_ACT_PROMPT).toMatch(/task_list/);
-    expect(DEFAULT_ACT_PROMPT).toMatch(/task_update/);
+  it('should contain Task Management via SQL Todos section', () => {
+    expect(DEFAULT_ACT_PROMPT).toContain('Task Management via SQL Todos');
+    expect(DEFAULT_ACT_PROMPT).toMatch(/INSERT INTO todos/);
+    expect(DEFAULT_ACT_PROMPT).toMatch(/UPDATE todos SET status/);
+    expect(DEFAULT_ACT_PROMPT).toMatch(/SELECT \* FROM todos/);
   });
 });
 
@@ -210,14 +210,6 @@ describe('DEFAULT_PLAN_PROMPT', () => {
     expect(DEFAULT_PLAN_PROMPT).toBeTruthy();
     expect(typeof DEFAULT_PLAN_PROMPT).toBe('string');
     expect(DEFAULT_PLAN_PROMPT.length).toBeGreaterThan(0);
-  });
-
-  it('should contain 5-phase workflow', () => {
-    expect(DEFAULT_PLAN_PROMPT).toMatch(/Phase 1/i);
-    expect(DEFAULT_PLAN_PROMPT).toMatch(/Phase 2/i);
-    expect(DEFAULT_PLAN_PROMPT).toMatch(/Phase 3/i);
-    expect(DEFAULT_PLAN_PROMPT).toMatch(/Phase 4/i);
-    expect(DEFAULT_PLAN_PROMPT).toMatch(/Phase 5/i);
   });
 
   it('should contain structured plan output format', () => {

@@ -341,7 +341,8 @@
     "empty": "沒有任務",
     "pending": "待處理",
     "inProgress": "進行中",
-    "completed": "已完成"
+    "done": "已完成",
+    "blocked": "已封鎖"
   },
   "sidebar": {
     "conversations": "對話紀錄",

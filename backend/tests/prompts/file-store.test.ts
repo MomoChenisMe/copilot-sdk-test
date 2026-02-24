@@ -85,7 +85,7 @@ describe('PromptFileStore', () => {
       store.ensureDirectories();
       const content = fs.readFileSync(path.join(tmpDir, 'PLAN_PROMPT.md'), 'utf-8');
       expect(content.length).toBeGreaterThan(0);
-      expect(content).toContain('Phase 1');
+      expect(content).toContain('Plan Structure');
     });
 
     it('should not overwrite existing PLAN_PROMPT.md', () => {

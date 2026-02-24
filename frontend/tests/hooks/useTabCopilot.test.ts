@@ -606,115 +606,67 @@ describe('useTabCopilot', () => {
     });
   });
 
-  // --- Task tool result parsing ---
-  describe('task tool result parsing', () => {
-    it('should parse task_list result and set tab tasks', () => {
+  // --- copilot:todos_updated event ---
+  describe('copilot:todos_updated event', () => {
+    it('should set tab tasks from todos_updated event', () => {
       renderHook(() => useTabCopilot({ subscribe, send }));
-      // First create a tool_start so tool_end finds a matching record
-      act(() => {
-        emit({ type: 'copilot:tool_start', data: { toolCallId: 'tc-task-1', toolName: 'task_list', conversationId: 'conv-A' } });
-      });
       act(() => {
         emit({
-          type: 'copilot:tool_end',
+          type: 'copilot:todos_updated',
           data: {
-            toolCallId: 'tc-task-1',
-            toolName: 'task_list',
-            success: true,
-            result: JSON.stringify({
-              tasks: [
-                { id: 't1', subject: 'Fix bug', description: 'desc', activeForm: '', status: 'completed', owner: null, blockedBy: [] },
-                { id: 't2', subject: 'Add feature', description: '', activeForm: 'Adding', status: 'in_progress', owner: 'agent', blockedBy: [] },
-              ],
-            }),
             conversationId: 'conv-A',
+            todos: [
+              { id: 't1', title: 'Fix bug', description: 'some desc', status: 'done', created_at: '2025-01-01', updated_at: '2025-01-02' },
+              { id: 't2', title: 'Add feature', description: null, status: 'in_progress', created_at: '2025-01-01', updated_at: '2025-01-01' },
+            ],
           },
         });
       });
       const tasks = useAppStore.getState().tabs[tabIdA].tasks;
       expect(tasks).toHaveLength(2);
-      expect(tasks[0].id).toBe('t1');
-      expect(tasks[0].status).toBe('completed');
-      expect(tasks[1].id).toBe('t2');
-      expect(tasks[1].activeForm).toBe('Adding');
+      expect(tasks[0]).toEqual({ id: 't1', title: 'Fix bug', description: 'some desc', status: 'done', created_at: '2025-01-01', updated_at: '2025-01-02' });
+      expect(tasks[1]).toEqual({ id: 't2', title: 'Add feature', description: null, status: 'in_progress', created_at: '2025-01-01', updated_at: '2025-01-01' });
     });
 
-    it('should parse task_create result and upsert single task', () => {
+    it('should replace existing tasks on subsequent todos_updated events', () => {
       renderHook(() => useTabCopilot({ subscribe, send }));
       act(() => {
-        emit({ type: 'copilot:tool_start', data: { toolCallId: 'tc-task-2', toolName: 'task_create', conversationId: 'conv-A' } });
+        emit({
+          type: 'copilot:todos_updated',
+          data: {
+            conversationId: 'conv-A',
+            todos: [
+              { id: 't1', title: 'Step 1', description: null, status: 'pending', created_at: '2025-01-01', updated_at: '2025-01-01' },
+            ],
+          },
+        });
       });
+      expect(useAppStore.getState().tabs[tabIdA].tasks).toHaveLength(1);
+
       act(() => {
         emit({
-          type: 'copilot:tool_end',
+          type: 'copilot:todos_updated',
           data: {
-            toolCallId: 'tc-task-2',
-            toolName: 'task_create',
-            success: true,
-            result: JSON.stringify({
-              task: { id: 't3', subject: 'Write tests', description: '', activeForm: '', status: 'pending', owner: null, blockedBy: [] },
-            }),
             conversationId: 'conv-A',
+            todos: [
+              { id: 't1', title: 'Step 1', description: null, status: 'done', created_at: '2025-01-01', updated_at: '2025-01-02' },
+              { id: 't2', title: 'Step 2', description: null, status: 'blocked', created_at: '2025-01-02', updated_at: '2025-01-02' },
+            ],
           },
         });
       });
       const tasks = useAppStore.getState().tabs[tabIdA].tasks;
-      expect(tasks).toHaveLength(1);
-      expect(tasks[0].id).toBe('t3');
-      expect(tasks[0].subject).toBe('Write tests');
+      expect(tasks).toHaveLength(2);
+      expect(tasks[0].status).toBe('done');
+      expect(tasks[1].status).toBe('blocked');
     });
 
-    it('should upsert existing task on task_update result', () => {
-      renderHook(() => useTabCopilot({ subscribe, send }));
-      // Seed a task via task_create
-      act(() => {
-        emit({ type: 'copilot:tool_start', data: { toolCallId: 'tc-t4a', toolName: 'task_create', conversationId: 'conv-A' } });
-      });
-      act(() => {
-        emit({
-          type: 'copilot:tool_end',
-          data: {
-            toolCallId: 'tc-t4a', toolName: 'task_create', success: true,
-            result: JSON.stringify({ task: { id: 't4', subject: 'Deploy', description: '', activeForm: '', status: 'pending', blockedBy: [] } }),
-            conversationId: 'conv-A',
-          },
-        });
-      });
-      expect(useAppStore.getState().tabs[tabIdA].tasks[0].status).toBe('pending');
-
-      // Update via task_update
-      act(() => {
-        emit({ type: 'copilot:tool_start', data: { toolCallId: 'tc-t4b', toolName: 'task_update', conversationId: 'conv-A' } });
-      });
-      act(() => {
-        emit({
-          type: 'copilot:tool_end',
-          data: {
-            toolCallId: 'tc-t4b', toolName: 'task_update', success: true,
-            result: JSON.stringify({ task: { id: 't4', subject: 'Deploy', description: '', activeForm: 'Deploying', status: 'in_progress', blockedBy: [] } }),
-            conversationId: 'conv-A',
-          },
-        });
-      });
-      const tasks = useAppStore.getState().tabs[tabIdA].tasks;
-      expect(tasks).toHaveLength(1);
-      expect(tasks[0].status).toBe('in_progress');
-      expect(tasks[0].activeForm).toBe('Deploying');
-    });
-
-    it('should not parse task results when success is false', () => {
+    it('should handle empty todos array', () => {
       renderHook(() => useTabCopilot({ subscribe, send }));
       act(() => {
-        emit({ type: 'copilot:tool_start', data: { toolCallId: 'tc-fail', toolName: 'task_list', conversationId: 'conv-A' } });
-      });
-      act(() => {
         emit({
-          type: 'copilot:tool_end',
-          data: {
-            toolCallId: 'tc-fail', toolName: 'task_list', success: false,
-            error: 'Something went wrong',
-            conversationId: 'conv-A',
-          },
+          type: 'copilot:todos_updated',
+          data: { conversationId: 'conv-A', todos: [] },
         });
       });
       expect(useAppStore.getState().tabs[tabIdA].tasks).toHaveLength(0);
