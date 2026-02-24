@@ -22,8 +22,9 @@ describe('PromptComposer', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('should compose in order: SYSTEM_PROMPT → PROFILE (no AGENT or preferences)', () => {
+  it('should compose in order: SYSTEM_PROMPT → ACT_PROMPT → PROFILE (no AGENT or preferences)', () => {
     fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), 'System prompt content');
+    fs.writeFileSync(path.join(tmpDir, 'ACT_PROMPT.md'), 'Act prompt content');
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile content');
     // AGENT.md and memory/preferences.md should be ignored
     fs.writeFileSync(path.join(tmpDir, 'AGENT.md'), 'Agent content');
@@ -32,7 +33,8 @@ describe('PromptComposer', () => {
     const result = composer.compose();
     const sections = result.split('\n\n---\n\n');
     expect(sections[0]).toBe('System prompt content');
-    expect(sections[1]).toBe('Profile content');
+    expect(sections[1]).toBe('Act prompt content');
+    expect(sections[2]).toBe('Profile content');
     // Should NOT include AGENT or preferences as separate sections
     expect(result).not.toContain('Agent content');
     expect(result).not.toContain('Preferences content');
@@ -40,6 +42,7 @@ describe('PromptComposer', () => {
 
   it('should skip SYSTEM_PROMPT when empty', () => {
     fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
+    fs.writeFileSync(path.join(tmpDir, 'ACT_PROMPT.md'), '');
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile content');
 
     const result = composer.compose();
@@ -47,8 +50,9 @@ describe('PromptComposer', () => {
   });
 
   it('should skip empty sections (no extra separators)', () => {
-    // Clear SYSTEM_PROMPT so we only test non-system sections
+    // Clear SYSTEM_PROMPT and ACT_PROMPT so we only test non-system sections
     fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
+    fs.writeFileSync(path.join(tmpDir, 'ACT_PROMPT.md'), '');
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile only');
 
     const result = composer.compose();
@@ -58,12 +62,14 @@ describe('PromptComposer', () => {
 
   it('should return empty string when all sections are empty', () => {
     fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
+    fs.writeFileSync(path.join(tmpDir, 'ACT_PROMPT.md'), '');
     const result = composer.compose();
     expect(result).toBe('');
   });
 
   it('should skip whitespace-only sections', () => {
     fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
+    fs.writeFileSync(path.join(tmpDir, 'ACT_PROMPT.md'), '');
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), '   \n  ');
 
     const result = composer.compose();
@@ -82,6 +88,7 @@ describe('PromptComposer', () => {
 
   it('should include .ai-terminal.md from cwd when provided', () => {
     fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
+    fs.writeFileSync(path.join(tmpDir, 'ACT_PROMPT.md'), '');
     const cwdDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cwd-'));
     fs.writeFileSync(path.join(cwdDir, '.ai-terminal.md'), 'Project rules');
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
@@ -95,6 +102,7 @@ describe('PromptComposer', () => {
 
   it('should skip .ai-terminal.md when file does not exist', () => {
     fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
+    fs.writeFileSync(path.join(tmpDir, 'ACT_PROMPT.md'), '');
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
 
     const result = composer.compose('/nonexistent-dir');
@@ -192,6 +200,7 @@ describe('PromptComposer', () => {
 
     it('should skip empty OPENSPEC_SDD.md even when enabled', () => {
       fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
+      fs.writeFileSync(path.join(tmpDir, 'ACT_PROMPT.md'), '');
       fs.writeFileSync(path.join(tmpDir, 'OPENSPEC_SDD.md'), '');
       fs.writeFileSync(path.join(tmpDir, 'CONFIG.json'), JSON.stringify({ openspecSddEnabled: true }));
 
@@ -206,6 +215,50 @@ describe('PromptComposer', () => {
 
       const result = composer.compose();
       expect(result).not.toContain('OpenSpec content');
+    });
+  });
+
+  describe('PLAN_PROMPT.md injection by mode', () => {
+    it('should inject PLAN_PROMPT.md when mode is plan', () => {
+      fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), 'System');
+      fs.writeFileSync(path.join(tmpDir, 'PLAN_PROMPT.md'), 'Plan instructions');
+
+      const result = composer.compose(undefined, undefined, 'plan');
+      expect(result).toContain('System');
+      expect(result).toContain('Plan instructions');
+    });
+
+    it('should NOT inject PLAN_PROMPT.md when mode is act', () => {
+      fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), 'System');
+      fs.writeFileSync(path.join(tmpDir, 'PLAN_PROMPT.md'), 'Plan instructions');
+
+      const result = composer.compose(undefined, undefined, 'act');
+      expect(result).toContain('System');
+      expect(result).not.toContain('Plan instructions');
+    });
+
+    it('should NOT inject PLAN_PROMPT.md when mode is undefined', () => {
+      fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), 'System');
+      fs.writeFileSync(path.join(tmpDir, 'PLAN_PROMPT.md'), 'Plan instructions');
+
+      const result = composer.compose();
+      expect(result).not.toContain('Plan instructions');
+    });
+
+    it('should place PLAN_PROMPT.md after SYSTEM_PROMPT.md', () => {
+      fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), 'System prompt');
+      fs.writeFileSync(path.join(tmpDir, 'PLAN_PROMPT.md'), 'Plan prompt');
+
+      const result = composer.compose(undefined, undefined, 'plan');
+      expect(result.indexOf('System prompt')).toBeLessThan(result.indexOf('Plan prompt'));
+    });
+
+    it('should skip empty PLAN_PROMPT.md', () => {
+      fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), 'System');
+      fs.writeFileSync(path.join(tmpDir, 'PLAN_PROMPT.md'), '');
+
+      const result = composer.compose(undefined, undefined, 'plan');
+      expect(result).toBe('System');
     });
   });
 
@@ -234,6 +287,7 @@ describe('PromptComposer', () => {
 
       const composerWithMem = new PromptComposer(store, 50_000, memStore);
       fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '');
+      fs.writeFileSync(path.join(tmpDir, 'ACT_PROMPT.md'), '');
       fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
 
       const result = composerWithMem.compose();

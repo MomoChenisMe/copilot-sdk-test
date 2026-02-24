@@ -196,8 +196,16 @@
       "resetFailed": "Reset failed"
     },
     "systemPrompt": {
+      "title": "System Prompt",
+      "desc": "Base instructions always injected into every conversation, regardless of mode.",
       "resetToDefault": "Reset to Default",
-      "resetConfirm": "Are you sure you want to reset to the default system prompt? Your current changes will be lost."
+      "resetConfirm": "Are you sure you want to reset to the default system prompt? Your current changes will be lost.",
+      "actMode": "Act Mode Prompt",
+      "actModeDesc": "Additional instructions appended when in Act mode (execution).",
+      "actResetConfirm": "Are you sure you want to reset to the default act mode prompt? Your current changes will be lost.",
+      "planMode": "Plan Mode Prompt",
+      "planModeDesc": "Additional instructions appended when in Plan mode.",
+      "planResetConfirm": "Are you sure you want to reset to the default plan mode prompt? Your current changes will be lost."
     },
     "memory": {
       "preferences": "Preferences",
@@ -298,7 +306,8 @@
     "copy": "Copy",
     "download": "Download",
     "close": "Close",
-    "empty": "No artifacts yet"
+    "empty": "No artifacts yet",
+    "plan": "Plan"
   },
   "directoryPicker": {
     "search": "Search directories...",
@@ -470,15 +479,7 @@
     "mcpLabel": "MCP Servers"
   },
   "sdk": {
-    "analyzeChanges": "Analyze Changes",
-    "changelogUnavailable": "Changelog unavailable",
-    "versionUnknown": "Unknown",
-    "updateAvailable": "Update Available",
-    "upToDate": "Up to date",
-    "checkForUpdates": "Check for Updates",
-    "updateSdk": "Update SDK",
-    "updateSuccess": "SDK updated successfully",
-    "updateFailed": "SDK update failed"
+    "versionUnknown": "Unknown"
   },
   "webSearch": {
     "toggleTitle": "Force web search",

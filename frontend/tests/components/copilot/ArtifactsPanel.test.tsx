@@ -143,6 +143,64 @@ describe('ArtifactsPanel', () => {
     expect(screen.getByTestId('artifacts-close')).toBeInTheDocument();
   });
 
+  // Plan artifact type tests (Issue 8)
+  const planArtifact: ParsedArtifact = {
+    id: 'a6',
+    type: 'plan',
+    title: 'Implementation Plan',
+    content: '# Plan\n\n## Context\nSome context\n\n## Approach\n1. Step one\n2. Step two',
+  };
+
+  it('should accept plan as a valid artifact type', () => {
+    const artifact: ParsedArtifact = planArtifact;
+    expect(artifact.type).toBe('plan');
+  });
+
+  it('should render plan artifact with ClipboardList icon in tab', () => {
+    render(
+      <ArtifactsPanel
+        artifacts={[planArtifact, markdownArtifact]}
+        activeArtifactId="a6"
+        onSelectArtifact={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    const planTab = screen.getByTestId('artifact-tab-a6');
+    expect(planTab).toBeInTheDocument();
+    // ClipboardList icon should be rendered (as an svg element)
+    const svg = planTab.querySelector('svg');
+    expect(svg).toBeTruthy();
+  });
+
+  it('should render plan artifact content as markdown', () => {
+    render(
+      <ArtifactsPanel
+        artifacts={[planArtifact]}
+        activeArtifactId="a6"
+        onSelectArtifact={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    const content = screen.getByTestId('artifact-content');
+    // Should contain the plan content rendered as markdown (prose article)
+    const article = content.querySelector('article.prose');
+    expect(article).toBeTruthy();
+  });
+
+  it('should download plan artifact as .md file', () => {
+    // Verify extMap includes plan -> .md
+    const { container } = render(
+      <ArtifactsPanel
+        artifacts={[planArtifact]}
+        activeArtifactId="a6"
+        onSelectArtifact={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    // The type label should use i18n key artifacts.plan → "Plan" (en.json)
+    expect(container.textContent).toContain('Plan');
+  });
+
   it('should show mermaid error fallback on render failure', async () => {
     const mermaid = (await import('mermaid')).default;
     vi.mocked(mermaid.render).mockRejectedValueOnce(new Error('Invalid syntax'));

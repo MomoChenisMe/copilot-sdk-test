@@ -282,7 +282,12 @@ export function ChatView({
   const conversations = useAppStore((s) => s.conversations);
   const recentConversations = useMemo(() => conversations.slice(0, 10), [conversations]);
 
-  const showStreamingBlock = isStreaming || streamingText || (toolRecords ?? []).length > 0 || (turnSegments ?? []).length > 0 || copilotError;
+  // Show streaming block when there's active content to display.
+  // When userInputRequest is pending and there's no live stream content (toolRecords, turnSegments, etc.),
+  // hide the streaming block — the InlineUserInput already indicates the stream is active.
+  // This prevents an empty "助手" block appearing after page refresh with pending ask_user.
+  const hasStreamContent = streamingText || (toolRecords ?? []).length > 0 || (turnSegments ?? []).length > 0 || copilotError;
+  const showStreamingBlock = hasStreamContent || (isStreaming && !userInputRequest);
 
   // Input history: extract previous user inputs (most recent first), filtered by mode
   const inputHistory = useMemo(() => {
@@ -527,10 +532,11 @@ export function ChatView({
                           case 'reasoning':
                             return <ReasoningBlock key={`reasoning-${index}`} text={segment.content} isStreaming={false} />;
                           case 'tool': {
+                            // Only show ToolResultBlock for successful results — errors are already shown inside ToolRecord
                             const showResult = INLINE_RESULT_TOOLS.includes(segment.toolName) &&
-                              segment.status !== 'running' &&
-                              (segment.result != null || segment.error != null);
-                            const resultValue = segment.result ?? segment.error;
+                              segment.status === 'success' &&
+                              segment.result != null;
+                            const resultValue = segment.result;
                             return (
                               <div key={`tool-${segment.toolCallId}`}>
                                 <ToolRecordErrorBoundary>

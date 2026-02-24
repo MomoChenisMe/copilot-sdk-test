@@ -12,6 +12,8 @@ function createMockStreamManager() {
   return {
     startStream: vi.fn().mockResolvedValue(undefined),
     subscribe: vi.fn().mockReturnValue(() => {}),
+    hasStream: vi.fn().mockReturnValue(false),
+    removeSubscriber: vi.fn(),
     abortStream: vi.fn(),
     getActiveStreamIds: vi.fn().mockReturnValue([]),
     getFullState: vi.fn().mockReturnValue({ activeStreams: [], pendingUserInputs: [] }),

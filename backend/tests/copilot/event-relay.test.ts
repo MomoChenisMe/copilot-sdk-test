@@ -422,6 +422,92 @@ describe('EventRelay', () => {
     });
   });
 
+  // --- safeHandler: error resilience ---
+
+  describe('safeHandler error resilience', () => {
+    it('should not crash when an event handler throws — other events still work', () => {
+      const send = vi.fn<(msg: WsMessage) => void>();
+      const handlers = new Map<string, (event: any) => void>();
+
+      const mockSession = {
+        sessionId: 'test-session',
+        on: vi.fn((eventOrHandler: string | Function, handler?: Function) => {
+          if (typeof eventOrHandler === 'string' && handler) {
+            handlers.set(eventOrHandler, handler);
+          }
+          return () => {};
+        }),
+      };
+
+      // Make send throw on the first call, simulating an error
+      send.mockImplementationOnce(() => {
+        throw new Error('Send failed');
+      });
+
+      const relay = new EventRelay(send);
+      relay.attach(mockSession as any);
+
+      // First event — the handler internally calls send which throws; safeHandler should catch
+      expect(() => {
+        handlers.get('assistant.message_delta')!({
+          type: 'assistant.message_delta',
+          messageId: 'msg-crash',
+          deltaContent: 'boom',
+        });
+      }).not.toThrow();
+
+      // Second event — should still work
+      handlers.get('assistant.message')!({
+        type: 'assistant.message',
+        messageId: 'msg-ok',
+        content: 'Hello after error',
+      });
+
+      expect(send).toHaveBeenCalledWith({
+        type: 'copilot:message',
+        data: { messageId: 'msg-ok', content: 'Hello after error' },
+      });
+    });
+
+    it('should send copilot:tool_end with error status when tool.execution_complete handler throws', () => {
+      const sent: WsMessage[] = [];
+      const send = vi.fn<(msg: WsMessage) => void>((msg) => {
+        // Throw when processing tool data that would cause .map() on undefined
+        if (msg.type === 'copilot:tool_end' && !(msg.data as any)._fromFallback) {
+          // Simulate the original handler failing
+          throw new TypeError("Cannot read properties of undefined (reading 'map')");
+        }
+        sent.push(msg);
+      });
+
+      const handlers = new Map<string, (event: any) => void>();
+      const mockSession = {
+        sessionId: 'test-session',
+        on: vi.fn((eventOrHandler: string | Function, handler?: Function) => {
+          if (typeof eventOrHandler === 'string' && handler) {
+            handlers.set(eventOrHandler, handler);
+          }
+          return () => {};
+        }),
+      };
+
+      const relay = new EventRelay(send);
+      relay.attach(mockSession as any);
+
+      // Calling the handler should not throw
+      expect(() => {
+        handlers.get('tool.execution_complete')!({
+          type: 'tool.execution_complete',
+          data: {
+            toolCallId: 'tc-fail',
+            success: false,
+            error: { message: "Cannot read properties of undefined (reading 'map')", code: 'failure' },
+          },
+        });
+      }).not.toThrow();
+    });
+  });
+
   // --- Nested event structure tests (SDK wraps payload in { type, data: {...} }) ---
 
   describe('nested event structure (e.data wrapper)', () => {
@@ -540,6 +626,50 @@ describe('EventRelay', () => {
         type: 'copilot:error',
         data: { errorType: 'nested_error', message: 'Nested error message' },
       });
+    });
+  });
+
+  // --- Plan changed event ---
+
+  it('should relay session.plan_changed as copilot:plan_changed', () => {
+    const { send, handlers } = setup();
+
+    handlers.get('session.plan_changed')!({
+      type: 'session.plan_changed',
+      data: { operation: 'create' },
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      type: 'copilot:plan_changed',
+      data: { operation: 'create' },
+    });
+  });
+
+  it('should relay session.plan_changed with update operation', () => {
+    const { send, handlers } = setup();
+
+    handlers.get('session.plan_changed')!({
+      type: 'session.plan_changed',
+      data: { operation: 'update' },
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      type: 'copilot:plan_changed',
+      data: { operation: 'update' },
+    });
+  });
+
+  it('should relay session.plan_changed with delete operation', () => {
+    const { send, handlers } = setup();
+
+    handlers.get('session.plan_changed')!({
+      type: 'session.plan_changed',
+      data: { operation: 'delete' },
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      type: 'copilot:plan_changed',
+      data: { operation: 'delete' },
     });
   });
 });

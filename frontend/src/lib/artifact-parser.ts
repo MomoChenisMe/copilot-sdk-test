@@ -1,6 +1,6 @@
 export interface ParsedArtifact {
   id: string;
-  type: 'markdown' | 'code' | 'html' | 'svg' | 'mermaid';
+  type: 'markdown' | 'code' | 'html' | 'svg' | 'mermaid' | 'plan';
   title: string;
   content: string;
   language?: string;

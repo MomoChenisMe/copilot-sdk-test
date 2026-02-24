@@ -7,7 +7,7 @@ import { useConversations } from '../../hooks/useConversations';
 import { useTabCopilot } from '../../hooks/useTabCopilot';
 import { useTerminal } from '../../hooks/useTerminal';
 import { useBashMode } from '../../hooks/useBashMode';
-import { useModels } from '../../hooks/useModels';
+import { useModelsQuery } from '../../hooks/queries/useModelsQuery';
 import { useSkills } from '../../hooks/useSkills';
 import { useGlobalShortcuts } from '../../hooks/useGlobalShortcuts';
 import { useQuota } from '../../hooks/useQuota';
@@ -24,7 +24,6 @@ import { ChatView } from '../copilot/ChatView';
 import { ArtifactsPanel } from '../copilot/ArtifactsPanel';
 import { SettingsPanel } from '../settings/SettingsPanel';
 import { ShortcutsPanel } from '../shared/ShortcutsPanel';
-import { SdkUpdateBanner } from '../copilot/SdkUpdateBanner';
 import { MobileDrawer } from './MobileDrawer';
 import { OpenSpecPanel } from '../openspec/OpenSpecPanel';
 import { ToastContainer } from '../shared/ToastContainer';
@@ -50,13 +49,12 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   }, [conversations]);
 
   // Load models, skills, and quota from API
-  useModels();
+  const { data: models = [] } = useModelsQuery();
   useSkills();
   useQuota();
 
   const activeConversationId = useAppStore((s) => s.activeConversationId);
   const setActiveConversationId = useAppStore((s) => s.setActiveConversationId);
-  const models = useAppStore((s) => s.models);
 
   // Tab state
   const activeTabId = useAppStore((s) => s.activeTabId);
@@ -103,7 +101,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
     };
   }, [checkOpenSpecDirExists]);
 
-  const { sendMessage, abortMessage, sendUserInputResponse, cleanupDedup } = useTabCopilot({ subscribe, send });
+  const { sendMessage, abortMessage, sendUserInputResponse, cleanupDedup } = useTabCopilot({ subscribe, send, status });
 
   const handleBashCwdChange = useCallback(
     async (newCwd: string) => {
@@ -576,18 +574,6 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   const activeConvId = activeTab?.conversationId;
   const activeConversation = conversations.find((c) => c.id === activeConvId);
 
-  // Listen for SDK analyze changes event from settings panel
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ message: string }>).detail;
-      if (detail?.message) {
-        handleSend(detail.message);
-      }
-    };
-    document.addEventListener('settings:analyzeChanges', handler);
-    return () => document.removeEventListener('settings:analyzeChanges', handler);
-  }, [handleSend]);
-
   // Mobile drawer state
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerConfirmDeleteId, setDrawerConfirmDeleteId] = useState<string | null>(null);
@@ -685,8 +671,6 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
         openSpecActive={openSpecActive}
         onMenuClick={() => setDrawerOpen(true)}
       />
-
-      <SdkUpdateBanner />
 
       <div className="hidden md:block">
       <TabBar

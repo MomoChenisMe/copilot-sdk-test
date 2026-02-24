@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Copy, Check, FileText, Code, Globe, Image, Download, Package } from 'lucide-react';
+import { X, Copy, Check, FileText, Code, Globe, Image, Download, Package, ClipboardList } from 'lucide-react';
 import { Markdown } from '../shared/Markdown';
 import type { ParsedArtifact } from '../../lib/artifact-parser';
 
@@ -18,6 +18,7 @@ function getArtifactIcon(type: ParsedArtifact['type']) {
     case 'html': return <Globe size={14} />;
     case 'svg': return <Image size={14} />;
     case 'mermaid': return <Image size={14} />;
+    case 'plan': return <ClipboardList size={14} />;
   }
 }
 
@@ -34,7 +35,7 @@ export function ArtifactsPanel({ artifacts, activeArtifactId, onSelectArtifact, 
   const handleDownload = useCallback(() => {
     if (!active) return;
     const extMap: Record<string, string> = {
-      html: '.html', svg: '.svg', mermaid: '.mmd', markdown: '.md', code: '.txt',
+      html: '.html', svg: '.svg', mermaid: '.mmd', markdown: '.md', code: '.txt', plan: '.md',
     };
     const ext = extMap[active.type] || '.txt';
     const fileName = active.title.includes('.') ? active.title : `artifact${ext}`;
@@ -137,7 +138,7 @@ export function ArtifactsPanel({ artifacts, activeArtifactId, onSelectArtifact, 
           </button>
           {active && (
             <span className="text-xs text-text-tertiary ml-auto">
-              {active.type}{active.language ? ` (${active.language})` : ''}
+              {t(`artifacts.${active.type}`, active.type)}{active.language ? ` (${active.language})` : ''}
             </span>
           )}
         </div>
@@ -180,6 +181,12 @@ function ArtifactRenderer({ artifact }: { artifact: ParsedArtifact }) {
       );
     case 'mermaid':
       return <MermaidRenderer content={artifact.content} />;
+    case 'plan':
+      return (
+        <article className="prose prose-sm dark:prose-invert max-w-none">
+          <Markdown content={artifact.content} />
+        </article>
+      );
   }
 }
 

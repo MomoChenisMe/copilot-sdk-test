@@ -17,6 +17,14 @@ export const promptsApi = {
   /** @deprecated Agent rules merged into PROFILE.md */
   putAgent: (content: string) => apiPut<{ ok: true }>('/api/prompts/agent', { content }),
 
+  getActPrompt: () => apiGet<PromptContent>('/api/prompts/act-prompt'),
+  putActPrompt: (content: string) => apiPut<{ ok: true }>('/api/prompts/act-prompt', { content }),
+  resetActPrompt: () => apiPost<PromptContent>('/api/prompts/act-prompt/reset'),
+
+  getPlanPrompt: () => apiGet<PromptContent>('/api/prompts/plan-prompt'),
+  putPlanPrompt: (content: string) => apiPut<{ ok: true }>('/api/prompts/plan-prompt', { content }),
+  resetPlanPrompt: () => apiPost<PromptContent>('/api/prompts/plan-prompt/reset'),
+
   getOpenspecSdd: () => apiGet<PromptContent>('/api/prompts/openspec-sdd'),
   putOpenspecSdd: (content: string) => apiPut<{ ok: true }>('/api/prompts/openspec-sdd', { content }),
 

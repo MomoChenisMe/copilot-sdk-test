@@ -15,8 +15,9 @@ export function createCopilotHandler(
   streamManager: StreamManager,
   repo: ConversationRepository,
 ): CopilotHandlerResult {
-  // Per-connection state
-  const activeSubscriptions = new Map<string, () => void>();
+  // Per-connection state: track which send function owns each subscription
+  // so onDisconnect only cleans up the disconnecting connection's subscriptions
+  const activeSubscriptions = new Map<string, { unsub: () => void; owner: SendFn }>();
   let _lastConversationId: string | null = null;
   const pendingBashContext = new Map<string, string[]>();
 
@@ -112,6 +113,11 @@ export function createCopilotHandler(
           // Delegate to StreamManager
           void (async () => {
             try {
+              // Clean up any existing stream first (fixes "Stream already exists" after refresh)
+              if (streamManager.hasStream(conversationId)) {
+                await streamManager.abortStream(conversationId);
+              }
+
               const disabledSkills = (payload.disabledSkills as string[]) ?? [];
               const mode = payload.mode as 'plan' | 'act' | undefined;
               const locale = payload.locale as string | undefined;
@@ -122,17 +128,17 @@ export function createCopilotHandler(
                 cwd: conversation.cwd,
                 disabledSkills,
                 files,
+                initialSubscriber: send,
                 ...(mode && { mode }),
                 ...(locale && { locale }),
               });
 
-              // Auto-subscribe this connection to the stream
-              const unsub = streamManager.subscribe(conversationId, send);
-              if (unsub) {
-                // Clean up previous subscription for same conversation
-                activeSubscriptions.get(conversationId)?.();
-                activeSubscriptions.set(conversationId, unsub);
-              }
+              // Manage cleanup: replace previous subscription cleanup
+              activeSubscriptions.get(conversationId)?.unsub();
+              activeSubscriptions.set(conversationId, {
+                unsub: () => streamManager.removeSubscriber(conversationId, send),
+                owner: send,
+              });
             } catch (err) {
               log.error({ err, conversationId }, 'Failed to start stream');
               send({
@@ -150,8 +156,8 @@ export function createCopilotHandler(
           const unsub = streamManager.subscribe(conversationId, send);
 
           if (unsub) {
-            activeSubscriptions.get(conversationId)?.();
-            activeSubscriptions.set(conversationId, unsub);
+            activeSubscriptions.get(conversationId)?.unsub();
+            activeSubscriptions.set(conversationId, { unsub, owner: send });
             send({
               type: 'copilot:stream-status',
               data: { conversationId, subscribed: true },
@@ -167,9 +173,9 @@ export function createCopilotHandler(
 
         case 'copilot:unsubscribe': {
           const conversationId = payload.conversationId as string;
-          const unsub = activeSubscriptions.get(conversationId);
-          if (unsub) {
-            unsub();
+          const entry = activeSubscriptions.get(conversationId);
+          if (entry) {
+            entry.unsub();
             activeSubscriptions.delete(conversationId);
           }
           break;
@@ -225,6 +231,24 @@ export function createCopilotHandler(
             return;
           }
 
+          // Ensure this connection is subscribed to the stream before resolving
+          // the user input. After page refresh, the auto-resubscribe from query_state
+          // may not have succeeded (race condition / timing), leaving subscribers=0.
+          // This guarantees the sender receives subsequent events (tool_end, idle, etc.).
+          if (streamManager.hasStream(conversationId)) {
+            const existingEntry = activeSubscriptions.get(conversationId);
+            if (!existingEntry || existingEntry.owner !== send) {
+              // Clean up previous subscription for this conversation (if any)
+              existingEntry?.unsub();
+              // Skip replay: eventBuffer may contain the user_input_request event
+              // that would re-trigger the selection UI on the frontend after it was cleared.
+              const unsub = streamManager.subscribe(conversationId, send, { skipReplay: true });
+              if (unsub) {
+                activeSubscriptions.set(conversationId, { unsub, owner: send });
+              }
+            }
+          }
+
           streamManager.handleUserInputResponse(conversationId, requestId, answer, wasFreeform);
           break;
         }
@@ -240,8 +264,8 @@ export function createCopilotHandler(
           for (const stream of fullState.activeStreams) {
             const unsub = streamManager.subscribe(stream.conversationId, send);
             if (unsub) {
-              activeSubscriptions.get(stream.conversationId)?.();
-              activeSubscriptions.set(stream.conversationId, unsub);
+              activeSubscriptions.get(stream.conversationId)?.unsub();
+              activeSubscriptions.set(stream.conversationId, { unsub, owner: send });
             }
           }
           break;
@@ -297,20 +321,26 @@ export function createCopilotHandler(
           // Start a new stream with plan content as prompt in act mode
           void (async () => {
             try {
+              // Clean up any existing stream first
+              if (streamManager.hasStream(conversationId)) {
+                await streamManager.abortStream(conversationId);
+              }
+
               await streamManager.startStream(conversationId, {
                 prompt: `以下是先前完成的實作計畫，請開始執行：\n\n${planContent}`,
                 sdkSessionId: null,
                 model: conversation.model,
                 cwd: conversation.cwd,
                 mode: 'act',
+                initialSubscriber: send,
               });
 
-              // Auto-subscribe this connection to the stream
-              const unsub = streamManager.subscribe(conversationId, send);
-              if (unsub) {
-                activeSubscriptions.get(conversationId)?.();
-                activeSubscriptions.set(conversationId, unsub);
-              }
+              // Manage cleanup
+              activeSubscriptions.get(conversationId)?.unsub();
+              activeSubscriptions.set(conversationId, {
+                unsub: () => streamManager.removeSubscriber(conversationId, send),
+                owner: send,
+              });
             } catch (err) {
               log.error({ err, conversationId }, 'Failed to execute plan');
               send({
@@ -331,16 +361,20 @@ export function createCopilotHandler(
       }
     },
 
-    onDisconnect(_send: SendFn): void {
-      // Clean up all subscriptions for this connection
-      for (const [, unsub] of activeSubscriptions) {
-        try {
-          unsub();
-        } catch (err) {
-          log.error({ err }, 'Error during subscription cleanup on disconnect');
+    onDisconnect(send: SendFn): void {
+      // Only clean up subscriptions owned by this specific connection.
+      // The handler is a singleton shared by all connections, so we must NOT
+      // remove subscriptions that belong to a different (newer) connection.
+      for (const [conversationId, entry] of activeSubscriptions) {
+        if (entry.owner === send) {
+          try {
+            entry.unsub();
+          } catch (err) {
+            log.error({ err }, 'Error during subscription cleanup on disconnect');
+          }
+          activeSubscriptions.delete(conversationId);
         }
       }
-      activeSubscriptions.clear();
       // Note: streams continue running in background
     },
   };

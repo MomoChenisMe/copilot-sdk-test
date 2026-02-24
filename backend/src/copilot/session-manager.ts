@@ -122,6 +122,16 @@ export class SessionManager {
     });
   }
 
+  async setMode(session: CopilotSession, mode: 'plan' | 'interactive' | 'autopilot'): Promise<void> {
+    log.info({ sessionId: session.sessionId, mode }, 'Setting SDK mode');
+    await (session as any).rpc.mode.set({ mode });
+  }
+
+  async readPlan(session: CopilotSession): Promise<{ exists: boolean; content: string | null }> {
+    log.debug({ sessionId: session.sessionId }, 'Reading SDK plan');
+    return (session as any).rpc.plan.read();
+  }
+
   async sendMessage(session: CopilotSession, prompt: string, files?: Array<{ id: string; originalName: string; mimeType: string; size: number; path: string }>): Promise<string> {
     log.info({ sessionId: session.sessionId, promptLength: prompt.length, filesCount: files?.length ?? 0 }, 'Sending message');
     const sendOptions: Record<string, unknown> = { prompt };

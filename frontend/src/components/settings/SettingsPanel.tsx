@@ -11,6 +11,7 @@ import { memoryApi as autoMemoryApi } from '../../lib/api';
 import type { MemoryConfig, MemoryStats } from '../../lib/api';
 import { useAppStore } from '../../store';
 import type { ModelInfo } from '../../store';
+import { useModelsQuery } from '../../hooks/queries/useModelsQuery';
 import { Markdown } from '../shared/Markdown';
 import { CustomSelect } from '../shared/CustomSelect';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
@@ -184,19 +185,12 @@ function GeneralTab({
   const { t } = useTranslation();
   const displayLang = language === 'zh-TW' ? '繁體中文' : 'English';
   const [sdkVersion, setSdkVersion] = useState<string | null>(null);
-  const [sdkLatestVersion, setSdkLatestVersion] = useState<string | null>(null);
-  const [sdkUpdateAvailable, setSdkUpdateAvailable] = useState(false);
-  const [analyzingChanges, setAnalyzingChanges] = useState(false);
-  const [checking, setChecking] = useState(false);
-  const [updatingSdk, setUpdatingSdk] = useState(false);
 
   const fetchVersionInfo = useCallback(async () => {
     try {
       const { apiGet } = await import('../../lib/api');
-      const r = await apiGet<{ currentVersion: string | null; latestVersion: string | null; updateAvailable: boolean }>('/api/copilot/sdk-version');
+      const r = await apiGet<{ currentVersion: string | null }>('/api/copilot/sdk-version');
       setSdkVersion(r.currentVersion);
-      setSdkLatestVersion(r.latestVersion);
-      setSdkUpdateAvailable(r.updateAvailable);
     } catch (err) {
       console.warn('Failed to fetch SDK version:', err);
     }
@@ -204,111 +198,14 @@ function GeneralTab({
 
   useEffect(() => { fetchVersionInfo(); }, [fetchVersionInfo]);
 
-  const handleCheckForUpdates = useCallback(async () => {
-    setChecking(true);
-    try { await fetchVersionInfo(); } finally { setChecking(false); }
-  }, [fetchVersionInfo]);
-
-  const handleUpdateSdk = useCallback(async () => {
-    setUpdatingSdk(true);
-    try {
-      const { apiPost } = await import('../../lib/api');
-      const r = await apiPost<{ success: boolean; error?: string }>('/api/copilot/sdk-update');
-      if (r.success) {
-        await fetchVersionInfo();
-        useAppStore.getState().addToast?.({ type: 'success', title: t('sdk.updateSuccess', 'SDK updated successfully') });
-      } else {
-        useAppStore.getState().addToast?.({ type: 'error', title: t('sdk.updateFailed', 'SDK update failed'), message: r.error });
-      }
-    } catch {
-      useAppStore.getState().addToast?.({ type: 'error', title: t('sdk.updateFailed', 'SDK update failed') });
-    } finally {
-      setUpdatingSdk(false);
-    }
-  }, [fetchVersionInfo, t]);
-
-  const handleAnalyzeChanges = useCallback(async () => {
-    if (!sdkVersion || !sdkLatestVersion) return;
-    setAnalyzingChanges(true);
-    try {
-      const { apiGet } = await import('../../lib/api');
-      const { changelog } = await apiGet<{ changelog: string | null }>(
-        `/api/copilot/sdk-changelog?from=${encodeURIComponent(sdkVersion)}&to=${encodeURIComponent(sdkLatestVersion)}`,
-      );
-
-      // Close settings
-      useAppStore.getState().setSettingsOpen(false);
-
-      // Build and dispatch the analyze message
-      const changelogText = changelog || t('sdk.changelogUnavailable');
-      const message = `SDK has been updated from v${sdkVersion} to v${sdkLatestVersion}. Here is the changelog:\n\n${changelogText}\n\nPlease analyze these changes and suggest how my backend and frontend code can be optimized.`;
-      document.dispatchEvent(new CustomEvent('settings:analyzeChanges', { detail: { message } }));
-    } catch {
-      // Fallback: still close settings and send without changelog
-      useAppStore.getState().setSettingsOpen(false);
-      const message = `SDK has been updated from v${sdkVersion} to v${sdkLatestVersion}. ${t('sdk.changelogUnavailable')}. Please analyze the update and suggest how my backend and frontend code can be optimized.`;
-      document.dispatchEvent(new CustomEvent('settings:analyzeChanges', { detail: { message } }));
-    } finally {
-      setAnalyzingChanges(false);
-    }
-  }, [sdkVersion, sdkLatestVersion, t]);
-
   return (
     <div className="flex flex-col gap-4">
       {/* SDK Version */}
       <section>
         <h3 className="text-xs font-semibold text-text-secondary uppercase mb-2">Copilot SDK</h3>
-        <div className="flex flex-col gap-2">
-          {/* Version display row */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <span data-testid="sdk-version" className="text-sm text-text-primary font-mono">
-              {sdkVersion ? `v${sdkVersion}` : t('sdk.versionUnknown')}
-            </span>
-            {sdkUpdateAvailable && sdkLatestVersion && (
-              <>
-                <span className="text-text-muted">→</span>
-                <span className="text-sm font-mono text-accent font-semibold">v{sdkLatestVersion}</span>
-                <span className="px-1.5 py-0.5 text-[10px] font-medium bg-accent/10 text-accent rounded">
-                  {t('sdk.updateAvailable', 'Update Available')}
-                </span>
-              </>
-            )}
-            {!sdkUpdateAvailable && sdkLatestVersion && (
-              <span className="text-xs text-green-500">{t('sdk.upToDate', 'Up to date')}</span>
-            )}
-          </div>
-          {/* Action buttons row */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              data-testid="check-updates-button"
-              onClick={handleCheckForUpdates}
-              disabled={checking}
-              className="px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-bg-tertiary transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-text-primary"
-            >
-              {checking ? '...' : t('sdk.checkForUpdates', 'Check for Updates')}
-            </button>
-            {sdkUpdateAvailable && sdkLatestVersion && (
-              <>
-                <button
-                  data-testid="update-sdk-button"
-                  onClick={handleUpdateSdk}
-                  disabled={updatingSdk}
-                  className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {updatingSdk ? '...' : t('sdk.updateSdk', 'Update SDK')}
-                </button>
-                <button
-                  data-testid="analyze-changes-button"
-                  onClick={handleAnalyzeChanges}
-                  disabled={analyzingChanges}
-                  className="px-3 py-1.5 text-xs font-medium border border-accent text-accent rounded-lg hover:bg-accent/10 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {analyzingChanges ? '...' : t('sdk.analyzeChanges')}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+        <span data-testid="sdk-version" className="text-sm text-text-primary font-mono">
+          {sdkVersion ? `v${sdkVersion}` : t('sdk.versionUnknown')}
+        </span>
       </section>
 
       {/* Language */}
@@ -526,13 +423,23 @@ function NotificationsSection() {
 function SystemPromptTab() {
   const { t } = useTranslation();
   const [content, setContent] = useState('');
+  const [actContent, setActContent] = useState('');
+  const [planContent, setPlanContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [actResetDialogOpen, setActResetDialogOpen] = useState(false);
+  const [planResetDialogOpen, setPlanResetDialogOpen] = useState(false);
 
   useEffect(() => {
-    promptsApi.getSystemPrompt().then((r) => {
-      setContent(r.content);
+    Promise.all([
+      promptsApi.getSystemPrompt(),
+      promptsApi.getActPrompt(),
+      promptsApi.getPlanPrompt(),
+    ]).then(([sys, act, plan]) => {
+      setContent(sys.content);
+      setActContent(act.content);
+      setPlanContent(plan.content);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -561,41 +468,172 @@ function SystemPromptTab() {
     }
   }, [t]);
 
+  const handleActSave = useCallback(async () => {
+    try {
+      await promptsApi.putActPrompt(actContent);
+      setToast(t('settings.toast.saved'));
+      setTimeout(() => setToast(null), 2000);
+    } catch {
+      setToast(t('settings.toast.saveFailed'));
+      setTimeout(() => setToast(null), 2000);
+    }
+  }, [actContent, t]);
+
+  const handleActResetConfirm = useCallback(async () => {
+    setActResetDialogOpen(false);
+    try {
+      const result = await promptsApi.resetActPrompt();
+      setActContent(result.content);
+      setToast(t('settings.toast.reset'));
+      setTimeout(() => setToast(null), 2000);
+    } catch {
+      setToast(t('settings.toast.resetFailed'));
+      setTimeout(() => setToast(null), 2000);
+    }
+  }, [t]);
+
+  const handlePlanSave = useCallback(async () => {
+    try {
+      await promptsApi.putPlanPrompt(planContent);
+      setToast(t('settings.toast.saved'));
+      setTimeout(() => setToast(null), 2000);
+    } catch {
+      setToast(t('settings.toast.saveFailed'));
+      setTimeout(() => setToast(null), 2000);
+    }
+  }, [planContent, t]);
+
+  const handlePlanResetConfirm = useCallback(async () => {
+    setPlanResetDialogOpen(false);
+    try {
+      const result = await promptsApi.resetPlanPrompt();
+      setPlanContent(result.content);
+      setToast(t('settings.toast.reset'));
+      setTimeout(() => setToast(null), 2000);
+    } catch {
+      setToast(t('settings.toast.resetFailed'));
+      setTimeout(() => setToast(null), 2000);
+    }
+  }, [t]);
+
   if (loading) return <div className="text-text-secondary text-sm">{t('settings.loading')}</div>;
 
   return (
-    <div className="flex flex-col gap-3">
-      <textarea
-        data-testid="system-prompt-textarea"
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-        className="w-full h-64 p-2 text-sm bg-bg-secondary border border-border rounded-lg resize-y font-mono text-text-primary"
-      />
-      <div className="flex items-center gap-2">
-        <button
-          data-testid="save-system-prompt"
-          onClick={handleSave}
-          className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
-        >
-          {t('settings.save')}
-        </button>
-        <button
-          data-testid="reset-system-prompt"
-          onClick={() => setResetDialogOpen(true)}
-          className="px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-bg-tertiary text-text-secondary"
-        >
-          {t('settings.systemPrompt.resetToDefault')}
-        </button>
-        {toast && <span className="text-xs text-text-secondary">{toast}</span>}
+    <div className="flex flex-col gap-6">
+      {/* System Prompt (Base) */}
+      <div className="flex flex-col gap-3">
+        <div>
+          <h3 data-testid="system-prompt-heading" className="text-sm font-medium text-text-primary">{t('settings.systemPrompt.title')}</h3>
+          <p className="text-xs text-text-secondary mt-0.5">{t('settings.systemPrompt.desc')}</p>
+        </div>
+        <textarea
+          data-testid="system-prompt-textarea"
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          className="w-full h-64 p-2 text-sm bg-bg-secondary border border-border rounded-lg resize-y font-mono text-text-primary"
+        />
+        <div className="flex items-center gap-2">
+          <button
+            data-testid="save-system-prompt"
+            onClick={handleSave}
+            className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
+          >
+            {t('settings.save')}
+          </button>
+          <button
+            data-testid="reset-system-prompt"
+            onClick={() => setResetDialogOpen(true)}
+            className="px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-bg-tertiary text-text-secondary"
+          >
+            {t('settings.systemPrompt.resetToDefault')}
+          </button>
+          {toast && <span className="text-xs text-text-secondary">{toast}</span>}
+        </div>
+        <ConfirmDialog
+          open={resetDialogOpen}
+          title={t('settings.systemPrompt.resetToDefault', 'Reset to default')}
+          description={t('settings.systemPrompt.resetConfirm', 'Are you sure you want to reset the system prompt to default? Current content will be lost.')}
+          destructive
+          onConfirm={handleResetConfirm}
+          onCancel={() => setResetDialogOpen(false)}
+        />
       </div>
-      <ConfirmDialog
-        open={resetDialogOpen}
-        title={t('settings.systemPrompt.resetToDefault', 'Reset to default')}
-        description={t('settings.systemPrompt.resetConfirm', 'Are you sure you want to reset the system prompt to default? Current content will be lost.')}
-        destructive
-        onConfirm={handleResetConfirm}
-        onCancel={() => setResetDialogOpen(false)}
-      />
+
+      {/* Act Mode Prompt */}
+      <div className="flex flex-col gap-3">
+        <div>
+          <h3 data-testid="act-mode-heading" className="text-sm font-medium text-text-primary">{t('settings.systemPrompt.actMode')}</h3>
+          <p className="text-xs text-text-secondary mt-0.5">{t('settings.systemPrompt.actModeDesc')}</p>
+        </div>
+        <textarea
+          data-testid="act-prompt-textarea"
+          value={actContent}
+          onChange={(e) => setActContent(e.target.value)}
+          className="w-full h-48 p-2 text-sm bg-bg-secondary border border-border rounded-lg resize-y font-mono text-text-primary"
+        />
+        <div className="flex items-center gap-2">
+          <button
+            data-testid="save-act-prompt"
+            onClick={handleActSave}
+            className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
+          >
+            {t('settings.save')}
+          </button>
+          <button
+            data-testid="reset-act-prompt"
+            onClick={() => setActResetDialogOpen(true)}
+            className="px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-bg-tertiary text-text-secondary"
+          >
+            {t('settings.systemPrompt.resetToDefault')}
+          </button>
+        </div>
+        <ConfirmDialog
+          open={actResetDialogOpen}
+          title={t('settings.systemPrompt.resetToDefault', 'Reset to default')}
+          description={t('settings.systemPrompt.actResetConfirm', 'Are you sure you want to reset the act mode prompt to default? Current content will be lost.')}
+          destructive
+          onConfirm={handleActResetConfirm}
+          onCancel={() => setActResetDialogOpen(false)}
+        />
+      </div>
+
+      {/* Plan Mode Prompt */}
+      <div className="flex flex-col gap-3">
+        <div>
+          <h3 data-testid="plan-mode-heading" className="text-sm font-medium text-text-primary">{t('settings.systemPrompt.planMode')}</h3>
+          <p className="text-xs text-text-secondary mt-0.5">{t('settings.systemPrompt.planModeDesc')}</p>
+        </div>
+        <textarea
+          data-testid="plan-prompt-textarea"
+          value={planContent}
+          onChange={(e) => setPlanContent(e.target.value)}
+          className="w-full h-48 p-2 text-sm bg-bg-secondary border border-border rounded-lg resize-y font-mono text-text-primary"
+        />
+        <div className="flex items-center gap-2">
+          <button
+            data-testid="save-plan-prompt"
+            onClick={handlePlanSave}
+            className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
+          >
+            {t('settings.save')}
+          </button>
+          <button
+            data-testid="reset-plan-prompt"
+            onClick={() => setPlanResetDialogOpen(true)}
+            className="px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-bg-tertiary text-text-secondary"
+          >
+            {t('settings.systemPrompt.resetToDefault')}
+          </button>
+        </div>
+        <ConfirmDialog
+          open={planResetDialogOpen}
+          title={t('settings.systemPrompt.resetToDefault', 'Reset to default')}
+          description={t('settings.systemPrompt.planResetConfirm', 'Are you sure you want to reset the plan mode prompt to default? Current content will be lost.')}
+          destructive
+          onConfirm={handlePlanResetConfirm}
+          onCancel={() => setPlanResetDialogOpen(false)}
+        />
+      </div>
     </div>
   );
 }
@@ -802,7 +840,7 @@ function MemoryTab() {
     }
   }, [autoMemConfig, t]);
 
-  const models = useAppStore((s) => s.models);
+  const { data: models = [] } = useModelsQuery();
 
   const handleLlmModelChange = useCallback(async (key: 'llmGatingModel' | 'llmExtractionModel' | 'llmCompactionModel', value: string) => {
     if (!autoMemConfig) return;

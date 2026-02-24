@@ -14,11 +14,22 @@ export class EventRelay {
 
   constructor(private send: (msg: WsMessage) => void) {}
 
+  /** Wrap an event handler with try-catch so errors don't crash the stream */
+  private safeHandler(eventName: string, handler: (event: any) => void): (event: any) => void {
+    return (event: any) => {
+      try {
+        handler(event);
+      } catch (err) {
+        log.error({ err, eventName }, 'Error in event handler');
+      }
+    };
+  }
+
   attach(session: CopilotSession): void {
     this.detach();
 
     this.unsubscribes.push(
-      session.on('assistant.message_delta', (event) => {
+      session.on('assistant.message_delta', this.safeHandler('assistant.message_delta', (event) => {
         const e = event as any;
         const d = e.data ?? e;
         log.debug({ event: e }, 'assistant.message_delta');
@@ -29,11 +40,11 @@ export class EventRelay {
             content: extractContent(d),
           },
         });
-      }),
+      })),
     );
 
     this.unsubscribes.push(
-      session.on('assistant.message', (event) => {
+      session.on('assistant.message', this.safeHandler('assistant.message', (event) => {
         const e = event as any;
         const d = e.data ?? e;
         log.debug({ event: e }, 'assistant.message');
@@ -44,11 +55,11 @@ export class EventRelay {
             content: d.content ?? '',
           },
         });
-      }),
+      })),
     );
 
     this.unsubscribes.push(
-      session.on('assistant.reasoning_delta', (event) => {
+      session.on('assistant.reasoning_delta', this.safeHandler('assistant.reasoning_delta', (event) => {
         const e = event as any;
         const d = e.data ?? e;
         log.debug({ event: e }, 'assistant.reasoning_delta');
@@ -59,11 +70,11 @@ export class EventRelay {
             content: extractContent(d),
           },
         });
-      }),
+      })),
     );
 
     this.unsubscribes.push(
-      session.on('assistant.reasoning', (event) => {
+      session.on('assistant.reasoning', this.safeHandler('assistant.reasoning', (event) => {
         const e = event as any;
         const d = e.data ?? e;
         log.debug({ event: e }, 'assistant.reasoning');
@@ -74,11 +85,11 @@ export class EventRelay {
             content: d.content ?? '',
           },
         });
-      }),
+      })),
     );
 
     this.unsubscribes.push(
-      session.on('tool.execution_start', (event) => {
+      session.on('tool.execution_start', this.safeHandler('tool.execution_start', (event) => {
         const e = event as any;
         const d = e.data ?? e;
         log.debug({ event: e }, 'tool.execution_start');
@@ -90,11 +101,11 @@ export class EventRelay {
             arguments: d.arguments,
           },
         });
-      }),
+      })),
     );
 
     this.unsubscribes.push(
-      session.on('tool.execution_complete', (event) => {
+      session.on('tool.execution_complete', this.safeHandler('tool.execution_complete', (event) => {
         const e = event as any;
         const d = e.data ?? e;
         log.debug({ event: e }, 'tool.execution_complete');
@@ -114,11 +125,11 @@ export class EventRelay {
           type: 'copilot:tool_end',
           data,
         });
-      }),
+      })),
     );
 
     this.unsubscribes.push(
-      session.on('assistant.usage', (event) => {
+      session.on('assistant.usage', this.safeHandler('assistant.usage', (event) => {
         const e = event as any;
         const d = e.data ?? e;
         log.debug({ event: e }, 'assistant.usage');
@@ -139,11 +150,11 @@ export class EventRelay {
             data: { quotaSnapshots: d.quotaSnapshots },
           });
         }
-      }),
+      })),
     );
 
     this.unsubscribes.push(
-      session.on('session.usage_info', (event) => {
+      session.on('session.usage_info', this.safeHandler('session.usage_info', (event) => {
         const e = event as any;
         const d = e.data ?? e;
         log.debug({ event: e }, 'session.usage_info');
@@ -154,25 +165,25 @@ export class EventRelay {
             contextWindowMax: d.contextWindowMax,
           },
         });
-      }),
+      })),
     );
 
     this.unsubscribes.push(
-      session.on('session.compaction_start', () => {
+      session.on('session.compaction_start', this.safeHandler('session.compaction_start', () => {
         log.debug('session.compaction_start');
         this.send({ type: 'copilot:compaction_start' });
-      }),
+      })),
     );
 
     this.unsubscribes.push(
-      session.on('session.compaction_complete', () => {
+      session.on('session.compaction_complete', this.safeHandler('session.compaction_complete', () => {
         log.debug('session.compaction_complete');
         this.send({ type: 'copilot:compaction_complete' });
-      }),
+      })),
     );
 
     this.unsubscribes.push(
-      session.on('session.shutdown', (event) => {
+      session.on('session.shutdown', this.safeHandler('session.shutdown', (event) => {
         const e = event as any;
         const d = e.data ?? e;
         log.debug({ event: e }, 'session.shutdown');
@@ -183,18 +194,32 @@ export class EventRelay {
             modelMetrics: d.modelMetrics,
           },
         });
-      }),
+      })),
     );
 
     this.unsubscribes.push(
-      session.on('session.idle', () => {
+      session.on('session.idle', this.safeHandler('session.idle', () => {
         log.debug('session.idle');
         this.send({ type: 'copilot:idle' });
-      }),
+      })),
     );
 
     this.unsubscribes.push(
-      session.on('session.error', (event) => {
+      session.on('session.plan_changed', this.safeHandler('session.plan_changed', (event) => {
+        const e = event as any;
+        const d = e.data ?? e;
+        log.debug({ event: e }, 'session.plan_changed');
+        this.send({
+          type: 'copilot:plan_changed',
+          data: {
+            operation: d.operation,
+          },
+        });
+      })),
+    );
+
+    this.unsubscribes.push(
+      session.on('session.error', this.safeHandler('session.error', (event) => {
         const e = event as any;
         const d = e.data ?? e;
         log.error({ event: e }, 'session.error');
@@ -205,7 +230,7 @@ export class EventRelay {
             message: d.message ?? 'Unknown error',
           },
         });
-      }),
+      })),
     );
   }
 

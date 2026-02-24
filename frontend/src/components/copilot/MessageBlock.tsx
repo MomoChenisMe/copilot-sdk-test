@@ -239,10 +239,11 @@ export function MessageBlock({ message }: MessageBlockProps) {
               case 'tool': {
                 const toolSeg = segment as TurnSegment & { type: 'tool' };
                 const isInlineTool = INLINE_RESULT_TOOLS.includes(toolSeg.toolName);
+                // Only show ToolResultBlock for successful results — errors are already shown inside ToolRecord
                 const showResult = isInlineTool &&
-                  toolSeg.status !== 'running' &&
-                  (toolSeg.result != null || toolSeg.error != null);
-                const resultValue = toolSeg.result ?? toolSeg.error;
+                  toolSeg.status === 'success' &&
+                  toolSeg.result != null;
+                const resultValue = toolSeg.result;
                 return (
                   <div key={`tool-${toolSeg.toolCallId}`}>
                     <ToolRecordErrorBoundary>

@@ -2,11 +2,13 @@ import { useEffect, useCallback, useRef } from 'react';
 import { useAppStore } from '../store';
 import { conversationApi } from '../lib/api';
 import type { MessageMetadata, TurnSegment } from '../lib/api';
-import type { WsMessage } from '../lib/ws-types';
+import type { WsMessage, WsStatus } from '../lib/ws-types';
+import type { ParsedArtifact } from '../lib/artifact-parser';
 
 interface UseTabCopilotOptions {
   subscribe: (listener: (message: WsMessage) => void) => () => void;
   send: (message: WsMessage) => void;
+  status?: WsStatus;
 }
 
 // Per-conversation dedup state
@@ -23,7 +25,7 @@ function findTabIdByConversationId(conversationId: string): string | undefined {
   return Object.keys(tabs).find((id) => tabs[id].conversationId === conversationId);
 }
 
-export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
+export function useTabCopilot({ subscribe, send, status }: UseTabCopilotOptions) {
   // Per-conversation dedup maps
   const dedupMapRef = useRef<Map<string, ConversationDedup>>(new Map());
 
@@ -41,13 +43,23 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
     return d;
   }
 
+  // Send query_state whenever WebSocket connects/reconnects
   useEffect(() => {
-    // On mount (or reconnect), query backend for any active streams / pending inputs
-    send({ type: 'copilot:query_state' });
+    if (status === 'connected') {
+      send({ type: 'copilot:query_state' });
+    }
+  }, [status, send]);
 
+  useEffect(() => {
     const unsub = subscribe((msg) => {
       const data = (msg.data ?? {}) as Record<string, unknown>;
       const conversationId = data.conversationId as string | undefined;
+
+      // Debug: log key copilot events to help trace ask_user flow
+      if (msg.type === 'copilot:user_input_request' || msg.type === 'copilot:tool_start' || msg.type === 'copilot:tool_end' || msg.type === 'copilot:idle' || msg.type === 'copilot:state_response' || msg.type === 'copilot:message') {
+        const tabId = conversationId ? findTabIdByConversationId(conversationId) : undefined;
+        console.debug(`[useTabCopilot] ${msg.type}`, { conversationId, tabId, hasTab: !!tabId, data: msg.type === 'copilot:state_response' ? { activeStreams: (data.activeStreams as any[])?.length, pendingUserInputs: (data.pendingUserInputs as any[])?.length } : data });
+      }
 
       // Global events — no conversationId routing needed
       switch (msg.type) {
@@ -71,27 +83,113 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
           const pendingUserInputs = data.pendingUserInputs as Array<{ requestId: string; question: string; choices?: string[]; allowFreeform: boolean; multiSelect?: boolean; conversationId: string }> | undefined;
           const state = useAppStore.getState();
 
-          // Restore streaming state for active streams
+          // Restore streaming state for active streams (including plan mode)
           if (activeStreams) {
             for (const stream of activeStreams) {
               const tid = findTabIdByConversationId(stream.conversationId);
               if (tid) {
                 state.setTabIsStreaming(tid, true);
                 state.updateStreamStatus(stream.conversationId, 'running');
+                // Restore plan mode from the backend stream state
+                if ((stream as any).mode === 'plan') {
+                  state.setTabPlanMode(tid, true);
+                }
               }
             }
           }
 
+          // Build set of active conversationIds for quick lookup
+          const activeConversationIds = new Set(activeStreams?.map((s) => s.conversationId) ?? []);
+
+          // Refresh messages from DB for all open tabs on reconnect.
+          // This fills in content that was lost during the disconnect window
+          // (events broadcast while frontend was disconnected are never replayed).
+          // Also handles the case where a stream finished during disconnect —
+          // the frontend never received copilot:idle, so it must fetch from DB.
+          const allTabs = state.tabs;
+          for (const tid of Object.keys(allTabs)) {
+            const tab = allTabs[tid];
+            if (!tab?.conversationId) continue;
+            // If the stream is NOT active (finished during disconnect), ensure streaming is off
+            if (!activeConversationIds.has(tab.conversationId)) {
+              if (tab.isStreaming) {
+                state.setTabIsStreaming(tid, false);
+                state.removeStream(tab.conversationId);
+              }
+            }
+            // Fetch latest messages from DB for this tab
+            conversationApi.getMessages(tab.conversationId).then((msgs) => {
+              const s = useAppStore.getState();
+              // Only update if the tab still exists and is not actively streaming new content
+              // (active streams will get their content via live events + DB fetch on idle)
+              const currentTab = s.tabs[tid];
+              if (currentTab) {
+                s.setTabMessages(tid, msgs);
+              }
+            }).catch(() => {
+              // Silently ignore — messages will load when tab is next selected
+            });
+          }
+
           // Restore pending user input requests
-          if (pendingUserInputs) {
+          if (pendingUserInputs && pendingUserInputs.length > 0) {
+            console.debug('[useTabCopilot] state_response: restoring pending user inputs', {
+              count: pendingUserInputs.length,
+              inputs: pendingUserInputs.map((p: any) => ({ conversationId: p.conversationId, requestId: p.requestId, question: p.question })),
+              availableTabs: Object.keys(allTabs).map(id => ({ id, conversationId: allTabs[id]?.conversationId })),
+            });
+            const unresolved: typeof pendingUserInputs = [];
             for (const input of pendingUserInputs) {
               const tid = findTabIdByConversationId(input.conversationId);
               if (tid) {
+                console.debug('[useTabCopilot] state_response: setting userInputRequest', { tabId: tid, conversationId: input.conversationId, requestId: input.requestId });
                 state.setTabUserInputRequest(tid, {
                   requestId: input.requestId,
                   question: input.question,
                   choices: input.choices,
                   allowFreeform: input.allowFreeform,
+                  multiSelect: input.multiSelect,
+                });
+                // Also ensure isStreaming is true (stream is active waiting for input)
+                state.setTabIsStreaming(tid, true);
+              } else {
+                unresolved.push(input);
+                console.debug('[useTabCopilot] state_response: tab not found for pending user input', { conversationId: input.conversationId, requestId: input.requestId });
+              }
+            }
+            // Retry unresolved inputs after 1s (tabs may still be loading from localStorage)
+            if (unresolved.length > 0) {
+              console.debug('[useTabCopilot] state_response: retrying unresolved user inputs in 1s', { count: unresolved.length });
+              setTimeout(() => {
+                const latestState = useAppStore.getState();
+                for (const input of unresolved) {
+                  const tid = findTabIdByConversationId(input.conversationId);
+                  if (tid) {
+                    latestState.setTabUserInputRequest(tid, {
+                      requestId: input.requestId,
+                      question: input.question,
+                      choices: input.choices,
+                      allowFreeform: input.allowFreeform,
+                      multiSelect: input.multiSelect,
+                    });
+                    latestState.setTabIsStreaming(tid, true);
+                    console.debug('[useTabCopilot] state_response retry: restored user input', { conversationId: input.conversationId, tabId: tid });
+                  } else {
+                    console.warn('[useTabCopilot] state_response retry: tab STILL not found', { conversationId: input.conversationId });
+                  }
+                }
+              }, 1000);
+            }
+          } else {
+            // No pending user inputs from backend — check if localStorage had a stale one
+            const allTabsAfter = useAppStore.getState().tabs;
+            for (const tid of Object.keys(allTabsAfter)) {
+              const t = allTabsAfter[tid];
+              if (t?.userInputRequest) {
+                console.warn('[useTabCopilot] state_response: tab has localStorage userInputRequest but backend has no pending inputs — stale?', {
+                  tabId: tid,
+                  conversationId: t.conversationId,
+                  requestId: t.userInputRequest.requestId,
                 });
               }
             }
@@ -163,13 +261,45 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
           const toolCallId = data.toolCallId as string;
           const toolName = data.toolName as string | undefined;
           const currentTab = useAppStore.getState().tabs[tabId];
-          if (!currentTab?.toolRecords.find((r) => r.toolCallId === toolCallId)) break;
 
           const updates = {
             status: (data.success ? 'success' : 'error') as 'success' | 'error',
             result: data.result as unknown,
             error: data.error as string | undefined,
           };
+
+          // If tool record doesn't exist in live stream state, check DB-loaded messages.
+          // After page refresh, tool_start was persisted to DB by premature idle but
+          // never appeared in the live toolRecords. Update the DB message directly
+          // to avoid creating a duplicate assistant block.
+          if (!currentTab?.toolRecords.find((r) => r.toolCallId === toolCallId)) {
+            const updatedInDb = state.updateMessageToolRecord(tabId, toolCallId, updates);
+            if (updatedInDb) {
+              console.debug('[useTabCopilot] copilot:tool_end — updated DB message tool record', { toolCallId, conversationId });
+              break;
+            }
+            // Not in DB either — create on-the-fly (original fallback)
+            if (toolName) {
+              state.addTabToolRecord(tabId, {
+                toolCallId,
+                toolName,
+                arguments: data.arguments,
+                status: 'running',
+              });
+              state.addTabTurnSegment(tabId, {
+                type: 'tool',
+                toolCallId,
+                toolName,
+                arguments: data.arguments,
+                status: 'running',
+              });
+            } else {
+              // No toolName available — can't create a meaningful record
+              console.debug('[useTabCopilot] copilot:tool_end for unknown tool — skipping', { toolCallId, conversationId });
+              break;
+            }
+          }
+
           state.updateTabToolRecord(tabId, toolCallId, updates);
           state.updateTabToolInTurnSegments(tabId, toolCallId, updates);
 
@@ -248,60 +378,93 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
 
         case 'copilot:idle': {
           const currentTab = useAppStore.getState().tabs[tabId];
-          if (!currentTab) break;
-
-          // Determine content
-          let content = '';
-          if (currentTab.turnContentSegments.length > 0) {
-            content = currentTab.turnContentSegments.filter((s) => s).join('\n\n');
-          } else if (!dedup.receivedMessage && currentTab.streamingText) {
-            content = currentTab.streamingText;
+          if (!currentTab) {
+            console.debug('[useTabCopilot] copilot:idle — tab not found', { tabId, conversationId });
+            break;
           }
 
-          // Build metadata
-          let metadata: MessageMetadata | null = null;
-          if (currentTab.toolRecords.length > 0 || currentTab.turnSegments.length > 0) {
-            metadata = {};
-            if (currentTab.toolRecords.length > 0) {
-              metadata.toolRecords = [...currentTab.toolRecords];
-            }
-            if (currentTab.turnSegments.length > 0) {
-              metadata.turnSegments = [...currentTab.turnSegments];
-            }
+          // Guard: if there's a pending userInputRequest, the turn is NOT actually complete.
+          if (currentTab.userInputRequest) {
+            console.debug('[useTabCopilot] Ignoring premature copilot:idle — pending userInputRequest', { conversationId });
+            break;
           }
 
-          // Create consolidated message
-          if (content || metadata) {
-            state.addTabMessage(tabId, {
-              id: crypto.randomUUID(),
-              conversationId,
-              role: 'assistant',
-              content,
-              metadata,
-              createdAt: new Date().toISOString(),
-            });
-          }
-
-          // Increment local premium request counter (each turn = 1 premium request)
-          state.incrementTabPremiumLocal(tabId);
-
-          // Remove from active streams
-          state.removeStream(conversationId);
-          state.setTabIsStreaming(tabId, false);
-          state.clearTabStreaming(tabId);
-          dedup.receivedMessage = false;
-
-          // Extract planFilePath if present
+          // 1. Handle plan artifact (synchronous, from idle event data)
           const planFilePath = data.planFilePath as string | undefined;
           if (planFilePath) {
             state.setTabPlanFilePath(tabId, planFilePath);
           }
 
-          // Show plan-complete prompt if we just finished in plan mode
-          const finalTab = useAppStore.getState().tabs[tabId];
-          if (finalTab?.planMode) {
-            state.setTabShowPlanCompletePrompt(tabId, true);
+          const planArtifact = data.planArtifact as { title: string; content: string; filePath: string } | undefined;
+          if (planArtifact?.content) {
+            const artifactId = `plan-${conversationId}`;
+            const artifact: ParsedArtifact = {
+              id: artifactId,
+              type: 'plan',
+              title: planArtifact.title,
+              content: planArtifact.content,
+            };
+            state.upsertTabArtifact(tabId, artifact);
+            state.setTabActiveArtifact(tabId, artifactId);
+            state.setTabArtifactsPanelOpen(tabId, true);
           }
+
+          // 2. Stop streaming indicators
+          state.incrementTabPremiumLocal(tabId);
+          state.removeStream(conversationId);
+          state.setTabIsStreaming(tabId, false);
+
+          // 3. DB-as-Source-of-Truth: fetch authoritative message list from the database
+          // This eliminates all race conditions related to event buffer replay / state management.
+          conversationApi.getMessages(conversationId).then((msgs) => {
+            const s = useAppStore.getState();
+            s.setTabMessages(tabId, msgs);
+            s.clearTabStreaming(tabId);
+            // Show plan-complete prompt if we just finished in plan mode
+            const finalTab = s.tabs[tabId];
+            if (finalTab?.planMode) {
+              s.setTabShowPlanCompletePrompt(tabId, true);
+            }
+          }).catch((err) => {
+            console.warn('[useTabCopilot] Failed to fetch messages from DB, fallback to streaming state', err);
+            // Fallback: build message from streaming state (original logic)
+            const fallbackTab = useAppStore.getState().tabs[tabId];
+            if (!fallbackTab) return;
+
+            let content = '';
+            if (fallbackTab.turnContentSegments.length > 0) {
+              content = fallbackTab.turnContentSegments.filter((s) => s).join('\n\n');
+            } else if (!dedup.receivedMessage && fallbackTab.streamingText) {
+              content = fallbackTab.streamingText;
+            }
+
+            let metadata: MessageMetadata | null = null;
+            if (fallbackTab.toolRecords.length > 0 || fallbackTab.turnSegments.length > 0) {
+              metadata = {};
+              if (fallbackTab.toolRecords.length > 0) metadata.toolRecords = [...fallbackTab.toolRecords];
+              if (fallbackTab.turnSegments.length > 0) metadata.turnSegments = [...fallbackTab.turnSegments];
+            }
+
+            if (content || metadata) {
+              const s = useAppStore.getState();
+              s.addTabMessage(tabId, {
+                id: crypto.randomUUID(),
+                conversationId,
+                role: 'assistant',
+                content,
+                metadata,
+                createdAt: new Date().toISOString(),
+              });
+            }
+
+            useAppStore.getState().clearTabStreaming(tabId);
+            const finalTab = useAppStore.getState().tabs[tabId];
+            if (finalTab?.planMode) {
+              useAppStore.getState().setTabShowPlanCompletePrompt(tabId, true);
+            }
+          });
+
+          dedup.receivedMessage = false;
           break;
         }
 
@@ -382,6 +545,10 @@ export function useTabCopilot({ subscribe, send }: UseTabCopilotOptions) {
           break;
 
         case 'copilot:user_input_request':
+          // Ensure streaming state is active — the stream is still running while waiting for user input
+          state.setTabIsStreaming(tabId, true);
+          // Clear any premature plan-complete prompt that may have been set by a premature idle
+          state.setTabShowPlanCompletePrompt(tabId, false);
           state.setTabUserInputRequest(tabId, {
             requestId: data.requestId as string,
             question: data.question as string,

@@ -850,8 +850,8 @@ describe('MessageBlock', () => {
     expect(exitBadge).toBeTruthy();
   });
 
-  // WARNING FIX: bash tool with error status should also show ToolResultBlock
-  it('renders ToolResultBlock for bash tool with error status and error field', () => {
+  // Error status should NOT show ToolResultBlock — ToolRecord already displays the error inside the card
+  it('does NOT render ToolResultBlock for bash tool with error status (error shown in ToolRecord only)', () => {
     render(
       <MessageBlock
         message={makeMessage({
@@ -867,6 +867,6 @@ describe('MessageBlock', () => {
     );
 
     expect(screen.getByTestId('tool-record-tc1')).toBeTruthy();
-    expect(screen.getByTestId('tool-result-bash')).toBeTruthy();
+    expect(screen.queryByTestId('tool-result-bash')).toBeNull();
   });
 });

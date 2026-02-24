@@ -92,7 +92,11 @@ export class WsClient {
         }
 
         for (const listener of this.listeners) {
-          listener(message);
+          try {
+            listener(message);
+          } catch (listenerErr) {
+            console.error('[WsClient] Error in message listener for', message.type, listenerErr);
+          }
         }
       } catch {
         // Ignore unparseable messages

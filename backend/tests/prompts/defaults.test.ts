@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_SYSTEM_PROMPT, DEFAULT_OPENSPEC_SDD } from '../../src/prompts/defaults.js';
+import { DEFAULT_SYSTEM_PROMPT, DEFAULT_ACT_PROMPT, DEFAULT_OPENSPEC_SDD, DEFAULT_PLAN_PROMPT } from '../../src/prompts/defaults.js';
 
 describe('DEFAULT_SYSTEM_PROMPT', () => {
   it('should be a non-empty string', () => {
@@ -30,23 +30,10 @@ describe('DEFAULT_SYSTEM_PROMPT', () => {
     expect(DEFAULT_SYSTEM_PROMPT).toContain('Workspace Context');
   });
 
-  // ── Act Mode sub-sections ──────────────────────────────────────────
-  it('should contain Act Mode with four behavioral sub-sections', () => {
+  // ── Act Mode reference in system prompt ─────────────────────────────
+  it('should reference Act Mode and Plan Mode', () => {
     expect(DEFAULT_SYSTEM_PROMPT).toContain('Act Mode');
-    expect(DEFAULT_SYSTEM_PROMPT).toContain('Doing Tasks');
-    expect(DEFAULT_SYSTEM_PROMPT).toContain('Executing Actions with Care');
-    expect(DEFAULT_SYSTEM_PROMPT).toContain('Tool Usage');
-    expect(DEFAULT_SYSTEM_PROMPT).toContain('Response Guidelines');
-  });
-
-  // ── Plan Mode workflow steps ────────────────────────────────────────
-  it('should contain Plan Mode with four-step workflow', () => {
     expect(DEFAULT_SYSTEM_PROMPT).toContain('Plan Mode');
-    expect(DEFAULT_SYSTEM_PROMPT).toContain('Plan Mode Workflow');
-    expect(DEFAULT_SYSTEM_PROMPT).toMatch(/\*\*Understand\*\*/);
-    expect(DEFAULT_SYSTEM_PROMPT).toMatch(/\*\*Explore\*\*/);
-    expect(DEFAULT_SYSTEM_PROMPT).toMatch(/\*\*Design\*\*/);
-    expect(DEFAULT_SYSTEM_PROMPT).toMatch(/\*\*Plan\*\*/);
   });
 
   // ── No standalone duplicate sections ─────────────────────────────────
@@ -130,9 +117,49 @@ describe('DEFAULT_SYSTEM_PROMPT', () => {
   });
 
   // ── Length budget ─────────────────────────────────────────────────
-  it('should be between 5,000 and 10,000 characters', () => {
+  it('should be between 5,000 and 15,000 characters', () => {
     expect(DEFAULT_SYSTEM_PROMPT.length).toBeGreaterThanOrEqual(5000);
-    expect(DEFAULT_SYSTEM_PROMPT.length).toBeLessThanOrEqual(10000);
+    expect(DEFAULT_SYSTEM_PROMPT.length).toBeLessThanOrEqual(15000);
+  });
+});
+
+describe('DEFAULT_ACT_PROMPT', () => {
+  it('should be a non-empty string', () => {
+    expect(DEFAULT_ACT_PROMPT).toBeTruthy();
+    expect(typeof DEFAULT_ACT_PROMPT).toBe('string');
+    expect(DEFAULT_ACT_PROMPT.length).toBeGreaterThan(0);
+  });
+
+  it('should contain behavioral sub-sections', () => {
+    expect(DEFAULT_ACT_PROMPT).toContain('Doing Tasks');
+    expect(DEFAULT_ACT_PROMPT).toContain('Executing Actions with Care');
+    expect(DEFAULT_ACT_PROMPT).toContain('Tool Usage');
+    expect(DEFAULT_ACT_PROMPT).toContain('Response Guidelines');
+  });
+
+  it('should contain Git Safety Protocol section', () => {
+    expect(DEFAULT_ACT_PROMPT).toContain('Git Safety');
+    expect(DEFAULT_ACT_PROMPT).toMatch(/force.?push/i);
+    expect(DEFAULT_ACT_PROMPT).toMatch(/--no-verify/i);
+    expect(DEFAULT_ACT_PROMPT).toMatch(/amend/i);
+  });
+
+  it('should contain enhanced Tool Usage with dedicated tool preference', () => {
+    expect(DEFAULT_ACT_PROMPT).toMatch(/File Read/i);
+    expect(DEFAULT_ACT_PROMPT).toMatch(/File Edit/i);
+    expect(DEFAULT_ACT_PROMPT).toMatch(/File Write/i);
+  });
+
+  it('should contain Code Quality / YAGNI guidelines', () => {
+    expect(DEFAULT_ACT_PROMPT).toMatch(/over-engineer/i);
+    expect(DEFAULT_ACT_PROMPT).toMatch(/premature abstraction/i);
+  });
+
+  it('should contain Task Management & Subagent Orchestration section', () => {
+    expect(DEFAULT_ACT_PROMPT).toContain('Task Management');
+    expect(DEFAULT_ACT_PROMPT).toMatch(/task_create/);
+    expect(DEFAULT_ACT_PROMPT).toMatch(/task_list/);
+    expect(DEFAULT_ACT_PROMPT).toMatch(/task_update/);
   });
 });
 
@@ -175,5 +202,27 @@ describe('DEFAULT_OPENSPEC_SDD', () => {
     expect(DEFAULT_OPENSPEC_SDD).toContain('/opsx:new');
     expect(DEFAULT_OPENSPEC_SDD).toContain('/opsx:apply');
     expect(DEFAULT_OPENSPEC_SDD).toContain('/opsx:verify');
+  });
+});
+
+describe('DEFAULT_PLAN_PROMPT', () => {
+  it('should be a non-empty string', () => {
+    expect(DEFAULT_PLAN_PROMPT).toBeTruthy();
+    expect(typeof DEFAULT_PLAN_PROMPT).toBe('string');
+    expect(DEFAULT_PLAN_PROMPT.length).toBeGreaterThan(0);
+  });
+
+  it('should contain 5-phase workflow', () => {
+    expect(DEFAULT_PLAN_PROMPT).toMatch(/Phase 1/i);
+    expect(DEFAULT_PLAN_PROMPT).toMatch(/Phase 2/i);
+    expect(DEFAULT_PLAN_PROMPT).toMatch(/Phase 3/i);
+    expect(DEFAULT_PLAN_PROMPT).toMatch(/Phase 4/i);
+    expect(DEFAULT_PLAN_PROMPT).toMatch(/Phase 5/i);
+  });
+
+  it('should contain structured plan output format', () => {
+    expect(DEFAULT_PLAN_PROMPT).toMatch(/context/i);
+    expect(DEFAULT_PLAN_PROMPT).toMatch(/approach/i);
+    expect(DEFAULT_PLAN_PROMPT).toMatch(/verification/i);
   });
 });

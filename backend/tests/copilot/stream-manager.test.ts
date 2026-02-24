@@ -2,7 +2,9 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import type { WsMessage, SendFn } from '../../src/ws/types.js';
 
 // Mock plan-writer
-const mockWritePlanFile = vi.hoisted(() => vi.fn().mockReturnValue('/tmp/.codeforge/plans/2026-02-19-plan.md'));
+const { mockWritePlanFile } = vi.hoisted(() => ({
+  mockWritePlanFile: vi.fn().mockReturnValue('/tmp/.codeforge/plans/2026-02-19-plan.md'),
+}));
 vi.mock('../../src/copilot/plan-writer.js', () => ({
   writePlanFile: mockWritePlanFile,
   extractTopicFromContent: vi.fn().mockReturnValue('test-topic'),
@@ -33,6 +35,8 @@ const { mockSession, mockSessionManager, mockRepo } = vi.hoisted(() => {
     getOrCreateSession: vi.fn().mockResolvedValue(_mockSession),
     sendMessage: vi.fn().mockResolvedValue('msg-1'),
     abortMessage: vi.fn().mockResolvedValue(undefined),
+    setMode: vi.fn().mockResolvedValue(undefined),
+    readPlan: vi.fn().mockResolvedValue({ exists: false, content: null }),
   };
 
   const _mockRepo = {
@@ -48,6 +52,7 @@ const { mockSession, mockSessionManager, mockRepo } = vi.hoisted(() => {
     }),
     update: vi.fn(),
     addMessage: vi.fn(),
+    updateToolResult: vi.fn(),
   };
 
   return {
@@ -78,9 +83,12 @@ function clearMocks() {
   mockSessionManager.getOrCreateSession.mockClear().mockResolvedValue(mockSession);
   mockSessionManager.sendMessage.mockClear().mockResolvedValue('msg-1');
   mockSessionManager.abortMessage.mockClear().mockResolvedValue(undefined);
+  mockSessionManager.setMode.mockClear().mockResolvedValue(undefined);
+  mockSessionManager.readPlan.mockClear().mockResolvedValue({ exists: false, content: null });
   mockRepo.getById.mockClear();
   mockRepo.update.mockClear();
   mockRepo.addMessage.mockClear();
+  mockRepo.updateToolResult.mockClear();
   mockWritePlanFile.mockClear().mockReturnValue('/tmp/.codeforge/plans/2026-02-19-plan.md');
 }
 
@@ -1347,7 +1355,7 @@ describe('StreamManager', () => {
         cwd: '/tmp',
       });
 
-      expect(mockComposer.compose).toHaveBeenCalledWith('/tmp', undefined);
+      expect(mockComposer.compose).toHaveBeenCalledWith('/tmp', undefined, undefined);
       expect(mockSessionManager.getOrCreateSession).toHaveBeenCalledWith(
         expect.objectContaining({
           systemMessage: { mode: 'append', content: 'Composed system prompt' },
@@ -1826,9 +1834,209 @@ describe('StreamManager', () => {
     });
   });
 
-  // === Plan mode idle → writePlanFile ===
-  describe('plan mode idle write', () => {
-    it('should call writePlanFile on idle when mode is plan and content exists', async () => {
+  // === 7.1 hasStream + removeSubscriber ===
+  describe('hasStream', () => {
+    it('should return false when no stream exists', () => {
+      expect(sm.hasStream('nonexistent')).toBe(false);
+    });
+
+    it('should return true when a stream exists (running)', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello', sdkSessionId: null, model: 'gpt-5', cwd: '/tmp',
+      });
+      expect(sm.hasStream('conv-1')).toBe(true);
+    });
+
+    it('should return false after stream completes (idle removes from map)', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello', sdkSessionId: null, model: 'gpt-5', cwd: '/tmp',
+      });
+      await tick();
+      fireEvent('session.idle', {});
+      await tick();
+      expect(sm.hasStream('conv-1')).toBe(false);
+    });
+  });
+
+  describe('removeSubscriber', () => {
+    it('should remove a specific subscriber from a stream', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello', sdkSessionId: null, model: 'gpt-5', cwd: '/tmp',
+      });
+      await tick();
+
+      const received: WsMessage[] = [];
+      const send: SendFn = (msg) => received.push(msg);
+      sm.subscribe('conv-1', send);
+
+      // Verify subscriber is active
+      fireEvent('assistant.message_delta', { messageId: 'msg-1', deltaContent: 'Hi' });
+      expect(received.length).toBeGreaterThan(0);
+
+      // Remove the subscriber
+      received.length = 0;
+      sm.removeSubscriber('conv-1', send);
+
+      // Should no longer receive events
+      fireEvent('assistant.message_delta', { messageId: 'msg-2', deltaContent: 'Bye' });
+      expect(received).toHaveLength(0);
+    });
+
+    it('should no-op for non-existent conversation', () => {
+      expect(() => sm.removeSubscriber('nonexistent', () => {})).not.toThrow();
+    });
+
+    it('should no-op for subscriber not in set', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello', sdkSessionId: null, model: 'gpt-5', cwd: '/tmp',
+      });
+      await tick();
+
+      const otherSend: SendFn = () => {};
+      expect(() => sm.removeSubscriber('conv-1', otherSend)).not.toThrow();
+    });
+  });
+
+  // === 7.3 abortStream handles non-running status ===
+  describe('abortStream non-running status', () => {
+    it('should clean up and remove stream in idle status', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello', sdkSessionId: null, model: 'gpt-5', cwd: '/tmp',
+      });
+      await tick();
+
+      // Force stream to idle status without removing from map
+      // by aborting normally first — but that already handles running
+      // Instead, simulate the scenario: stream exists but in error status
+      fireEvent('assistant.message', { messageId: 'msg-1', content: 'partial' });
+
+      // Abort should work on running stream
+      await sm.abortStream('conv-1');
+      // Stream should be removed from the map after abort
+      expect(sm.hasStream('conv-1')).toBe(false);
+    });
+
+    it('should handle stream in error status', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello', sdkSessionId: null, model: 'gpt-5', cwd: '/tmp',
+      });
+      await tick();
+
+      // Put stream into error status
+      fireEvent('session.error', {
+        data: { errorType: 'test', message: 'test error' },
+      });
+
+      // Should be able to abort an error-status stream
+      await expect(sm.abortStream('conv-1')).resolves.not.toThrow();
+      expect(sm.hasStream('conv-1')).toBe(false);
+    });
+
+    it('should remove stream from map after abort regardless of status', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello', sdkSessionId: null, model: 'gpt-5', cwd: '/tmp',
+      });
+      await tick();
+
+      await sm.abortStream('conv-1');
+      expect(sm.hasStream('conv-1')).toBe(false);
+
+      // Should be able to start a new stream immediately
+      clearMocks();
+      await expect(sm.startStream('conv-1', {
+        prompt: 'second', sdkSessionId: null, model: 'gpt-5', cwd: '/tmp',
+      })).resolves.not.toThrow();
+    });
+  });
+
+  // === 8.1 initialSubscriber ===
+  describe('initialSubscriber', () => {
+    it('should add initialSubscriber to stream subscribers immediately during startStream', async () => {
+      const received: WsMessage[] = [];
+      const initialSend: SendFn = (msg) => received.push(msg);
+
+      await sm.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+        initialSubscriber: initialSend,
+      });
+      await tick();
+
+      // The subscriber should already be in place — fire event
+      fireEvent('assistant.message_delta', { messageId: 'msg-1', deltaContent: 'Hi' });
+
+      expect(received.length).toBeGreaterThan(0);
+      expect(received.some((m) => m.type === 'copilot:delta')).toBe(true);
+    });
+
+    it('should receive events even before subscribe() is called', async () => {
+      const received: WsMessage[] = [];
+      const initialSend: SendFn = (msg) => received.push(msg);
+
+      await sm.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+        initialSubscriber: initialSend,
+      });
+      await tick();
+
+      // Fire events — no explicit subscribe() call
+      fireEvent('assistant.message', { messageId: 'msg-1', content: 'Full response' });
+
+      const msgEvent = received.find((m) => m.type === 'copilot:message');
+      expect(msgEvent).toBeDefined();
+      expect((msgEvent!.data as any).content).toBe('Full response');
+    });
+
+    it('should not duplicate events when subscribe() is also called with the same send', async () => {
+      const received: WsMessage[] = [];
+      const initialSend: SendFn = (msg) => received.push(msg);
+
+      await sm.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+        initialSubscriber: initialSend,
+      });
+      await tick();
+
+      // subscribe() with same function — Set will deduplicate
+      sm.subscribe('conv-1', initialSend);
+
+      fireEvent('assistant.message_delta', { messageId: 'msg-1', deltaContent: 'Only once' });
+
+      // Should NOT receive duplicate because Set deduplicates the same function reference
+      const deltas = received.filter((m) => m.type === 'copilot:delta');
+      expect(deltas).toHaveLength(1);
+    });
+
+    it('should work when initialSubscriber is not provided (backward compat)', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+        // No initialSubscriber
+      });
+      await tick();
+
+      // Explicitly subscribe later
+      const received: WsMessage[] = [];
+      sm.subscribe('conv-1', (msg) => received.push(msg));
+
+      fireEvent('assistant.message_delta', { messageId: 'msg-1', deltaContent: 'Late' });
+      expect(received.length).toBeGreaterThan(0);
+    });
+  });
+
+  // === Plan mode: SDK plan_changed → writePlanFile ===
+  describe('plan mode SDK integration', () => {
+    it('should call sessionManager.setMode with plan when mode is plan', async () => {
       await sm.startStream('conv-1', {
         prompt: 'plan something',
         sdkSessionId: null,
@@ -1838,14 +2046,54 @@ describe('StreamManager', () => {
       });
       await tick();
 
-      // Simulate content being accumulated
-      fireEvent('assistant.message', {
-        messageId: 'msg-1',
+      expect(mockSessionManager.setMode).toHaveBeenCalledWith(mockSession, 'plan');
+    });
+
+    it('should NOT call sessionManager.setMode when mode is act', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'do something',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+        mode: 'act',
+      });
+      await tick();
+
+      expect(mockSessionManager.setMode).not.toHaveBeenCalled();
+    });
+
+    it('should register session.plan_changed listener when mode is plan', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'plan something',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+        mode: 'plan',
+      });
+      await tick();
+
+      expect(mockSession._eventHandlers.has('session.plan_changed')).toBe(true);
+    });
+
+    it('should call writePlanFile when session.plan_changed fires with create', async () => {
+      mockSessionManager.readPlan.mockResolvedValue({
+        exists: true,
         content: '# Plan\n\nStep 1: Do the thing',
       });
 
-      fireEvent('session.idle', {});
+      await sm.startStream('conv-1', {
+        prompt: 'plan something',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+        mode: 'plan',
+      });
+      await tick();
 
+      fireEvent('session.plan_changed', { data: { operation: 'create' } });
+      await tick();
+
+      expect(mockSessionManager.readPlan).toHaveBeenCalledWith(mockSession);
       expect(mockWritePlanFile).toHaveBeenCalledWith(
         '/tmp',
         '# Plan\n\nStep 1: Do the thing',
@@ -1853,7 +2101,12 @@ describe('StreamManager', () => {
       );
     });
 
-    it('should save planFilePath to conversation via repo.update on plan idle', async () => {
+    it('should save planFilePath to conversation via repo.update on plan_changed', async () => {
+      mockSessionManager.readPlan.mockResolvedValue({
+        exists: true,
+        content: '# Plan',
+      });
+
       await sm.startStream('conv-1', {
         prompt: 'plan something',
         sdkSessionId: null,
@@ -1863,19 +2116,20 @@ describe('StreamManager', () => {
       });
       await tick();
 
-      fireEvent('assistant.message', {
-        messageId: 'msg-1',
-        content: '# Plan',
-      });
-
-      fireEvent('session.idle', {});
+      fireEvent('session.plan_changed', { data: { operation: 'create' } });
+      await tick();
 
       expect(mockRepo.update).toHaveBeenCalledWith('conv-1', {
         planFilePath: '/tmp/.codeforge/plans/2026-02-19-plan.md',
       });
     });
 
-    it('should include planFilePath in idle event data sent to frontend', async () => {
+    it('should include planArtifact in idle event data after plan_changed', async () => {
+      mockSessionManager.readPlan.mockResolvedValue({
+        exists: true,
+        content: '# Plan\n\nStep 1: Do things',
+      });
+
       await sm.startStream('conv-1', {
         prompt: 'plan something',
         sdkSessionId: null,
@@ -1888,16 +2142,43 @@ describe('StreamManager', () => {
       const received: WsMessage[] = [];
       sm.subscribe('conv-1', (msg) => received.push(msg));
 
+      fireEvent('session.plan_changed', { data: { operation: 'create' } });
+      await tick();
+
+      fireEvent('session.idle', {});
+
+      const idleMsg = received.find((m) => m.type === 'copilot:idle');
+      expect(idleMsg).toBeDefined();
+      const idleData = idleMsg!.data as any;
+      expect(idleData.planArtifact).toBeDefined();
+      expect(idleData.planArtifact.title).toBe('test-topic');
+      expect(idleData.planArtifact.content).toBe('# Plan\n\nStep 1: Do things');
+      expect(idleData.planArtifact.filePath).toBe('/tmp/.codeforge/plans/2026-02-19-plan.md');
+    });
+
+    it('should NOT include planArtifact when mode is act', async () => {
+      await sm.startStream('conv-1', {
+        prompt: 'do something',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+        mode: 'act',
+      });
+      await tick();
+
+      const received: WsMessage[] = [];
+      sm.subscribe('conv-1', (msg) => received.push(msg));
+
       fireEvent('assistant.message', {
         messageId: 'msg-1',
-        content: '# Plan',
+        content: 'Done',
       });
 
       fireEvent('session.idle', {});
 
       const idleMsg = received.find((m) => m.type === 'copilot:idle');
       expect(idleMsg).toBeDefined();
-      expect((idleMsg!.data as any).planFilePath).toBe('/tmp/.codeforge/plans/2026-02-19-plan.md');
+      expect((idleMsg!.data as any).planArtifact).toBeUndefined();
     });
 
     it('should NOT call writePlanFile when mode is act', async () => {
@@ -1920,7 +2201,7 @@ describe('StreamManager', () => {
       expect(mockWritePlanFile).not.toHaveBeenCalled();
     });
 
-    it('should NOT call writePlanFile when mode is plan but no content accumulated', async () => {
+    it('should NOT call writePlanFile when plan_changed fires with delete', async () => {
       await sm.startStream('conv-1', {
         prompt: 'plan something',
         sdkSessionId: null,
@@ -1930,10 +2211,263 @@ describe('StreamManager', () => {
       });
       await tick();
 
-      // No message events — directly idle
-      fireEvent('session.idle', {});
+      fireEvent('session.plan_changed', { data: { operation: 'delete' } });
+      await tick();
+
+      expect(mockSessionManager.readPlan).not.toHaveBeenCalled();
+      expect(mockWritePlanFile).not.toHaveBeenCalled();
+    });
+
+    it('should NOT call writePlanFile when readPlan returns no content', async () => {
+      mockSessionManager.readPlan.mockResolvedValue({
+        exists: false,
+        content: null,
+      });
+
+      await sm.startStream('conv-1', {
+        prompt: 'plan something',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+        mode: 'plan',
+      });
+      await tick();
+
+      fireEvent('session.plan_changed', { data: { operation: 'create' } });
+      await tick();
 
       expect(mockWritePlanFile).not.toHaveBeenCalled();
+    });
+  });
+
+  // === Health monitor ===
+  describe('health monitor', () => {
+    it('should set a health check interval during startStream', async () => {
+      vi.useFakeTimers();
+
+      await sm.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+      });
+
+      // The health check interval fires every 60s.
+      // The condition is elapsed > 120_000 (strict greater-than).
+      // At t=60s: elapsed=60s → no warning.
+      // At t=120s: elapsed=120s → 120000 > 120000 is false → no warning.
+      // At t=180s: elapsed=180s → 180000 > 120000 is true → warning.
+      const received: WsMessage[] = [];
+      sm.subscribe('conv-1', (msg) => received.push(msg));
+
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(received.filter((m) => m.type === 'copilot:warning')).toHaveLength(0);
+
+      // Advance to 180s — the interval at 180s has elapsed=180s > 120000
+      await vi.advanceTimersByTimeAsync(60_000);
+      const warnings = received.filter((m) => m.type === 'copilot:warning');
+      expect(warnings.length).toBeGreaterThanOrEqual(1);
+
+      vi.useRealTimers();
+    });
+
+    it('should broadcast a warning after 120s of no events', async () => {
+      vi.useFakeTimers();
+
+      await sm.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+      });
+
+      const received: WsMessage[] = [];
+      sm.subscribe('conv-1', (msg) => received.push(msg));
+
+      // Advance past 180s so the interval fires 3 times (60s, 120s, 180s).
+      // At t=180s: elapsed=180s > 120_000 → broadcasts warning.
+      await vi.advanceTimersByTimeAsync(181_000);
+
+      const warning = received.find((m) => m.type === 'copilot:warning');
+      expect(warning).toBeDefined();
+      expect((warning!.data as any).message).toMatch(/stalled/i);
+      expect((warning!.data as any).conversationId).toBe('conv-1');
+
+      vi.useRealTimers();
+    });
+
+    it('should clear health check interval on finishStream and abortStream', async () => {
+      vi.useFakeTimers();
+
+      // Test 1: finishStream clears it (via idle)
+      await sm.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+      });
+
+      const received1: WsMessage[] = [];
+      sm.subscribe('conv-1', (msg) => received1.push(msg));
+
+      fireEvent('session.idle', {});
+      await vi.advanceTimersByTimeAsync(10);
+
+      // After finishStream, advancing time should NOT produce warnings
+      await vi.advanceTimersByTimeAsync(200_000);
+      expect(received1.filter((m) => m.type === 'copilot:warning')).toHaveLength(0);
+
+      // Test 2: abortStream clears it
+      clearMocks();
+      await sm.startStream('conv-2', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+      });
+
+      const received2: WsMessage[] = [];
+      sm.subscribe('conv-2', (msg) => received2.push(msg));
+
+      await sm.abortStream('conv-2');
+
+      // After abort, advancing time should NOT produce warnings
+      await vi.advanceTimersByTimeAsync(200_000);
+      expect(received2.filter((m) => m.type === 'copilot:warning')).toHaveLength(0);
+
+      vi.useRealTimers();
+    });
+  });
+
+  // === finishStream dual-condition (idle + sendComplete) ===
+  describe('finishStream dual-condition', () => {
+    it('should defer finishStream when idle is received before sendComplete', async () => {
+      // Make sendMessage hang so sendComplete stays false
+      let resolveSendMessage!: () => void;
+      mockSessionManager.sendMessage.mockReturnValue(
+        new Promise<string>((resolve) => {
+          resolveSendMessage = () => resolve('msg-1');
+        }),
+      );
+
+      const received: WsMessage[] = [];
+      const startPromise = sm.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+        initialSubscriber: (msg) => received.push(msg),
+      });
+
+      // Give time for relay to attach (getOrCreateSession resolves immediately)
+      await tick();
+
+      // Fire session.idle while sendMessage is still pending (sendComplete = false)
+      fireEvent('session.idle', {});
+      await tick();
+
+      // copilot:idle should NOT have been broadcast yet (stream not finished)
+      expect(received.filter((m) => m.type === 'copilot:idle')).toHaveLength(0);
+      expect(sm.hasStream('conv-1')).toBe(true);
+
+      // Now resolve sendMessage — sendComplete becomes true, finishStream should fire
+      resolveSendMessage();
+      await startPromise;
+      await tick();
+
+      // Now copilot:idle should have been broadcast
+      expect(received.filter((m) => m.type === 'copilot:idle')).toHaveLength(1);
+    });
+
+    it('should call finishStream immediately when idle arrives after sendComplete', async () => {
+      // Default mock: sendMessage resolves immediately → sendComplete = true after startStream
+      await sm.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+      });
+      await tick();
+
+      const received: WsMessage[] = [];
+      sm.subscribe('conv-1', (msg) => received.push(msg));
+
+      // sendComplete is already true. Now fire idle → finishStream should trigger immediately.
+      fireEvent('session.idle', {});
+      await tick();
+
+      expect(received.filter((m) => m.type === 'copilot:idle')).toHaveLength(1);
+      expect(sm.hasStream('conv-1')).toBe(false);
+    });
+  });
+
+  // === tool_end broadcast after premature idle ===
+  describe('tool_end broadcast after premature idle', () => {
+    it('should broadcast tool_end even when tool record was already persisted by premature idle', async () => {
+      // Make sendMessage hang so we can simulate premature idle (sendComplete = false)
+      let resolveSendMessage!: () => void;
+      mockSessionManager.sendMessage.mockReturnValue(
+        new Promise<string>((resolve) => {
+          resolveSendMessage = () => resolve('msg-1');
+        }),
+      );
+
+      const received: WsMessage[] = [];
+      const startPromise = sm.startStream('conv-1', {
+        prompt: 'hello',
+        sdkSessionId: null,
+        model: 'gpt-5',
+        cwd: '/tmp',
+        initialSubscriber: (msg) => received.push(msg),
+      });
+
+      await tick();
+
+      // 1. Start a tool
+      fireEvent('tool.execution_start', {
+        toolCallId: 'tc-1',
+        toolName: 'read_file',
+        arguments: { path: '/tmp/file.txt' },
+      });
+
+      // 2. Fire a premature idle (sendComplete is false, so finishStream defers).
+      //    This persists the accumulation (including the running tool record)
+      //    and resets accumulation state.
+      fireEvent('session.idle', {});
+      await tick();
+
+      // The tool record should have been persisted by the premature idle
+      expect(mockRepo.addMessage).toHaveBeenCalled();
+
+      // 3. Tool completes AFTER the premature idle reset the accumulation.
+      //    With the return→break fix, this should still broadcast tool_end.
+      fireEvent('tool.execution_complete', {
+        toolCallId: 'tc-1',
+        success: true,
+        result: 'file contents here',
+      });
+
+      // tool_end should be broadcast to subscribers
+      const toolEndMsgs = received.filter((m) => m.type === 'copilot:tool_end');
+      expect(toolEndMsgs.length).toBeGreaterThanOrEqual(1);
+      const toolEndData = toolEndMsgs[0].data as Record<string, unknown>;
+      expect(toolEndData.toolCallId).toBe('tc-1');
+      expect(toolEndData.success).toBe(true);
+      // The toolName should be enriched from the toolNameMap
+      expect(toolEndData.toolName).toBe('read_file');
+
+      // Since the record was already persisted, updateToolResult should be called
+      // to patch the result into the DB
+      expect(mockRepo.updateToolResult).toHaveBeenCalledWith(
+        'conv-1',
+        'tc-1',
+        expect.objectContaining({ status: 'success', result: 'file contents here' }),
+      );
+
+      // Clean up: resolve sendMessage and let the stream finish
+      resolveSendMessage();
+      await startPromise;
+      await tick();
     });
   });
 });

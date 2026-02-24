@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { DEFAULT_SYSTEM_PROMPT } from './defaults.js';
+import { DEFAULT_SYSTEM_PROMPT, DEFAULT_ACT_PROMPT, DEFAULT_PLAN_PROMPT } from './defaults.js';
 
 const UNSAFE_PATTERN = /[.]{2}|[/\\]|\0/;
 const SAFE_CHARS = /[^a-zA-Z0-9_-]/g;
@@ -26,6 +26,18 @@ export class PromptFileStore {
     const systemPromptPath = path.join(this.basePath, 'SYSTEM_PROMPT.md');
     if (!fs.existsSync(systemPromptPath)) {
       fs.writeFileSync(systemPromptPath, DEFAULT_SYSTEM_PROMPT);
+    }
+
+    // Create ACT_PROMPT.md with default content if it doesn't exist
+    const actPromptPath = path.join(this.basePath, 'ACT_PROMPT.md');
+    if (!fs.existsSync(actPromptPath)) {
+      fs.writeFileSync(actPromptPath, DEFAULT_ACT_PROMPT);
+    }
+
+    // Create PLAN_PROMPT.md with default content if it doesn't exist
+    const planPromptPath = path.join(this.basePath, 'PLAN_PROMPT.md');
+    if (!fs.existsSync(planPromptPath)) {
+      fs.writeFileSync(planPromptPath, DEFAULT_PLAN_PROMPT);
     }
 
     // Create empty files if they don't exist

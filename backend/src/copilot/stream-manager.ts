@@ -127,7 +127,24 @@ interface ConversationStream {
   seenMessageIds: Set<string>;
   seenToolCallIds: Set<string>;
   seenReasoningIds: Set<string>;
+  /** Map toolCallId → toolName for the entire stream lifetime.
+   *  Used to enrich copilot:tool_end events with toolName
+   *  (the SDK doesn't include it in tool.execution_complete). */
+  toolNameMap: Map<string, string>;
   pendingUserInputRequests: Map<string, PendingUserInput>;
+  /** True once any copilot:idle event has been processed during this stream */
+  idleReceived: boolean;
+  /** True once session.send() (sendMessage) has resolved or errored */
+  sendComplete: boolean;
+  /** Extra data accumulated from premature idle events (planFilePath, planArtifact, etc.)
+   *  to be included in the final copilot:idle broadcast when the stream truly finishes. */
+  pendingIdleExtra: Record<string, unknown> | null;
+  /** Cleanup function for SDK session.plan_changed listener (plan mode only) */
+  planChangedUnsub: (() => void) | null;
+  /** Timestamp of last event received — used for health monitoring */
+  lastEventAt: number;
+  /** Interval handle for health monitoring */
+  healthCheckInterval: ReturnType<typeof setInterval> | null;
 }
 
 export interface StreamManagerDeps {
@@ -157,6 +174,8 @@ export interface StartStreamOptions {
   files?: FileReference[];
   mode?: 'plan' | 'act';
   locale?: string;
+  /** Subscriber to add synchronously during stream creation, before any async work */
+  initialSubscriber?: SendFn;
 }
 
 export class StreamManager extends EventEmitter {
@@ -244,7 +263,14 @@ export class StreamManager extends EventEmitter {
       seenMessageIds: new Set(),
       seenToolCallIds: new Set(),
       seenReasoningIds: new Set(),
+      toolNameMap: new Map(),
       pendingUserInputRequests: new Map(),
+      idleReceived: false,
+      sendComplete: false,
+      pendingIdleExtra: null,
+      planChangedUnsub: null,
+      lastEventAt: Date.now(),
+      healthCheckInterval: null,
     };
 
     // Build accumulatingSend for this stream
@@ -255,6 +281,11 @@ export class StreamManager extends EventEmitter {
     stream.relay = new EventRelay(accumulatingSend);
     this.streams.set(conversationId, stream);
 
+    // Add initial subscriber synchronously so it receives events from the very start
+    if (options.initialSubscriber) {
+      stream.subscribers.add(options.initialSubscriber);
+    }
+
     // Async: get/create session and send message
     try {
       const permissionHandler = createPermissionHandler(() => stream.mode);
@@ -263,6 +294,23 @@ export class StreamManager extends EventEmitter {
         request: { question: string; choices?: string[]; allowFreeform?: boolean; multiSelect?: boolean },
         _invocation: { sessionId: string },
       ): Promise<{ answer: string; wasFreeform: boolean }> => {
+        // Persist accumulated assistant response so far to the database.
+        // This ensures the partial response (reasoning, tool calls, text) is saved
+        // even if the user closes the browser tab while ask_user is waiting.
+        try {
+          persistAccumulated(this.repo, stream.conversationId, stream.accumulation);
+          stream.accumulation = createEmptyAccumulation();
+          // Trim event buffer: only keep pending user_input_request events
+          stream.eventBuffer = stream.eventBuffer.filter(
+            (e) => e.type === 'copilot:user_input_request' &&
+              stream.pendingUserInputRequests.has((e.data as any)?.requestId),
+          );
+        } catch (err) {
+          log.error({ err, conversationId: stream.conversationId }, 'Failed to persist accumulation before ask_user');
+          // Reset accumulation anyway so stale data doesn't accumulate
+          stream.accumulation = createEmptyAccumulation();
+        }
+
         return new Promise((resolve, reject) => {
           const requestId = randomUUID();
           const requestData: PendingUserInputRequestData = {
@@ -317,6 +365,9 @@ export class StreamManager extends EventEmitter {
               conversationId: stream.conversationId,
             },
           };
+          // Add to eventBuffer so reconnecting subscribers receive it via replay
+          stream.eventBuffer.push(msg);
+          log.debug({ conversationId: stream.conversationId, requestId, subscribers: stream.subscribers.size }, 'Broadcasting copilot:user_input_request');
           this.broadcast(stream, msg);
         });
       };
@@ -343,7 +394,7 @@ export class StreamManager extends EventEmitter {
       };
 
       if (this.promptComposer) {
-        const composed = this.promptComposer.compose(resolvedCwd, options.locale);
+        const composed = this.promptComposer.compose(resolvedCwd, options.locale, options.mode);
         if (composed) {
           sessionOpts.systemMessage = { mode: 'append', content: composed };
         }
@@ -382,7 +433,36 @@ export class StreamManager extends EventEmitter {
       StreamManager.sessionConversationMap.set(session.sessionId, conversationId);
       stream.relay.attach(session);
 
+      // Activate SDK plan mode via RPC and register plan_changed listener
+      if (stream.mode === 'plan') {
+        try {
+          await this.sessionManager.setMode(session, 'plan');
+          log.info({ conversationId }, 'SDK plan mode activated');
+        } catch (err) {
+          log.warn({ err, conversationId }, 'Failed to set SDK plan mode via RPC — falling back to prompt-only plan mode');
+        }
+        stream.planChangedUnsub = this.registerPlanChangedListener(stream);
+      }
+
+      // Start health monitoring: warn if no events received for an extended period
+      stream.healthCheckInterval = setInterval(() => {
+        const elapsed = Date.now() - stream.lastEventAt;
+        if (elapsed > 120_000 && stream.status === 'running') {
+          log.warn({ conversationId, elapsedMs: elapsed }, 'No events received for 120s — stream may be stalled');
+          this.broadcast(stream, {
+            type: 'copilot:warning',
+            data: { conversationId, message: 'Stream may be stalled — no events for 2 minutes' },
+          });
+        }
+      }, 60_000);
+
       await this.sessionManager.sendMessage(session, options.prompt, options.files);
+
+      // session.send() resolved — mark send as complete and clean up if idle was already received
+      stream.sendComplete = true;
+      if (stream.idleReceived) {
+        this.finishStream(conversationId);
+      }
     } catch (err) {
       log.error({ err, conversationId }, 'Failed to start stream');
       stream.status = 'error';
@@ -391,17 +471,23 @@ export class StreamManager extends EventEmitter {
         data: { message: err instanceof Error ? err.message : 'Unknown error' },
       };
       this.broadcast(stream, errorMsg);
+
+      // Clean up on error
+      stream.sendComplete = true;
+      this.finishStream(conversationId);
       throw err;
     }
   }
 
-  subscribe(conversationId: string, send: SendFn): (() => void) | null {
+  subscribe(conversationId: string, send: SendFn, options?: { skipReplay?: boolean }): (() => void) | null {
     const stream = this.streams.get(conversationId);
     if (!stream) return null;
 
-    // Catch-up: replay eventBuffer
-    for (const msg of stream.eventBuffer) {
-      send(msg);
+    // Catch-up: replay eventBuffer (skip when caller already has context, e.g. user_input_response)
+    if (!options?.skipReplay) {
+      for (const msg of stream.eventBuffer) {
+        send(msg);
+      }
     }
 
     const wasEmpty = stream.subscribers.size === 0;
@@ -423,12 +509,97 @@ export class StreamManager extends EventEmitter {
     };
   }
 
+  hasStream(conversationId: string): boolean {
+    return this.streams.has(conversationId);
+  }
+
+  removeSubscriber(conversationId: string, send: SendFn): void {
+    const stream = this.streams.get(conversationId);
+    if (!stream) return;
+
+    stream.subscribers.delete(send);
+
+    // Pause user input timeouts when last subscriber leaves
+    if (stream.subscribers.size === 0) {
+      this.pausePendingTimeouts(stream);
+    }
+  }
+
+  /**
+   * Final cleanup: detach relay and remove stream from map.
+   * Called only when BOTH idleReceived and sendComplete are true.
+   */
+  private finishStream(conversationId: string): void {
+    const stream = this.streams.get(conversationId);
+    if (!stream || stream.status === 'idle') return; // Already cleaned up
+
+    // Safety: do NOT finish the stream while there are still pending user input requests.
+    // The SDK should resolve all tool calls before session.send() resolves, but guard
+    // against edge cases where idleReceived + sendComplete are both true prematurely.
+    if (stream.pendingUserInputRequests.size > 0) {
+      log.warn({ conversationId, pending: stream.pendingUserInputRequests.size }, 'finishStream called while user input requests are pending — deferring');
+      return;
+    }
+
+    log.debug({ conversationId, subscribers: stream.subscribers.size }, 'Finishing stream');
+
+    // Clear health monitoring
+    if (stream.healthCheckInterval) {
+      clearInterval(stream.healthCheckInterval);
+      stream.healthCheckInterval = null;
+    }
+
+    // Safety persist: ensure any remaining accumulated data is saved before cleanup
+    persistAccumulated(this.repo, conversationId, stream.accumulation);
+    stream.accumulation = createEmptyAccumulation();
+
+    // Broadcast the final copilot:idle with accumulated extra data (planFilePath, planArtifact, etc.)
+    // This is the ONLY place copilot:idle is broadcast — processEventInner suppresses premature idles.
+    const idleMsg: WsMessage = {
+      type: 'copilot:idle',
+      data: {
+        conversationId,
+        ...(stream.pendingIdleExtra ?? {}),
+      },
+    };
+    stream.eventBuffer.push(idleMsg);
+    this.broadcast(stream, idleMsg);
+
+    stream.status = 'idle';
+    stream.relay.detach();
+
+    // Clean up plan_changed listener
+    if (stream.planChangedUnsub) {
+      stream.planChangedUnsub();
+      stream.planChangedUnsub = null;
+    }
+
+    if (stream.session?.sessionId) {
+      StreamManager.sessionConversationMap.delete(stream.session.sessionId);
+    }
+
+    this.emit('stream:idle', stream.conversationId);
+
+    // Use queueMicrotask so the broadcast can complete first
+    queueMicrotask(() => {
+      this.streams.delete(conversationId);
+    });
+  }
+
   async abortStream(conversationId: string): Promise<void> {
     const stream = this.streams.get(conversationId);
-    if (!stream || stream.status !== 'running') return;
+    if (!stream) return;
+
+    const wasRunning = stream.status === 'running';
+
+    // Clear health monitoring
+    if (stream.healthCheckInterval) {
+      clearInterval(stream.healthCheckInterval);
+      stream.healthCheckInterval = null;
+    }
 
     // Reject all pending user input requests
-    for (const [id, pending] of stream.pendingUserInputRequests) {
+    for (const [, pending] of stream.pendingUserInputRequests) {
       clearTimeout(pending.timeoutId);
       pending.reject(new Error('Stream aborted'));
     }
@@ -444,12 +615,25 @@ export class StreamManager extends EventEmitter {
     stream.accumulation = createEmptyAccumulation();
     stream.status = 'idle';
 
+    // Detach event relay and plan_changed listener
+    stream.relay.detach();
+    if (stream.planChangedUnsub) {
+      stream.planChangedUnsub();
+      stream.planChangedUnsub = null;
+    }
+
     // Notify subscribers
-    const idleMsg: WsMessage = { type: 'copilot:idle' };
+    const idleMsg: WsMessage = {
+      type: 'copilot:idle',
+      data: {
+        conversationId,
+        ...(stream.pendingIdleExtra ?? {}),
+      },
+    };
     this.broadcast(stream, idleMsg);
 
-    // Abort SDK session
-    if (stream.session) {
+    // Abort SDK session only if was running
+    if (wasRunning && stream.session) {
       try {
         await this.sessionManager.abortMessage(stream.session);
       } catch (err) {
@@ -457,16 +641,26 @@ export class StreamManager extends EventEmitter {
       }
     }
 
+    // Always remove from map so a new stream can start
+    this.streams.delete(conversationId);
+
     this.emit('stream:idle', conversationId);
   }
 
   handleUserInputResponse(conversationId: string, requestId: string, answer: string, wasFreeform: boolean): void {
     const stream = this.streams.get(conversationId);
-    if (!stream) return;
+    if (!stream) {
+      log.warn({ conversationId, requestId }, 'handleUserInputResponse: stream not found');
+      return;
+    }
 
     const pending = stream.pendingUserInputRequests.get(requestId);
-    if (!pending) return;
+    if (!pending) {
+      log.warn({ conversationId, requestId }, 'handleUserInputResponse: pending request not found');
+      return;
+    }
 
+    log.debug({ conversationId, requestId, answer: answer.substring(0, 50) }, 'Resolving user input request');
     clearTimeout(pending.timeoutId);
     stream.pendingUserInputRequests.delete(requestId);
     pending.resolve({ answer, wasFreeform });
@@ -477,11 +671,56 @@ export class StreamManager extends EventEmitter {
     if (!stream) return;
 
     stream.mode = mode;
+
+    // Sync mode with SDK via RPC (fire-and-forget)
+    if (stream.session) {
+      const sdkMode = mode === 'plan' ? 'plan' : 'interactive';
+      this.sessionManager.setMode(stream.session, sdkMode).catch((err: unknown) => {
+        log.warn({ err, conversationId }, 'Failed to set SDK mode via RPC');
+      });
+
+      // Manage plan_changed listener
+      if (mode === 'plan' && !stream.planChangedUnsub) {
+        stream.planChangedUnsub = this.registerPlanChangedListener(stream);
+      } else if (mode !== 'plan' && stream.planChangedUnsub) {
+        stream.planChangedUnsub();
+        stream.planChangedUnsub = null;
+      }
+    }
+
     const msg: WsMessage = {
       type: 'copilot:mode_changed',
       data: { mode, conversationId },
     };
     this.broadcast(stream, msg);
+  }
+
+  /** Register a listener for SDK session.plan_changed events.
+   *  When the SDK creates/updates plan.md, we read it, write to .codeforge/plans/, and store in pendingIdleExtra. */
+  private registerPlanChangedListener(stream: ConversationStream): () => void {
+    return stream.session.on('session.plan_changed', (event: any) => {
+      const d = event?.data ?? event;
+      if (d.operation === 'create' || d.operation === 'update') {
+        this.sessionManager.readPlan(stream.session).then((planResult) => {
+          if (planResult.exists && planResult.content) {
+            const topic = extractTopicFromContent(planResult.content);
+            const planFilePath = writePlanFile(stream.cwd, planResult.content, topic);
+            this.repo.update(stream.conversationId, { planFilePath });
+            stream.pendingIdleExtra = {
+              ...(stream.pendingIdleExtra ?? {}),
+              planFilePath,
+              planArtifact: {
+                title: topic || 'Implementation Plan',
+                content: planResult.content,
+                filePath: planFilePath,
+              },
+            };
+          }
+        }).catch((err: unknown) => {
+          log.error({ err, conversationId: stream.conversationId }, 'Failed to read/write SDK plan');
+        });
+      }
+    });
   }
 
   getActiveStreamIds(): string[] {
@@ -497,10 +736,10 @@ export class StreamManager extends EventEmitter {
   }
 
   getFullState(): {
-    activeStreams: { conversationId: string; status: string; startedAt: string }[];
+    activeStreams: { conversationId: string; status: string; startedAt: string; mode: string }[];
     pendingUserInputs: (PendingUserInputRequestData & { conversationId: string })[];
   } {
-    const activeStreams: { conversationId: string; status: string; startedAt: string }[] = [];
+    const activeStreams: { conversationId: string; status: string; startedAt: string; mode: string }[] = [];
     const pendingUserInputs: (PendingUserInputRequestData & { conversationId: string })[] = [];
 
     for (const [, stream] of this.streams) {
@@ -509,6 +748,7 @@ export class StreamManager extends EventEmitter {
           conversationId: stream.conversationId,
           status: stream.status,
           startedAt: stream.startedAt,
+          mode: stream.mode,
         });
       }
 
@@ -520,6 +760,21 @@ export class StreamManager extends EventEmitter {
       }
     }
 
+    log.debug({
+      totalStreams: this.streams.size,
+      activeStreams: activeStreams.length,
+      pendingUserInputs: pendingUserInputs.length,
+      streamDetails: [...this.streams.values()].map(s => ({
+        conversationId: s.conversationId,
+        status: s.status,
+        subscribers: s.subscribers.size,
+        pendingRequests: s.pendingUserInputRequests.size,
+        eventBufferLength: s.eventBuffer.length,
+        idleReceived: s.idleReceived,
+        sendComplete: s.sendComplete,
+      })),
+    }, 'getFullState called');
+
     return { activeStreams, pendingUserInputs };
   }
 
@@ -529,6 +784,12 @@ export class StreamManager extends EventEmitter {
 
     const abortPromises: Promise<void>[] = [];
     for (const [conversationId, stream] of this.streams) {
+      // Clear health monitoring
+      if (stream.healthCheckInterval) {
+        clearInterval(stream.healthCheckInterval);
+        stream.healthCheckInterval = null;
+      }
+
       // Reject all pending user input requests
       for (const [, pending] of stream.pendingUserInputRequests) {
         clearTimeout(pending.timeoutId);
@@ -577,6 +838,26 @@ export class StreamManager extends EventEmitter {
   }
 
   private processEvent(stream: ConversationStream, msg: WsMessage): void {
+    // Update health monitoring timestamp
+    stream.lastEventAt = Date.now();
+    try {
+      this.processEventInner(stream, msg);
+    } catch (err) {
+      log.error({ err, eventType: msg.type, conversationId: stream.conversationId }, 'Error processing event');
+      // Still forward the raw event so the stream doesn't silently swallow it
+      const fallbackMsg: WsMessage = {
+        ...msg,
+        data: {
+          ...((msg.data as Record<string, unknown>) ?? {}),
+          conversationId: stream.conversationId,
+        },
+      };
+      stream.eventBuffer.push(fallbackMsg);
+      this.broadcast(stream, fallbackMsg);
+    }
+  }
+
+  private processEventInner(stream: ConversationStream, msg: WsMessage): void {
     const msgData = (msg.data ?? {}) as Record<string, unknown>;
     let extraData: Record<string, unknown> | null = null;
 
@@ -601,9 +882,14 @@ export class StreamManager extends EventEmitter {
         const toolCallId = msgData.toolCallId as string;
         if (toolCallId && stream.seenToolCallIds.has(toolCallId)) return;
         if (toolCallId) stream.seenToolCallIds.add(toolCallId);
+        const toolName = msgData.toolName as string;
+        // Track toolCallId → toolName for the entire stream lifetime
+        if (toolCallId && toolName) {
+          stream.toolNameMap.set(toolCallId, toolName);
+        }
         const toolRecord: ToolRecord = {
           toolCallId,
-          toolName: msgData.toolName as string,
+          toolName,
           arguments: msgData.arguments,
           status: 'running',
         };
@@ -620,25 +906,50 @@ export class StreamManager extends EventEmitter {
       case 'copilot:tool_end': {
         const toolCallId = msgData.toolCallId as string;
         const success = msgData.success as boolean;
-        const record = stream.accumulation.toolRecords.find((r) => r.toolCallId === toolCallId);
-        if (!record) return;
-        record.status = success ? 'success' : 'error';
-        if (success) {
-          record.result = msgData.result;
-        } else {
+        // Enrich with toolName from our tracking map (SDK doesn't include it in tool_end)
+        if (!msgData.toolName && toolCallId) {
+          const trackedName = stream.toolNameMap.get(toolCallId);
+          if (trackedName) {
+            extraData = { ...(extraData ?? {}), toolName: trackedName };
+          }
+        }
+        const normalizedError = (() => {
+          if (success) return undefined;
           const rawError = msgData.error;
-          record.error = typeof rawError === 'string'
+          return typeof rawError === 'string'
             ? rawError
             : (rawError as any)?.message ?? JSON.stringify(rawError);
+        })();
+        const record = stream.accumulation.toolRecords.find((r) => r.toolCallId === toolCallId);
+        if (record) {
+          record.status = success ? 'success' : 'error';
+          if (success) {
+            record.result = msgData.result;
+          } else {
+            record.error = normalizedError;
+          }
+          const segment = stream.accumulation.turnSegments.find(
+            (s) => s.type === 'tool' && s.toolCallId === toolCallId,
+          );
+          if (segment) {
+            segment.status = success ? 'success' : 'error';
+            if (success) segment.result = msgData.result;
+            else segment.error = normalizedError;
+          }
+        } else {
+          // Tool record was already persisted (premature idle reset the accumulation).
+          // Update the last assistant message in the DB to include the tool result.
+          try {
+            this.repo.updateToolResult(stream.conversationId, toolCallId, {
+              status: success ? 'success' : 'error',
+              result: success ? msgData.result : undefined,
+              error: normalizedError,
+            });
+          } catch (err) {
+            log.error({ err, conversationId: stream.conversationId, toolCallId }, 'Failed to update tool result in DB');
+          }
         }
-        const segment = stream.accumulation.turnSegments.find(
-          (s) => s.type === 'tool' && s.toolCallId === toolCallId,
-        );
-        if (segment) {
-          segment.status = success ? 'success' : 'error';
-          if (success) segment.result = msgData.result;
-          else segment.error = record.error; // Use already-normalized string
-        }
+        // Always broadcast tool_end even if record was already persisted
         break;
       }
       case 'copilot:reasoning_delta': {
@@ -706,38 +1017,36 @@ export class StreamManager extends EventEmitter {
         break;
       }
       case 'copilot:idle': {
-        // Write plan file if in plan mode and there is accumulated content
-        if (stream.mode === 'plan') {
-          const planContent = stream.accumulation.contentSegments.join('');
-          if (planContent.length > 0) {
-            try {
-              const topic = extractTopicFromContent(planContent);
-              const planFilePath = writePlanFile(stream.cwd, planContent, topic);
-              this.repo.update(stream.conversationId, { planFilePath });
-              extraData = { planFilePath };
-            } catch (err) {
-              log.error({ err, conversationId: stream.conversationId }, 'Failed to write plan file');
-            }
-          }
-        }
+        // Plan data is now managed by the SDK's plan mode via session.plan_changed listener
+        // (registered in startStream / setMode). pendingIdleExtra is populated there.
 
         persistAccumulated(this.repo, stream.conversationId, stream.accumulation);
         stream.accumulation = createEmptyAccumulation();
-        stream.status = 'idle';
-        stream.relay.detach();
-        this.emit('stream:idle', stream.conversationId);
+        // Content has been persisted to DB — clear event buffer EXCEPT pending user_input_request events.
+        // The SDK fires session.idle after each model turn, including BEFORE tools (like ask_user) execute.
+        // If we blindly clear, a subsequent idle could wipe the user_input_request that handleAskUser added.
+        stream.eventBuffer = stream.eventBuffer.filter(
+          (e) => e.type === 'copilot:user_input_request' &&
+            stream.pendingUserInputRequests.has((e.data as any)?.requestId),
+        );
 
-        // Clean up session-conversation mapping
-        if (stream.session?.sessionId) {
-          StreamManager.sessionConversationMap.delete(stream.session.sessionId);
+        stream.idleReceived = true;
+
+        // Only do full cleanup when BOTH conditions are met:
+        // 1. session.idle was received (idleReceived = true)
+        // 2. session.send() has resolved (sendComplete = true)
+        // This prevents premature cleanup when session.idle fires mid-turn (e.g., before ask_user).
+        if (stream.sendComplete) {
+          this.finishStream(stream.conversationId);
         }
 
-        // Clean up after broadcasting so the conversation can start a new stream
-        // (broadcast happens below, after the switch)
-        queueMicrotask(() => {
-          this.streams.delete(stream.conversationId);
-        });
-        break;
+        // CRITICAL: Do NOT broadcast copilot:idle to the frontend here.
+        // The SDK fires session.idle after each model response, even when tools
+        // (like ask_user) are still pending. Broadcasting premature idles causes
+        // the frontend to clear streaming state and lose track of the active turn.
+        // The real copilot:idle will be broadcast by finishStream() when the
+        // stream truly ends (both idleReceived AND sendComplete).
+        return;
       }
       case 'copilot:error': {
         stream.status = 'error';
@@ -763,11 +1072,17 @@ export class StreamManager extends EventEmitter {
   }
 
   private broadcast(stream: ConversationStream, msg: WsMessage): void {
+    if (msg.type === 'copilot:user_input_request' || msg.type === 'copilot:tool_start' || msg.type === 'copilot:tool_end') {
+      log.debug({ type: msg.type, conversationId: stream.conversationId, subscribers: stream.subscribers.size }, 'Broadcasting event');
+    }
+    if (stream.subscribers.size === 0 && (msg.type === 'copilot:tool_end' || msg.type === 'copilot:idle')) {
+      log.warn({ type: msg.type, conversationId: stream.conversationId }, 'Broadcasting to 0 subscribers — frontend will not receive this event');
+    }
     for (const send of stream.subscribers) {
       try {
         send(msg);
       } catch (err) {
-        log.error({ err }, 'Error broadcasting to subscriber');
+        log.error({ err, type: msg.type }, 'Error broadcasting to subscriber');
       }
     }
   }

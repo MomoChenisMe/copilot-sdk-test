@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { PromptFileStore } from './file-store.js';
-import { DEFAULT_SYSTEM_PROMPT } from './defaults.js';
+import { DEFAULT_SYSTEM_PROMPT, DEFAULT_ACT_PROMPT, DEFAULT_PLAN_PROMPT } from './defaults.js';
 
 export function createPromptsRoutes(store: PromptFileStore): Router {
   const router = Router();
@@ -21,6 +21,42 @@ export function createPromptsRoutes(store: PromptFileStore): Router {
   router.post('/system-prompt/reset', (_req, res) => {
     store.writeFile('SYSTEM_PROMPT.md', DEFAULT_SYSTEM_PROMPT);
     res.json({ content: DEFAULT_SYSTEM_PROMPT });
+  });
+
+  // --- Act Prompt ---
+
+  router.get('/act-prompt', (_req, res) => {
+    const content = store.readFile('ACT_PROMPT.md');
+    res.json({ content });
+  });
+
+  router.put('/act-prompt', (req, res) => {
+    const { content } = req.body;
+    store.writeFile('ACT_PROMPT.md', content ?? '');
+    res.json({ ok: true });
+  });
+
+  router.post('/act-prompt/reset', (_req, res) => {
+    store.writeFile('ACT_PROMPT.md', DEFAULT_ACT_PROMPT);
+    res.json({ content: DEFAULT_ACT_PROMPT });
+  });
+
+  // --- Plan Prompt ---
+
+  router.get('/plan-prompt', (_req, res) => {
+    const content = store.readFile('PLAN_PROMPT.md');
+    res.json({ content });
+  });
+
+  router.put('/plan-prompt', (req, res) => {
+    const { content } = req.body;
+    store.writeFile('PLAN_PROMPT.md', content ?? '');
+    res.json({ ok: true });
+  });
+
+  router.post('/plan-prompt/reset', (_req, res) => {
+    store.writeFile('PLAN_PROMPT.md', DEFAULT_PLAN_PROMPT);
+    res.json({ content: DEFAULT_PLAN_PROMPT });
   });
 
   // --- Profile ---

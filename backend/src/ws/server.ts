@@ -47,6 +47,10 @@ export function createWsServer(httpServer: HttpServer, sessionStore: SessionStor
   wss.on('connection', (ws: WebSocket) => {
     log.info('Client connected');
 
+    // Stable reference for this connection — same closure used for routing and disconnect
+    // so that subscriber identity checks (===) work correctly.
+    const connectionSend: (msg: WsMessage) => void = (msg) => send(ws, msg);
+
     let lastPing = Date.now();
     const heartbeatInterval = setInterval(() => {
       if (Date.now() - lastPing > HEARTBEAT_TIMEOUT) {
@@ -75,12 +79,12 @@ export function createWsServer(httpServer: HttpServer, sessionStore: SessionStor
       // All incoming messages reset heartbeat timer (not just ping)
       lastPing = Date.now();
 
-      router(message, (msg) => send(ws, msg));
+      router(message, connectionSend);
     });
 
     ws.on('close', () => {
       clearInterval(heartbeatInterval);
-      notifyDisconnect((msg) => send(ws, msg));
+      notifyDisconnect(connectionSend);
       log.info('Client disconnected');
     });
 

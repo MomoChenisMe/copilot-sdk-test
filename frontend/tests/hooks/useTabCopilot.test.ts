@@ -4,10 +4,11 @@ import { useTabCopilot } from '../../src/hooks/useTabCopilot';
 import { useAppStore } from '../../src/store';
 import type { WsMessage } from '../../src/lib/ws-types';
 
-// Mock conversationApi for auto-title tests
+// Mock conversationApi for auto-title tests and DB-as-Source-of-Truth idle handler
 vi.mock('../../src/lib/api', () => ({
   conversationApi: {
     update: vi.fn().mockResolvedValue({}),
+    getMessages: vi.fn().mockResolvedValue([]),
   },
 }));
 import { conversationApi } from '../../src/lib/api';
@@ -35,6 +36,10 @@ describe('useTabCopilot', () => {
       };
     };
     send = vi.fn();
+
+    // Clear mocks
+    vi.mocked(conversationApi.getMessages).mockClear();
+    vi.mocked(conversationApi.getMessages).mockResolvedValue([]);
 
     // Reset store
     useAppStore.setState({
@@ -157,12 +162,18 @@ describe('useTabCopilot', () => {
 
   // --- copilot:idle integration ---
   describe('copilot:idle integration', () => {
-    it('should consolidate streaming state into a message on idle', () => {
+    it('should consolidate streaming state into a message on idle', async () => {
+      // DB-as-Source-of-Truth: idle handler fetches messages from DB
+      vi.mocked(conversationApi.getMessages).mockResolvedValueOnce([
+        { id: 'db-msg-1', conversationId: 'conv-A', role: 'assistant', content: 'Hello World', metadata: null, createdAt: new Date().toISOString() },
+      ]);
       renderHook(() => useTabCopilot({ subscribe, send }));
       act(() => {
         emit({ type: 'copilot:delta', data: { content: 'Hello ', conversationId: 'conv-A' } });
         emit({ type: 'copilot:delta', data: { content: 'World', conversationId: 'conv-A' } });
         emit({ type: 'copilot:message', data: { content: 'Hello World', messageId: 'mid-1', conversationId: 'conv-A' } });
+      });
+      await act(async () => {
         emit({ type: 'copilot:idle', data: { conversationId: 'conv-A' } });
       });
       const tabA = useAppStore.getState().tabs[tabIdA];
@@ -173,11 +184,13 @@ describe('useTabCopilot', () => {
       expect(tabA.isStreaming).toBe(false);
     });
 
-    it('should not affect other tabs on idle', () => {
+    it('should not affect other tabs on idle', async () => {
       renderHook(() => useTabCopilot({ subscribe, send }));
       act(() => {
         emit({ type: 'copilot:delta', data: { content: 'A content', conversationId: 'conv-A' } });
         emit({ type: 'copilot:delta', data: { content: 'B content', conversationId: 'conv-B' } });
+      });
+      await act(async () => {
         emit({ type: 'copilot:idle', data: { conversationId: 'conv-A' } });
       });
       expect(useAppStore.getState().tabs[tabIdA].streamingText).toBe('');
@@ -216,7 +229,7 @@ describe('useTabCopilot', () => {
 
     it('should not throw when called with non-existent tabId', () => {
       const { result } = renderHook(() => useTabCopilot({ subscribe, send }));
-      send.mockClear(); // Clear the copilot:query_state call from mount
+      send.mockClear();
       expect(() => {
         act(() => {
           result.current.sendMessage('non-existent-tab', 'hello');
@@ -361,7 +374,7 @@ describe('useTabCopilot', () => {
       act(() => {
         result.current.sendMessage(tabIdA, 'act on this');
       });
-      // Find the copilot:send call (skip the initial copilot:query_state)
+      // Find the copilot:send call
       const sendCall = send.mock.calls.find((c: any[]) => (c[0] as WsMessage).type === 'copilot:send');
       expect(sendCall).toBeDefined();
       const sentData = (sendCall![0] as WsMessage).data as Record<string, unknown>;
@@ -381,44 +394,124 @@ describe('useTabCopilot', () => {
       expect(useAppStore.getState().tabs[tabIdA].planMode).toBe(false);
     });
 
-    it('should show plan complete prompt when idle fires in plan mode', () => {
+    it('should show plan complete prompt when idle fires in plan mode', async () => {
       useAppStore.getState().setTabPlanMode(tabIdA, true);
       useAppStore.getState().setTabIsStreaming(tabIdA, true);
       useAppStore.getState().updateStreamStatus('conv-A', 'running');
       renderHook(() => useTabCopilot({ subscribe, send }));
-      act(() => {
+      await act(async () => {
         emit({ type: 'copilot:idle', data: { conversationId: 'conv-A' } });
       });
       expect(useAppStore.getState().tabs[tabIdA].showPlanCompletePrompt).toBe(true);
     });
 
-    it('should extract planFilePath from copilot:idle event data', () => {
+    it('should extract planFilePath from copilot:idle event data', async () => {
       useAppStore.getState().setTabPlanMode(tabIdA, true);
       useAppStore.getState().setTabIsStreaming(tabIdA, true);
       useAppStore.getState().updateStreamStatus('conv-A', 'running');
       renderHook(() => useTabCopilot({ subscribe, send }));
-      act(() => {
+      await act(async () => {
         emit({ type: 'copilot:idle', data: { conversationId: 'conv-A', planFilePath: '/tmp/.codeforge/plans/2026-02-19-plan.md' } });
       });
       expect(useAppStore.getState().tabs[tabIdA].planFilePath).toBe('/tmp/.codeforge/plans/2026-02-19-plan.md');
     });
 
-    it('should not set planFilePath when idle event has no planFilePath', () => {
+    it('should not set planFilePath when idle event has no planFilePath', async () => {
       useAppStore.getState().setTabIsStreaming(tabIdA, true);
       useAppStore.getState().updateStreamStatus('conv-A', 'running');
       renderHook(() => useTabCopilot({ subscribe, send }));
-      act(() => {
+      await act(async () => {
         emit({ type: 'copilot:idle', data: { conversationId: 'conv-A' } });
       });
       expect(useAppStore.getState().tabs[tabIdA].planFilePath).toBeNull();
     });
 
-    it('should not show plan complete prompt when idle fires in act mode', () => {
+    it('should create plan artifact and open panel when planArtifact is present in idle event', async () => {
+      useAppStore.getState().setTabPlanMode(tabIdA, true);
+      useAppStore.getState().setTabIsStreaming(tabIdA, true);
+      useAppStore.getState().updateStreamStatus('conv-A', 'running');
+      renderHook(() => useTabCopilot({ subscribe, send }));
+      await act(async () => {
+        emit({
+          type: 'copilot:idle',
+          data: {
+            conversationId: 'conv-A',
+            planFilePath: '/tmp/plan.md',
+            planArtifact: {
+              title: 'My Plan',
+              content: '# Plan\n\nStep 1',
+              filePath: '/tmp/plan.md',
+            },
+          },
+        });
+      });
+      const tab = useAppStore.getState().tabs[tabIdA];
+      expect(tab.artifacts.length).toBe(1);
+      expect(tab.artifacts[0].type).toBe('plan');
+      expect(tab.artifacts[0].title).toBe('My Plan');
+      expect(tab.artifacts[0].content).toBe('# Plan\n\nStep 1');
+      expect(tab.activeArtifactId).toBe(tab.artifacts[0].id);
+      expect(tab.artifactsPanelOpen).toBe(true);
+    });
+
+    it('should use stable plan artifact ID (no timestamp) so updates replace the existing artifact', async () => {
+      useAppStore.getState().setTabPlanMode(tabIdA, true);
+      useAppStore.getState().setTabIsStreaming(tabIdA, true);
+      useAppStore.getState().updateStreamStatus('conv-A', 'running');
+      renderHook(() => useTabCopilot({ subscribe, send }));
+
+      // First plan
+      await act(async () => {
+        emit({
+          type: 'copilot:idle',
+          data: {
+            conversationId: 'conv-A',
+            planFilePath: '/tmp/plan.md',
+            planArtifact: { title: 'Old Plan', content: '# Old\n\nContent', filePath: '/tmp/plan.md' },
+          },
+        });
+      });
+      expect(useAppStore.getState().tabs[tabIdA].artifacts.length).toBe(1);
+
+      // Re-enable streaming for second idle
+      useAppStore.getState().setTabIsStreaming(tabIdA, true);
+      useAppStore.getState().updateStreamStatus('conv-A', 'running');
+
+      // Second plan (same conversation) — should REPLACE, not add
+      await act(async () => {
+        emit({
+          type: 'copilot:idle',
+          data: {
+            conversationId: 'conv-A',
+            planFilePath: '/tmp/plan2.md',
+            planArtifact: { title: 'New Plan', content: '# New\n\nBetter content', filePath: '/tmp/plan2.md' },
+          },
+        });
+      });
+      const tab = useAppStore.getState().tabs[tabIdA];
+      expect(tab.artifacts.length).toBe(1); // Still 1, not 2
+      expect(tab.artifacts[0].title).toBe('New Plan');
+      expect(tab.artifacts[0].content).toBe('# New\n\nBetter content');
+    });
+
+    it('should not create plan artifact when planArtifact is absent from idle event', async () => {
+      useAppStore.getState().setTabIsStreaming(tabIdA, true);
+      useAppStore.getState().updateStreamStatus('conv-A', 'running');
+      renderHook(() => useTabCopilot({ subscribe, send }));
+      await act(async () => {
+        emit({ type: 'copilot:idle', data: { conversationId: 'conv-A' } });
+      });
+      const tab = useAppStore.getState().tabs[tabIdA];
+      expect(tab.artifacts.length).toBe(0);
+      expect(tab.artifactsPanelOpen).toBe(false);
+    });
+
+    it('should not show plan complete prompt when idle fires in act mode', async () => {
       // planMode defaults to false
       useAppStore.getState().setTabIsStreaming(tabIdA, true);
       useAppStore.getState().updateStreamStatus('conv-A', 'running');
       renderHook(() => useTabCopilot({ subscribe, send }));
-      act(() => {
+      await act(async () => {
         emit({ type: 'copilot:idle', data: { conversationId: 'conv-A' } });
       });
       expect(useAppStore.getState().tabs[tabIdA].showPlanCompletePrompt).toBe(false);
@@ -630,8 +723,26 @@ describe('useTabCopilot', () => {
 
   // --- Reconnection state recovery ---
   describe('reconnection state recovery', () => {
-    it('should send copilot:query_state on mount to recover state', () => {
-      renderHook(() => useTabCopilot({ subscribe, send }));
+    it('should send copilot:query_state when status becomes connected', () => {
+      const { rerender } = renderHook(
+        ({ status }) => useTabCopilot({ subscribe, send, status }),
+        { initialProps: { status: 'disconnected' as const } },
+      );
+      expect(send).not.toHaveBeenCalledWith({ type: 'copilot:query_state' });
+      rerender({ status: 'connected' as const });
+      expect(send).toHaveBeenCalledWith({ type: 'copilot:query_state' });
+    });
+
+    it('should re-send copilot:query_state on reconnection', () => {
+      const { rerender } = renderHook(
+        ({ status }) => useTabCopilot({ subscribe, send, status }),
+        { initialProps: { status: 'connected' as const } },
+      );
+      expect(send).toHaveBeenCalledWith({ type: 'copilot:query_state' });
+      send.mockClear();
+      // Simulate disconnect then reconnect
+      rerender({ status: 'disconnected' as const });
+      rerender({ status: 'connected' as const });
       expect(send).toHaveBeenCalledWith({ type: 'copilot:query_state' });
     });
 
@@ -680,7 +791,10 @@ describe('useTabCopilot', () => {
         question: 'Pick one',
         choices: ['X', 'Y'],
         allowFreeform: true,
+        multiSelect: false,
       });
+      // Should also set isStreaming when there are pending user inputs
+      expect(tabA.isStreaming).toBe(true);
     });
 
     it('should not set streaming for conversations without matching tabs', () => {
@@ -699,6 +813,113 @@ describe('useTabCopilot', () => {
       // Should not affect existing tabs
       expect(useAppStore.getState().tabs[tabIdA].isStreaming).toBe(false);
       expect(useAppStore.getState().tabs[tabIdB].isStreaming).toBe(false);
+    });
+
+    it('should retry unresolved pending user inputs after 1 second (deferred retry)', async () => {
+      vi.useFakeTimers();
+      try {
+        // Don't open tab yet — simulate tabs loading from localStorage slowly
+        useAppStore.setState({ tabs: {}, tabOrder: [], activeTabId: null });
+
+        renderHook(() => useTabCopilot({ subscribe, send }));
+        act(() => {
+          emit({
+            type: 'copilot:state_response',
+            data: {
+              activeStreams: [],
+              pendingUserInputs: [
+                {
+                  requestId: 'req-deferred',
+                  question: 'Deferred question',
+                  choices: ['X'],
+                  allowFreeform: true,
+                  conversationId: 'conv-A',
+                },
+              ],
+            },
+          });
+        });
+
+        // Tab doesn't exist yet, so userInputRequest should not be set
+        // Now simulate the tab loading
+        const lateTabId = openTabAndGetId('conv-A', 'Late Tab');
+
+        // Advance 1 second to trigger the deferred retry
+        await act(async () => {
+          vi.advanceTimersByTime(1000);
+        });
+
+        const lateTab = useAppStore.getState().tabs[lateTabId];
+        expect(lateTab.userInputRequest).toEqual({
+          requestId: 'req-deferred',
+          question: 'Deferred question',
+          choices: ['X'],
+          allowFreeform: true,
+          multiSelect: undefined,
+        });
+        // Should also set isStreaming for deferred-resolved tabs
+        expect(lateTab.isStreaming).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should resolve immediately for matching tabs and retry only unresolved ones', async () => {
+      vi.useFakeTimers();
+      try {
+        renderHook(() => useTabCopilot({ subscribe, send }));
+        act(() => {
+          emit({
+            type: 'copilot:state_response',
+            data: {
+              activeStreams: [],
+              pendingUserInputs: [
+                {
+                  requestId: 'req-immediate',
+                  question: 'Immediate question',
+                  choices: ['A'],
+                  allowFreeform: false,
+                  conversationId: 'conv-A', // tab exists
+                },
+                {
+                  requestId: 'req-late',
+                  question: 'Late question',
+                  choices: ['B'],
+                  allowFreeform: true,
+                  conversationId: 'conv-LATE', // tab doesn't exist yet
+                },
+              ],
+            },
+          });
+        });
+
+        // conv-A should have been resolved immediately
+        expect(useAppStore.getState().tabs[tabIdA].userInputRequest).toEqual({
+          requestId: 'req-immediate',
+          question: 'Immediate question',
+          choices: ['A'],
+          allowFreeform: false,
+          multiSelect: undefined,
+        });
+        expect(useAppStore.getState().tabs[tabIdA].isStreaming).toBe(true);
+
+        // conv-LATE has no tab yet — simulate tab arriving
+        const lateTabId = openTabAndGetId('conv-LATE', 'Late Tab');
+        await act(async () => {
+          vi.advanceTimersByTime(1000);
+        });
+
+        expect(useAppStore.getState().tabs[lateTabId].userInputRequest).toEqual({
+          requestId: 'req-late',
+          question: 'Late question',
+          choices: ['B'],
+          allowFreeform: true,
+          multiSelect: undefined,
+        });
+        expect(useAppStore.getState().tabs[lateTabId].isStreaming).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

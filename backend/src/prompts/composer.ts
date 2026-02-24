@@ -16,12 +16,21 @@ export class PromptComposer {
     private memoryStore?: MemoryStore,
   ) {}
 
-  compose(cwd?: string, locale?: string): string {
+  compose(cwd?: string, locale?: string, mode?: 'plan' | 'act'): string {
     const sections: string[] = [];
 
     // 1. SYSTEM_PROMPT.md
     const systemPrompt = this.store.readFile('SYSTEM_PROMPT.md');
     if (systemPrompt.trim()) sections.push(systemPrompt);
+
+    // 1b. Mode-specific prompt: ACT_PROMPT.md or PLAN_PROMPT.md
+    if (mode === 'plan') {
+      const planPrompt = this.store.readFile('PLAN_PROMPT.md');
+      if (planPrompt.trim()) sections.push(planPrompt);
+    } else {
+      const actPrompt = this.store.readFile('ACT_PROMPT.md');
+      if (actPrompt.trim()) sections.push(actPrompt);
+    }
 
     // 2. PROFILE.md (includes merged agent rules + preferences)
     const profile = this.store.readFile('PROFILE.md');

@@ -7,74 +7,130 @@ vi.mock('../../../src/components/shared/Markdown', () => ({
   Markdown: ({ content }: { content: string }) => <div data-testid="markdown-render">{content}</div>,
 }));
 
-// Mock prompts-api
+// Mock prompts-api — factories create bare vi.fn(); defaults set in beforeEach
 vi.mock('../../../src/lib/prompts-api', () => ({
   promptsApi: {
-    getProfile: vi.fn().mockResolvedValue({ content: '# Profile content' }),
-    putProfile: vi.fn().mockResolvedValue({ ok: true }),
-    getAgent: vi.fn().mockResolvedValue({ content: '# Agent content' }),
-    putAgent: vi.fn().mockResolvedValue({ ok: true }),
-    getOpenspecSdd: vi.fn().mockResolvedValue({ content: '# OpenSpec SDD content' }),
-    putOpenspecSdd: vi.fn().mockResolvedValue({ ok: true }),
-    getSystemPrompt: vi.fn().mockResolvedValue({ content: '# System Prompt' }),
-    putSystemPrompt: vi.fn().mockResolvedValue({ ok: true }),
-    resetSystemPrompt: vi.fn().mockResolvedValue({ content: '# Default System Prompt' }),
+    getProfile: vi.fn(),
+    putProfile: vi.fn(),
+    getAgent: vi.fn(),
+    putAgent: vi.fn(),
+    getOpenspecSdd: vi.fn(),
+    putOpenspecSdd: vi.fn(),
+    getSystemPrompt: vi.fn(),
+    putSystemPrompt: vi.fn(),
+    resetSystemPrompt: vi.fn(),
+    getActPrompt: vi.fn(),
+    putActPrompt: vi.fn(),
+    resetActPrompt: vi.fn(),
+    getPlanPrompt: vi.fn(),
+    putPlanPrompt: vi.fn(),
+    resetPlanPrompt: vi.fn(),
   },
   memoryApi: {
-    getPreferences: vi.fn().mockResolvedValue({ content: '' }),
-    putPreferences: vi.fn().mockResolvedValue({ ok: true }),
+    getPreferences: vi.fn(),
+    putPreferences: vi.fn(),
   },
   skillsApi: {
-    list: vi.fn().mockResolvedValue({
-      skills: [
-        { name: 'tdd-workflow', description: 'Test-driven development', content: '# TDD Workflow', builtin: true },
-        { name: 'code-review', description: 'Review code for quality', content: '# Code Review Skill', builtin: false },
-        { name: 'debugging', description: 'Help debug issues', content: '# Debugging Skill', builtin: false },
-      ],
-    }),
-    get: vi.fn().mockResolvedValue({ name: 'code-review', description: 'Review code for quality', content: '# Code Review Skill', builtin: false }),
-    put: vi.fn().mockResolvedValue({ ok: true }),
-    delete: vi.fn().mockResolvedValue({ ok: true }),
+    list: vi.fn(),
+    get: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
   },
 }));
 
 // Mock configApi and memoryApi
 vi.mock('../../../src/lib/api', () => ({
-  apiGet: vi.fn().mockResolvedValue({ currentVersion: '0.1.0', latestVersion: '0.1.0', updateAvailable: false }),
+  apiGet: vi.fn(),
   configApi: {
-    get: vi.fn().mockResolvedValue({ defaultCwd: '/home' }),
-    getBraveApiKey: vi.fn().mockResolvedValue({ hasKey: false, maskedKey: '' }),
-    putBraveApiKey: vi.fn().mockResolvedValue({ ok: true }),
-    getOpenspecSdd: vi.fn().mockResolvedValue({ enabled: false }),
-    putOpenspecSdd: vi.fn().mockResolvedValue({ ok: true }),
+    get: vi.fn(),
+    getBraveApiKey: vi.fn(),
+    putBraveApiKey: vi.fn(),
+    getOpenspecSdd: vi.fn(),
+    putOpenspecSdd: vi.fn(),
   },
   memoryApi: {
-    getMain: vi.fn().mockResolvedValue({ content: '- User prefers TypeScript' }),
-    putMain: vi.fn().mockResolvedValue({ ok: true }),
-    listDailyLogs: vi.fn().mockResolvedValue({ dates: ['2026-02-17'] }),
-    searchMemory: vi.fn().mockResolvedValue({ results: [{ content: 'TypeScript fact', category: 'general', source: 'MEMORY.md' }] }),
-    getConfig: vi.fn().mockResolvedValue({
-      enabled: true, autoExtract: true, flushThreshold: 0.75, extractIntervalSeconds: 60, minNewMessages: 4,
-      llmGatingEnabled: false, llmGatingModel: 'gpt-4o-mini',
-      llmExtractionEnabled: false, llmExtractionModel: 'gpt-4o-mini', llmExtractionMaxMessages: 20,
-      llmCompactionEnabled: false, llmCompactionModel: 'gpt-4o-mini', llmCompactionFactThreshold: 30,
-    }),
-    putConfig: vi.fn().mockResolvedValue({ ok: true }),
-    getStats: vi.fn().mockResolvedValue({ totalFacts: 5, dailyLogCount: 2 }),
-    compactMemory: vi.fn().mockResolvedValue({ beforeCount: 10, afterCount: 5 }),
+    getMain: vi.fn(),
+    putMain: vi.fn(),
+    listDailyLogs: vi.fn(),
+    searchMemory: vi.fn(),
+    getConfig: vi.fn(),
+    putConfig: vi.fn(),
+    getStats: vi.fn(),
+    compactMemory: vi.fn(),
   },
 }));
 
 // Mock settingsApi to prevent it from consuming apiGet mocks internally
 vi.mock('../../../src/lib/settings-api', () => ({
   settingsApi: {
-    get: vi.fn().mockResolvedValue({}),
-    patch: vi.fn().mockResolvedValue({ ok: true }),
+    get: vi.fn(),
+    patch: vi.fn(),
   },
 }));
 
-import { configApi, memoryApi as autoMemoryApi } from '../../../src/lib/api';
+import { apiGet, configApi, memoryApi as autoMemoryApi } from '../../../src/lib/api';
+import { promptsApi, skillsApi } from '../../../src/lib/prompts-api';
+import { settingsApi } from '../../../src/lib/settings-api';
 import { SettingsPanel } from '../../../src/components/settings/SettingsPanel';
+
+/** Re-establish all mock default implementations (called in beforeEach after clearAllMocks) */
+function setupMockDefaults() {
+  // prompts-api
+  (promptsApi.getProfile as ReturnType<typeof vi.fn>).mockResolvedValue({ content: '# Profile content' });
+  (promptsApi.putProfile as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
+  (promptsApi.getAgent as ReturnType<typeof vi.fn>).mockResolvedValue({ content: '# Agent content' });
+  (promptsApi.putAgent as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
+  (promptsApi.getOpenspecSdd as ReturnType<typeof vi.fn>).mockResolvedValue({ content: '# OpenSpec SDD content' });
+  (promptsApi.putOpenspecSdd as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
+  (promptsApi.getSystemPrompt as ReturnType<typeof vi.fn>).mockResolvedValue({ content: '# System Prompt' });
+  (promptsApi.putSystemPrompt as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
+  (promptsApi.resetSystemPrompt as ReturnType<typeof vi.fn>).mockResolvedValue({ content: '# Default System Prompt' });
+  (promptsApi.getActPrompt as ReturnType<typeof vi.fn>).mockResolvedValue({ content: '# Act Prompt' });
+  (promptsApi.putActPrompt as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
+  (promptsApi.resetActPrompt as ReturnType<typeof vi.fn>).mockResolvedValue({ content: '# Default Act Prompt' });
+  (promptsApi.getPlanPrompt as ReturnType<typeof vi.fn>).mockResolvedValue({ content: '# Plan Prompt' });
+  (promptsApi.putPlanPrompt as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
+  (promptsApi.resetPlanPrompt as ReturnType<typeof vi.fn>).mockResolvedValue({ content: '# Default Plan Prompt' });
+
+  // skillsApi
+  (skillsApi.list as ReturnType<typeof vi.fn>).mockResolvedValue({
+    skills: [
+      { name: 'tdd-workflow', description: 'Test-driven development', content: '# TDD Workflow', builtin: true },
+      { name: 'code-review', description: 'Review code for quality', content: '# Code Review Skill', builtin: false },
+      { name: 'debugging', description: 'Help debug issues', content: '# Debugging Skill', builtin: false },
+    ],
+  });
+  (skillsApi.get as ReturnType<typeof vi.fn>).mockResolvedValue({ name: 'code-review', description: 'Review code for quality', content: '# Code Review Skill', builtin: false });
+  (skillsApi.put as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
+  (skillsApi.delete as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
+
+  // configApi + memoryApi (from lib/api)
+  (apiGet as ReturnType<typeof vi.fn>).mockResolvedValue({ currentVersion: '0.1.0' });
+
+  (configApi.get as ReturnType<typeof vi.fn>).mockResolvedValue({ defaultCwd: '/home' });
+  (configApi.getBraveApiKey as ReturnType<typeof vi.fn>).mockResolvedValue({ hasKey: false, maskedKey: '' });
+  (configApi.putBraveApiKey as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
+  (configApi.getOpenspecSdd as ReturnType<typeof vi.fn>).mockResolvedValue({ enabled: false });
+  (configApi.putOpenspecSdd as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
+
+  (autoMemoryApi.getMain as ReturnType<typeof vi.fn>).mockResolvedValue({ content: '- User prefers TypeScript' });
+  (autoMemoryApi.putMain as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
+  (autoMemoryApi.listDailyLogs as ReturnType<typeof vi.fn>).mockResolvedValue({ dates: ['2026-02-17'] });
+  (autoMemoryApi.searchMemory as ReturnType<typeof vi.fn>).mockResolvedValue({ results: [{ content: 'TypeScript fact', category: 'general', source: 'MEMORY.md' }] });
+  (autoMemoryApi.getConfig as ReturnType<typeof vi.fn>).mockResolvedValue({
+    enabled: true, autoExtract: true, flushThreshold: 0.75, extractIntervalSeconds: 60, minNewMessages: 4,
+    llmGatingEnabled: false, llmGatingModel: 'gpt-4o-mini',
+    llmExtractionEnabled: false, llmExtractionModel: 'gpt-4o-mini', llmExtractionMaxMessages: 20,
+    llmCompactionEnabled: false, llmCompactionModel: 'gpt-4o-mini', llmCompactionFactThreshold: 30,
+  });
+  (autoMemoryApi.putConfig as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
+  (autoMemoryApi.getStats as ReturnType<typeof vi.fn>).mockResolvedValue({ totalFacts: 5, dailyLogCount: 2 });
+  (autoMemoryApi.compactMemory as ReturnType<typeof vi.fn>).mockResolvedValue({ beforeCount: 10, afterCount: 5 });
+
+  // settingsApi
+  (settingsApi.get as ReturnType<typeof vi.fn>).mockResolvedValue({});
+  (settingsApi.patch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
+}
 
 describe('SettingsPanel', () => {
   const defaultProps = {
@@ -87,6 +143,7 @@ describe('SettingsPanel', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    setupMockDefaults();
   });
 
   // === Structure ===
@@ -259,68 +316,35 @@ describe('SettingsPanel', () => {
     });
   });
 
-  // === SDK Analyze Changes ===
-  describe('SDK Analyze Changes', () => {
-    it('should show "Analyze Changes" button when SDK update is available', async () => {
-      const { apiGet } = await import('../../../src/lib/api');
-      (apiGet as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        currentVersion: '0.1.0',
-        latestVersion: '0.2.0',
-        updateAvailable: true,
-      });
 
+  // === SDK Version display (General tab) ===
+  describe('SDK version display (General tab)', () => {
+    it('should display SDK version when available', async () => {
+      (apiGet as ReturnType<typeof vi.fn>).mockResolvedValue({ currentVersion: '1.2.3' });
       render(<SettingsPanel {...defaultProps} />);
       fireEvent.click(screen.getByRole('tab', { name: /general/i }));
-
       await waitFor(() => {
-        expect(screen.getByTestId('analyze-changes-button')).toBeTruthy();
+        expect(screen.getByTestId('sdk-version').textContent).toBe('v1.2.3');
       });
-
-      expect(screen.getByTestId('analyze-changes-button').textContent).toBe('Analyze Changes');
     });
 
-    it('should NOT show "Analyze Changes" button when no update is available', async () => {
+    it('should display fallback text when version is null', async () => {
+      (apiGet as ReturnType<typeof vi.fn>).mockResolvedValue({ currentVersion: null });
       render(<SettingsPanel {...defaultProps} />);
       fireEvent.click(screen.getByRole('tab', { name: /general/i }));
+      await waitFor(() => {
+        expect(screen.getByTestId('sdk-version').textContent).toBe('Unknown');
+      });
+    });
 
+    it('should not crash when API call fails', async () => {
+      (apiGet as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Network error'));
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
+      // Should show fallback, not crash
       await waitFor(() => {
         expect(screen.getByTestId('sdk-version')).toBeTruthy();
       });
-
-      expect(screen.queryByTestId('analyze-changes-button')).toBeNull();
-    });
-
-    it('should dispatch settings:analyzeChanges event and close settings on click', async () => {
-      const { apiGet } = await import('../../../src/lib/api');
-      (apiGet as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce({
-          currentVersion: '0.1.0',
-          latestVersion: '0.2.0',
-          updateAvailable: true,
-        })
-        .mockResolvedValueOnce({ changelog: '## v0.2.0\nNew features' });
-
-      const eventSpy = vi.fn();
-      document.addEventListener('settings:analyzeChanges', eventSpy);
-
-      render(<SettingsPanel {...defaultProps} />);
-      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
-
-      await waitFor(() => {
-        expect(screen.getByTestId('analyze-changes-button')).toBeTruthy();
-      });
-
-      fireEvent.click(screen.getByTestId('analyze-changes-button'));
-
-      await waitFor(() => {
-        expect(eventSpy).toHaveBeenCalled();
-      });
-
-      const detail = (eventSpy.mock.calls[0][0] as CustomEvent).detail;
-      expect(detail.message).toContain('v0.1.0');
-      expect(detail.message).toContain('v0.2.0');
-
-      document.removeEventListener('settings:analyzeChanges', eventSpy);
     });
   });
 
@@ -424,6 +448,114 @@ describe('SettingsPanel', () => {
       fireEvent.click(screen.getByTestId('reset-system-prompt'));
       expect(confirmSpy).not.toHaveBeenCalled();
       vi.restoreAllMocks();
+    });
+
+    // --- Act Mode Prompt section ---
+    it('should display Act Mode Prompt section with heading and textarea', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      await waitFor(() => {
+        expect(screen.getByTestId('act-mode-heading')).toBeTruthy();
+        expect(screen.getByTestId('act-prompt-textarea')).toBeTruthy();
+      });
+      expect(screen.getByTestId('act-mode-heading').textContent).toBe('Act Mode Prompt');
+    });
+
+    it('should load act prompt content', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      await waitFor(() => {
+        expect(screen.getByDisplayValue('# Act Prompt')).toBeTruthy();
+      });
+    });
+
+    it('should save act prompt on save button click', async () => {
+      const { promptsApi } = await import('../../../src/lib/prompts-api');
+      render(<SettingsPanel {...defaultProps} />);
+
+      await waitFor(() => {
+        expect(screen.getByDisplayValue('# Act Prompt')).toBeTruthy();
+      });
+
+      const textarea = screen.getByDisplayValue('# Act Prompt');
+      fireEvent.change(textarea, { target: { value: 'Updated act prompt' } });
+
+      fireEvent.click(screen.getByTestId('save-act-prompt'));
+
+      await waitFor(() => {
+        expect(promptsApi.putActPrompt).toHaveBeenCalledWith('Updated act prompt');
+      });
+    });
+
+    it('should reset act prompt when confirmed', async () => {
+      const { promptsApi } = await import('../../../src/lib/prompts-api');
+      render(<SettingsPanel {...defaultProps} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('reset-act-prompt')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('reset-act-prompt'));
+
+      // ConfirmDialog should appear
+      const confirmBtn = screen.getAllByText(/Confirm|確認/i);
+      fireEvent.click(confirmBtn[confirmBtn.length - 1]);
+
+      await waitFor(() => {
+        expect(promptsApi.resetActPrompt).toHaveBeenCalled();
+      });
+    });
+
+    // --- Plan Mode Prompt section ---
+    it('should display Plan Mode Prompt section with heading and textarea', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      await waitFor(() => {
+        expect(screen.getByTestId('plan-mode-heading')).toBeTruthy();
+        expect(screen.getByTestId('plan-prompt-textarea')).toBeTruthy();
+      });
+      expect(screen.getByTestId('plan-mode-heading').textContent).toBe('Plan Mode Prompt');
+    });
+
+    it('should load plan prompt content', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      await waitFor(() => {
+        expect(screen.getByDisplayValue('# Plan Prompt')).toBeTruthy();
+      });
+    });
+
+    it('should save plan prompt on save button click', async () => {
+      const { promptsApi } = await import('../../../src/lib/prompts-api');
+      render(<SettingsPanel {...defaultProps} />);
+
+      await waitFor(() => {
+        expect(screen.getByDisplayValue('# Plan Prompt')).toBeTruthy();
+      });
+
+      const textarea = screen.getByDisplayValue('# Plan Prompt');
+      fireEvent.change(textarea, { target: { value: 'Updated plan prompt' } });
+
+      fireEvent.click(screen.getByTestId('save-plan-prompt'));
+
+      await waitFor(() => {
+        expect(promptsApi.putPlanPrompt).toHaveBeenCalledWith('Updated plan prompt');
+      });
+    });
+
+    it('should reset plan prompt when confirmed', async () => {
+      const { promptsApi } = await import('../../../src/lib/prompts-api');
+      render(<SettingsPanel {...defaultProps} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('reset-plan-prompt')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('reset-plan-prompt'));
+
+      // ConfirmDialog should appear
+      const confirmBtn = screen.getAllByText(/Confirm|確認/i);
+      fireEvent.click(confirmBtn[confirmBtn.length - 1]);
+
+      await waitFor(() => {
+        expect(promptsApi.resetPlanPrompt).toHaveBeenCalled();
+      });
     });
   });
 

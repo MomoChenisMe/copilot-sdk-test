@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown } from 'lucide-react';
-import { useAppStore } from '../../store';
+import { useModelsQuery } from '../../hooks/queries/useModelsQuery';
 
 interface ModelSelectorProps {
   currentModel: string;
@@ -22,9 +22,7 @@ export function ModelSelector({ currentModel, onSelect }: ModelSelectorProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const models = useAppStore((s) => s.models);
-  const modelsLoading = useAppStore((s) => s.modelsLoading);
-  const modelsError = useAppStore((s) => s.modelsError);
+  const { data: models = [], isLoading: modelsLoading, error: modelsError } = useModelsQuery();
 
   const currentModelObj = models.find((m) => m.id === currentModel);
   const currentModelName = currentModelObj?.name || currentModel;

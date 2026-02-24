@@ -15,6 +15,8 @@ const { mockStreamManager, mockRepo } = vi.hoisted(() => {
     startStream: vi.fn().mockResolvedValue(undefined),
     subscribe: vi.fn().mockReturnValue(_unsubFn),
     abortStream: vi.fn().mockResolvedValue(undefined),
+    hasStream: vi.fn().mockReturnValue(false),
+    removeSubscriber: vi.fn(),
     getActiveStreamIds: vi.fn().mockReturnValue([]),
     setMode: vi.fn(),
     handleUserInputResponse: vi.fn(),
@@ -55,6 +57,8 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
     mockStreamManager.startStream.mockClear().mockResolvedValue(undefined);
     mockStreamManager.subscribe.mockClear().mockReturnValue(mockStreamManager._unsubFn);
     mockStreamManager.abortStream.mockClear().mockResolvedValue(undefined);
+    mockStreamManager.hasStream.mockClear().mockReturnValue(false);
+    mockStreamManager.removeSubscriber.mockClear();
     mockStreamManager.getActiveStreamIds.mockClear().mockReturnValue([]);
     mockStreamManager.setMode.mockClear();
     mockStreamManager.handleUserInputResponse.mockClear();
@@ -84,7 +88,7 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
 
   // === 6.1 Handler delegation: copilot:send ===
   describe('copilot:send delegation', () => {
-    it('should call streamManager.startStream with conversation details', async () => {
+    it('should call streamManager.startStream with conversation details and initialSubscriber', async () => {
       handle({
         type: 'copilot:send',
         data: { conversationId: 'conv-1', prompt: 'Hello' },
@@ -97,18 +101,24 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
           model: 'gpt-5',
           cwd: '/tmp',
           disabledSkills: [],
+          initialSubscriber: send,
         });
       });
     });
 
-    it('should auto-subscribe after starting stream', async () => {
+    it('should use initialSubscriber instead of separate subscribe call', async () => {
       handle({
         type: 'copilot:send',
         data: { conversationId: 'conv-1', prompt: 'Hello' },
       });
 
       await vi.waitFor(() => {
-        expect(mockStreamManager.subscribe).toHaveBeenCalledWith('conv-1', send);
+        expect(mockStreamManager.startStream).toHaveBeenCalledWith(
+          'conv-1',
+          expect.objectContaining({ initialSubscriber: send }),
+        );
+        // subscribe() should NOT be called separately
+        expect(mockStreamManager.subscribe).not.toHaveBeenCalled();
       });
     });
 
@@ -273,24 +283,24 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
   });
 
   describe('copilot:unsubscribe', () => {
-    it('should call stored unsubscribe function', async () => {
-      // First subscribe
+    it('should call stored cleanup function (removeSubscriber)', async () => {
+      // First send to set up the subscription cleanup
       handle({
         type: 'copilot:send',
         data: { conversationId: 'conv-1', prompt: 'Hello' },
       });
 
       await vi.waitFor(() => {
-        expect(mockStreamManager.subscribe).toHaveBeenCalled();
+        expect(mockStreamManager.startStream).toHaveBeenCalled();
       });
 
-      // Then unsubscribe
+      // Then unsubscribe — should trigger the cleanup (removeSubscriber)
       handle({
         type: 'copilot:unsubscribe',
         data: { conversationId: 'conv-1' },
       });
 
-      expect(mockStreamManager._unsubFn).toHaveBeenCalled();
+      expect(mockStreamManager.removeSubscriber).toHaveBeenCalledWith('conv-1', send);
     });
   });
 
@@ -353,21 +363,24 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
   // === 6.5 onDisconnect ===
   describe('onDisconnect', () => {
     it('should clean up all subscriptions but not stop streams', async () => {
-      // Subscribe to a stream
+      // Send to set up subscription cleanup
       handle({
         type: 'copilot:send',
         data: { conversationId: 'conv-1', prompt: 'Hello' },
       });
 
       await vi.waitFor(() => {
-        expect(mockStreamManager.subscribe).toHaveBeenCalled();
+        expect(mockStreamManager.startStream).toHaveBeenCalled();
       });
+
+      // Reset abortStream mock since it may have been called during hasStream check
+      mockStreamManager.abortStream.mockClear();
 
       // Disconnect
       handlerObj.onDisconnect!(send);
 
-      // Should have called unsubscribe
-      expect(mockStreamManager._unsubFn).toHaveBeenCalled();
+      // Should have called removeSubscriber (cleanup function)
+      expect(mockStreamManager.removeSubscriber).toHaveBeenCalledWith('conv-1', send);
       // Should NOT have called abortStream (streams continue in background)
       expect(mockStreamManager.abortStream).not.toHaveBeenCalled();
     });
@@ -819,6 +832,105 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
     });
   });
 
+  // === 8.3 abort-before-start + initialSubscriber + cleanup ===
+  describe('copilot:send abort-before-start', () => {
+    it('should abort existing stream before starting a new one', async () => {
+      mockStreamManager.hasStream.mockReturnValue(true);
+
+      handle({
+        type: 'copilot:send',
+        data: { conversationId: 'conv-1', prompt: 'Hello' },
+      });
+
+      await vi.waitFor(() => {
+        expect(mockStreamManager.hasStream).toHaveBeenCalledWith('conv-1');
+        expect(mockStreamManager.abortStream).toHaveBeenCalledWith('conv-1');
+        expect(mockStreamManager.startStream).toHaveBeenCalled();
+      });
+    });
+
+    it('should not abort when no existing stream', async () => {
+      mockStreamManager.hasStream.mockReturnValue(false);
+
+      handle({
+        type: 'copilot:send',
+        data: { conversationId: 'conv-1', prompt: 'Hello' },
+      });
+
+      await vi.waitFor(() => {
+        expect(mockStreamManager.hasStream).toHaveBeenCalledWith('conv-1');
+        expect(mockStreamManager.abortStream).not.toHaveBeenCalled();
+        expect(mockStreamManager.startStream).toHaveBeenCalled();
+      });
+    });
+
+    it('should pass initialSubscriber to startStream', async () => {
+      handle({
+        type: 'copilot:send',
+        data: { conversationId: 'conv-1', prompt: 'Hello' },
+      });
+
+      await vi.waitFor(() => {
+        expect(mockStreamManager.startStream).toHaveBeenCalledWith(
+          'conv-1',
+          expect.objectContaining({ initialSubscriber: send }),
+        );
+      });
+    });
+
+    it('should set up cleanup with removeSubscriber', async () => {
+      handle({
+        type: 'copilot:send',
+        data: { conversationId: 'conv-1', prompt: 'Hello' },
+      });
+
+      await vi.waitFor(() => {
+        expect(mockStreamManager.startStream).toHaveBeenCalled();
+      });
+
+      // Disconnect should call removeSubscriber for the active subscription
+      handlerObj.onDisconnect!(send);
+
+      expect(mockStreamManager.removeSubscriber).toHaveBeenCalledWith('conv-1', send);
+    });
+  });
+
+  describe('copilot:execute_plan abort-before-start', () => {
+    beforeEach(() => {
+      vi.mocked(readFileSync).mockReturnValue('# Plan Content\n\n- Step 1\n- Step 2');
+      vi.mocked(existsSync).mockReturnValue(true);
+    });
+
+    it('should abort existing stream before executing plan', async () => {
+      mockStreamManager.hasStream.mockReturnValue(true);
+
+      handle({
+        type: 'copilot:execute_plan',
+        data: { conversationId: 'conv-1', planFilePath: '/tmp/plan.md' },
+      });
+
+      await vi.waitFor(() => {
+        expect(mockStreamManager.hasStream).toHaveBeenCalledWith('conv-1');
+        expect(mockStreamManager.abortStream).toHaveBeenCalledWith('conv-1');
+        expect(mockStreamManager.startStream).toHaveBeenCalled();
+      });
+    });
+
+    it('should pass initialSubscriber to startStream for execute_plan', async () => {
+      handle({
+        type: 'copilot:execute_plan',
+        data: { conversationId: 'conv-1', planFilePath: '/tmp/plan.md' },
+      });
+
+      await vi.waitFor(() => {
+        expect(mockStreamManager.startStream).toHaveBeenCalledWith(
+          'conv-1',
+          expect.objectContaining({ initialSubscriber: send }),
+        );
+      });
+    });
+  });
+
   // === 9.1 Execute plan ===
   describe('copilot:execute_plan', () => {
     beforeEach(() => {
@@ -853,14 +965,19 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
       });
     });
 
-    it('should auto-subscribe after starting execute_plan stream', async () => {
+    it('should use initialSubscriber instead of subscribe for execute_plan', async () => {
       handle({
         type: 'copilot:execute_plan',
         data: { conversationId: 'conv-1', planFilePath: '/tmp/plan.md' },
       });
 
       await vi.waitFor(() => {
-        expect(mockStreamManager.subscribe).toHaveBeenCalledWith('conv-1', send);
+        expect(mockStreamManager.startStream).toHaveBeenCalledWith(
+          'conv-1',
+          expect.objectContaining({ initialSubscriber: send }),
+        );
+        // subscribe() should NOT be called separately
+        expect(mockStreamManager.subscribe).not.toHaveBeenCalled();
       });
     });
 

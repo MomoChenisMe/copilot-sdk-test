@@ -97,6 +97,12 @@ vi.mock('../../../src/components/copilot/MobileToolbarPopup', () => ({
   MobileToolbarPopup: () => <div data-testid="mobile-toolbar-popup" />,
 }));
 
+vi.mock('../../../src/components/copilot/ModelSelector', () => ({
+  ModelSelector: ({ currentModel, onSelect }: { currentModel: string; onSelect: (id: string) => void }) => (
+    <button data-testid="model-selector" onClick={() => onSelect('test-model')}>{currentModel}</button>
+  ),
+}));
+
 import { ChatView } from '../../../src/components/copilot/ChatView';
 
 describe('ChatView', () => {
@@ -413,6 +419,17 @@ describe('ChatView', () => {
       useAppStore.setState({
         activeConversationId: 'conv-1',
         tabs: { [tabId]: makePlanTab(false) },
+        tabOrder: [tabId],
+        activeTabId: tabId,
+      });
+      render(<ChatView {...defaultProps} tabId={tabId} />);
+      expect(screen.queryByTestId('plan-mode-banner')).toBeNull();
+    });
+
+    it('hides plan mode banner when mode is terminal even if planMode is true', () => {
+      useAppStore.setState({
+        activeConversationId: 'conv-1',
+        tabs: { [tabId]: makePlanTab(true, { mode: 'terminal' }) },
         tabOrder: [tabId],
         activeTabId: tabId,
       });

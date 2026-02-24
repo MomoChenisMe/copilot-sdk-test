@@ -153,6 +153,53 @@ describe('prompts routes', () => {
     });
   });
 
+  // --- Plan Prompt ---
+
+  describe('GET /api/prompts/plan-prompt', () => {
+    it('should return plan prompt content', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'PLAN_PROMPT.md'), 'My plan prompt');
+      const res = await fetch(`${baseUrl}/api/prompts/plan-prompt`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.content).toBe('My plan prompt');
+    });
+
+    it('should return default content when plan prompt has not been customized', async () => {
+      const res = await fetch(`${baseUrl}/api/prompts/plan-prompt`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.content).toContain('Phase 1');
+    });
+  });
+
+  describe('PUT /api/prompts/plan-prompt', () => {
+    it('should update plan prompt content', async () => {
+      const res = await fetch(`${baseUrl}/api/prompts/plan-prompt`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'Custom plan instructions' }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      expect(fs.readFileSync(path.join(tmpDir, 'PLAN_PROMPT.md'), 'utf-8')).toBe('Custom plan instructions');
+    });
+  });
+
+  describe('POST /api/prompts/plan-prompt/reset', () => {
+    it('should reset to default plan prompt', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'PLAN_PROMPT.md'), 'Custom plan');
+      const res = await fetch(`${baseUrl}/api/prompts/plan-prompt/reset`, {
+        method: 'POST',
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.content).toContain('Phase 1');
+      const fileContent = fs.readFileSync(path.join(tmpDir, 'PLAN_PROMPT.md'), 'utf-8');
+      expect(fileContent).toContain('Phase 1');
+    });
+  });
+
   // --- OpenSpec SDD ---
 
   describe('GET /api/prompts/openspec-sdd', () => {

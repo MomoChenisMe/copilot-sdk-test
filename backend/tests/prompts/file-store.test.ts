@@ -81,6 +81,20 @@ describe('PromptFileStore', () => {
       expect(fs.readFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), 'utf-8')).toBe('custom system prompt');
     });
 
+    it('should create PLAN_PROMPT.md with default content when not exists', () => {
+      store.ensureDirectories();
+      const content = fs.readFileSync(path.join(tmpDir, 'PLAN_PROMPT.md'), 'utf-8');
+      expect(content.length).toBeGreaterThan(0);
+      expect(content).toContain('Phase 1');
+    });
+
+    it('should not overwrite existing PLAN_PROMPT.md', () => {
+      store.ensureDirectories();
+      fs.writeFileSync(path.join(tmpDir, 'PLAN_PROMPT.md'), 'custom plan prompt');
+      store.ensureDirectories();
+      expect(fs.readFileSync(path.join(tmpDir, 'PLAN_PROMPT.md'), 'utf-8')).toBe('custom plan prompt');
+    });
+
     it('should be idempotent (no error when called twice)', () => {
       store.ensureDirectories();
       expect(() => store.ensureDirectories()).not.toThrow();

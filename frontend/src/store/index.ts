@@ -99,16 +99,6 @@ export interface AppState {
   llmLanguage: string | null;
   setLlmLanguage: (lang: string | null) => void;
 
-  // Models
-  models: ModelInfo[];
-  modelsLoading: boolean;
-  modelsError: string | null;
-  modelsLastFetched: number;
-  setModels: (models: ModelInfo[]) => void;
-  setModelsLoading: (loading: boolean) => void;
-  setModelsError: (error: string | null) => void;
-  setModelsLastFetched: (ts: number) => void;
-
   // Conversations
   conversations: Conversation[];
   activeConversationId: string | null;
@@ -240,6 +230,8 @@ export interface AppState {
   addTabTurnContentSegment: (tabId: string, content: string) => void;
   addTabTurnSegment: (tabId: string, segment: TurnSegment) => void;
   updateTabToolInTurnSegments: (tabId: string, toolCallId: string, updates: Partial<ToolRecord>) => void;
+  /** Update a tool record inside a DB-loaded message's metadata (for reconnect scenarios) */
+  updateMessageToolRecord: (tabId: string, toolCallId: string, updates: Partial<ToolRecord>) => boolean;
   setTabCopilotError: (tabId: string, error: string | null) => void;
   setTabMode: (tabId: string, mode: 'copilot' | 'terminal' | 'cron') => void;
 
@@ -261,6 +253,7 @@ export interface AppState {
 
   // Actions — Per-tab artifacts
   addTabArtifacts: (tabId: string, artifacts: ParsedArtifact[]) => void;
+  upsertTabArtifact: (tabId: string, artifact: ParsedArtifact) => void;
   setTabActiveArtifact: (tabId: string, artifactId: string | null) => void;
   setTabArtifactsPanelOpen: (tabId: string, open: boolean) => void;
 
@@ -341,16 +334,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ llmLanguage: lang });
     settingsApi.patch({ llmLanguage: lang }).catch(() => {});
   },
-
-  // Models state
-  models: [],
-  modelsLoading: false,
-  modelsError: null,
-  modelsLastFetched: 0,
-  setModels: (models) => set({ models }),
-  setModelsLoading: (loading) => set({ modelsLoading: loading }),
-  setModelsError: (error) => set({ modelsError: error }),
-  setModelsLastFetched: (ts) => set({ modelsLastFetched: ts }),
 
   // State
   conversations: [],
@@ -544,6 +527,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     }
     const tabId = crypto.randomUUID();
+    // Restore ephemeral state if this conversation was previously open
+    const ephemeral = conversationId ? loadConversationEphemeral(conversationId) : null;
     const tab: TabState = {
       id: tabId,
       conversationId,
@@ -560,13 +545,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       messagesLoaded: false,
       createdAt: Date.now(),
       usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, contextWindowUsed: 0, contextWindowMax: 0, premiumRequestsUsed: 0, premiumRequestsLocal: 0, premiumRequestsTotal: 0, premiumResetDate: null, premiumUnlimited: false, model: null },
-      planMode: false,
-      showPlanCompletePrompt: false,
-      planFilePath: null,
-      userInputRequest: null,
-      artifacts: [],
-      activeArtifactId: null,
-      artifactsPanelOpen: false,
+      planMode: ephemeral?.planMode ?? false,
+      showPlanCompletePrompt: ephemeral?.showPlanCompletePrompt ?? false,
+      planFilePath: ephemeral?.planFilePath ?? null,
+      userInputRequest: ephemeral?.userInputRequest ?? null,
+      artifacts: ephemeral?.artifacts ?? [],
+      activeArtifactId: ephemeral?.activeArtifactId ?? null,
+      artifactsPanelOpen: ephemeral?.artifactsPanelOpen ?? false,
       openspecPanelOpen: false,
       tasks: [],
       cronConfigOpen: false,
@@ -589,6 +574,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   closeTab: (tabId) => {
     const state = get();
+    // Save ephemeral state before removing (for restore on reopen)
+    const closingTab = state.tabs[tabId];
+    if (closingTab?.conversationId) {
+      saveConversationEphemeral(closingTab.conversationId, closingTab);
+    }
     const { [tabId]: _, ...restTabs } = state.tabs;
     const newOrder = state.tabOrder.filter((id) => id !== tabId);
     let nextActiveId = state.activeTabId;
@@ -636,6 +626,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     const state = get();
     const tab = state.tabs[tabId];
     if (!tab) return;
+    // Save ephemeral state of the old conversation before switching
+    if (tab.conversationId) {
+      saveConversationEphemeral(tab.conversationId, tab);
+    }
+    // Restore ephemeral state for the new conversation
+    const ephemeral = loadConversationEphemeral(conversationId);
     const updatedTab: TabState = {
       ...tab,
       conversationId,
@@ -651,13 +647,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       copilotError: null,
       messagesLoaded: false,
       usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, contextWindowUsed: 0, contextWindowMax: 0, premiumRequestsUsed: 0, premiumRequestsLocal: 0, premiumRequestsTotal: 0, premiumResetDate: null, premiumUnlimited: false, model: null },
-      planMode: false,
-      showPlanCompletePrompt: false,
-      planFilePath: null,
-      userInputRequest: null,
-      artifacts: [],
-      activeArtifactId: null,
-      artifactsPanelOpen: false,
+      planMode: ephemeral?.planMode ?? false,
+      showPlanCompletePrompt: ephemeral?.showPlanCompletePrompt ?? false,
+      planFilePath: ephemeral?.planFilePath ?? null,
+      userInputRequest: ephemeral?.userInputRequest ?? null,
+      artifacts: ephemeral?.artifacts ?? [],
+      activeArtifactId: ephemeral?.activeArtifactId ?? null,
+      artifactsPanelOpen: ephemeral?.artifactsPanelOpen ?? false,
       openspecPanelOpen: false,
       tasks: [],
       cronConfigOpen: false,
@@ -701,6 +697,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         const isOldFormat = !item.conversationId;
         const tabId = isOldFormat ? crypto.randomUUID() : item.id;
         const conversationId = item.conversationId ?? item.id;
+        // Restore persisted ephemeral state (artifacts, ask_user, plan mode) — fallback to defaults for old format
+        const ext = item as Record<string, unknown>;
         tabs[tabId] = {
           id: tabId,
           conversationId,
@@ -717,13 +715,13 @@ export const useAppStore = create<AppState>((set, get) => ({
           messagesLoaded: false,
           createdAt: Date.now(),
           usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, contextWindowUsed: 0, contextWindowMax: 0, premiumRequestsUsed: 0, premiumRequestsLocal: 0, premiumRequestsTotal: 0, premiumResetDate: null, premiumUnlimited: false, model: null },
-          planMode: false,
-          showPlanCompletePrompt: false,
-          planFilePath: null,
-          userInputRequest: null,
-          artifacts: [],
-          activeArtifactId: null,
-          artifactsPanelOpen: false,
+          planMode: (ext.planMode as boolean) ?? false,
+          showPlanCompletePrompt: (ext.showPlanCompletePrompt as boolean) ?? false,
+          planFilePath: (ext.planFilePath as string | null) ?? null,
+          userInputRequest: (ext.userInputRequest as UserInputRequest | null) ?? null,
+          artifacts: (Array.isArray(ext.artifacts) ? ext.artifacts : []) as ParsedArtifact[],
+          activeArtifactId: (ext.activeArtifactId as string | null) ?? null,
+          artifactsPanelOpen: (ext.artifactsPanelOpen as boolean) ?? false,
           openspecPanelOpen: false,
           cronConfigOpen: false,
           webSearchForced: false,
@@ -755,7 +753,39 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => {
       const tab = state.tabs[tabId];
       if (!tab) return state;
-      return { tabs: { ...state.tabs, [tabId]: { ...tab, messages, messagesLoaded: true } } };
+      // Fix stale "running" tool records in historical messages:
+      // If a message is followed by another message, any "running" tools
+      // in it must have completed (the conversation continued past them).
+      // This handles the case where ask_user tools are persisted with
+      // status "running" (before tool_end fires) and never updated.
+      const fixed = messages.map((msg, i) => {
+        if (msg.role !== 'assistant' || !msg.metadata?.toolRecords) return msg;
+        const hasNext = i < messages.length - 1;
+        if (!hasNext) return msg;
+        const hasRunning = (msg.metadata.toolRecords as ToolRecord[]).some(
+          (r) => r.status === 'running',
+        );
+        if (!hasRunning) return msg;
+        return {
+          ...msg,
+          metadata: {
+            ...msg.metadata,
+            toolRecords: (msg.metadata.toolRecords as ToolRecord[]).map((r) =>
+              r.status === 'running' ? { ...r, status: 'success' as const } : r,
+            ),
+            ...(msg.metadata.turnSegments
+              ? {
+                  turnSegments: (msg.metadata.turnSegments as TurnSegment[]).map((s) =>
+                    s.type === 'tool' && s.status === 'running'
+                      ? { ...s, status: 'success' as const }
+                      : s,
+                  ),
+                }
+              : {}),
+          },
+        };
+      });
+      return { tabs: { ...state.tabs, [tabId]: { ...tab, messages: fixed, messagesLoaded: true } } };
     }),
 
   addTabMessage: (tabId, message) =>
@@ -863,6 +893,42 @@ export const useAppStore = create<AppState>((set, get) => ({
       };
     }),
 
+  updateMessageToolRecord: (tabId, toolCallId, updates) => {
+    const tab = get().tabs[tabId];
+    if (!tab) return false;
+    // Search messages in reverse to find the tool in the most recent message first
+    for (let i = tab.messages.length - 1; i >= 0; i--) {
+      const msg = tab.messages[i];
+      if (msg.role !== 'assistant' || !msg.metadata?.toolRecords) continue;
+      const records = msg.metadata.toolRecords as ToolRecord[];
+      const idx = records.findIndex((r) => r.toolCallId === toolCallId);
+      if (idx === -1) continue;
+      // Found the tool in a DB-loaded message — update it
+      const updatedRecords = records.map((r) =>
+        r.toolCallId === toolCallId ? { ...r, ...updates } : r,
+      );
+      const updatedSegments = msg.metadata.turnSegments
+        ? (msg.metadata.turnSegments as TurnSegment[]).map((s) =>
+            s.type === 'tool' && s.toolCallId === toolCallId ? { ...s, ...updates } : s,
+          )
+        : undefined;
+      const updatedMessages = [...tab.messages];
+      updatedMessages[i] = {
+        ...msg,
+        metadata: {
+          ...msg.metadata,
+          toolRecords: updatedRecords,
+          ...(updatedSegments ? { turnSegments: updatedSegments } : {}),
+        },
+      };
+      set((state) => ({
+        tabs: { ...state.tabs, [tabId]: { ...state.tabs[tabId], messages: updatedMessages } },
+      }));
+      return true;
+    }
+    return false;
+  },
+
   setTabCopilotError: (tabId, error) =>
     set((state) => {
       const tab = state.tabs[tabId];
@@ -956,7 +1022,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       };
     }),
 
-  setTabPlanMode: (tabId, planMode) =>
+  setTabPlanMode: (tabId, planMode) => {
     set((state) => {
       const tab = state.tabs[tabId];
       if (!tab) return state;
@@ -966,9 +1032,12 @@ export const useAppStore = create<AppState>((set, get) => ({
           [tabId]: { ...tab, planMode, showPlanCompletePrompt: false },
         },
       };
-    }),
+    });
+    const s = get();
+    persistOpenTabs(s.tabs, s.tabOrder);
+  },
 
-  setTabShowPlanCompletePrompt: (tabId: string, show: boolean) =>
+  setTabShowPlanCompletePrompt: (tabId: string, show: boolean) => {
     set((state) => {
       const tab = state.tabs[tabId];
       if (!tab) return state;
@@ -978,9 +1047,12 @@ export const useAppStore = create<AppState>((set, get) => ({
           [tabId]: { ...tab, showPlanCompletePrompt: show },
         },
       };
-    }),
+    });
+    const s = get();
+    persistOpenTabs(s.tabs, s.tabOrder);
+  },
 
-  setTabPlanFilePath: (tabId: string, path: string | null) =>
+  setTabPlanFilePath: (tabId: string, path: string | null) => {
     set((state) => {
       const tab = state.tabs[tabId];
       if (!tab) return state;
@@ -990,9 +1062,12 @@ export const useAppStore = create<AppState>((set, get) => ({
           [tabId]: { ...tab, planFilePath: path },
         },
       };
-    }),
+    });
+    const s = get();
+    persistOpenTabs(s.tabs, s.tabOrder);
+  },
 
-  setTabUserInputRequest: (tabId, request) =>
+  setTabUserInputRequest: (tabId, request) => {
     set((state) => {
       const tab = state.tabs[tabId];
       if (!tab) return state;
@@ -1002,7 +1077,10 @@ export const useAppStore = create<AppState>((set, get) => ({
           [tabId]: { ...tab, userInputRequest: request },
         },
       };
-    }),
+    });
+    const s = get();
+    persistOpenTabs(s.tabs, s.tabOrder);
+  },
 
   setTabCronConfigOpen: (tabId, open) =>
     set((state) => {
@@ -1029,7 +1107,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }),
 
   // Artifacts actions
-  addTabArtifacts: (tabId, artifacts) =>
+  addTabArtifacts: (tabId, artifacts) => {
     set((state) => {
       const tab = state.tabs[tabId];
       if (!tab) return state;
@@ -1046,9 +1124,30 @@ export const useAppStore = create<AppState>((set, get) => ({
           [tabId]: { ...tab, artifacts: [...tab.artifacts, ...newOnes] },
         },
       };
-    }),
+    });
+    const s = get();
+    persistOpenTabs(s.tabs, s.tabOrder);
+  },
 
-  setTabActiveArtifact: (tabId, artifactId) =>
+  upsertTabArtifact: (tabId, artifact) => {
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      const idx = tab.artifacts.findIndex((a) => a.id === artifact.id);
+      if (idx >= 0) {
+        // Replace existing artifact in-place
+        const updated = [...tab.artifacts];
+        updated[idx] = artifact;
+        return { tabs: { ...state.tabs, [tabId]: { ...tab, artifacts: updated } } };
+      }
+      // New artifact — append
+      return { tabs: { ...state.tabs, [tabId]: { ...tab, artifacts: [...tab.artifacts, artifact] } } };
+    });
+    const s = get();
+    persistOpenTabs(s.tabs, s.tabOrder);
+  },
+
+  setTabActiveArtifact: (tabId, artifactId) => {
     set((state) => {
       const tab = state.tabs[tabId];
       if (!tab) return state;
@@ -1058,9 +1157,12 @@ export const useAppStore = create<AppState>((set, get) => ({
           [tabId]: { ...tab, activeArtifactId: artifactId },
         },
       };
-    }),
+    });
+    const s = get();
+    persistOpenTabs(s.tabs, s.tabOrder);
+  },
 
-  setTabArtifactsPanelOpen: (tabId, open) =>
+  setTabArtifactsPanelOpen: (tabId, open) => {
     set((state) => {
       const tab = state.tabs[tabId];
       if (!tab) return state;
@@ -1071,7 +1173,10 @@ export const useAppStore = create<AppState>((set, get) => ({
           [tabId]: { ...tab, artifactsPanelOpen: open, ...(open ? { openspecPanelOpen: false } : {}) },
         },
       };
-    }),
+    });
+    const s = get();
+    persistOpenTabs(s.tabs, s.tabOrder);
+  },
 
   // Tasks actions
   setTabTasks: (tabId, tasks) =>
@@ -1111,7 +1216,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setPremiumQuota: (quota) => set({ premiumQuota: quota }),
 
   // OpenSpec panel (per-tab)
-  setTabOpenspecPanelOpen: (tabId, open) =>
+  setTabOpenspecPanelOpen: (tabId, open) => {
     set((state) => {
       const tab = state.tabs[tabId];
       if (!tab) return state;
@@ -1122,21 +1227,84 @@ export const useAppStore = create<AppState>((set, get) => ({
           [tabId]: { ...tab, openspecPanelOpen: open, ...(open ? { artifactsPanelOpen: false } : {}) },
         },
       };
-    }),
+    });
+    const s = get();
+    persistOpenTabs(s.tabs, s.tabOrder);
+  },
 
   // Settings cache
   settings: null,
   setSettings: (settings) => set({ settings }),
 }));
 
+/**
+ * Save a tab's ephemeral UI state to a per-conversation localStorage key.
+ * Called when closing a tab so the state can be restored if the same
+ * conversation is reopened later (Scenarios 1, 3, 4 fix).
+ */
+function saveConversationEphemeral(conversationId: string, tab: TabState) {
+  try {
+    const data = {
+      userInputRequest: tab.userInputRequest,
+      artifacts: tab.artifacts,
+      activeArtifactId: tab.activeArtifactId,
+      artifactsPanelOpen: tab.artifactsPanelOpen,
+      planMode: tab.planMode,
+      showPlanCompletePrompt: tab.showPlanCompletePrompt,
+      planFilePath: tab.planFilePath,
+      savedAt: Date.now(),
+    };
+    localStorage.setItem(`codeforge:ephemeral:${conversationId}`, JSON.stringify(data));
+  } catch { /* noop */ }
+}
+
+/**
+ * Load and consume (one-time) ephemeral state for a conversation.
+ * Returns null if no cache exists or it has expired (>24h).
+ */
+function loadConversationEphemeral(conversationId: string): {
+  userInputRequest: UserInputRequest | null;
+  artifacts: ParsedArtifact[];
+  activeArtifactId: string | null;
+  artifactsPanelOpen: boolean;
+  planMode: boolean;
+  showPlanCompletePrompt: boolean;
+  planFilePath: string | null;
+} | null {
+  try {
+    const key = `codeforge:ephemeral:${conversationId}`;
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    // Expire after 24 hours to avoid stale state
+    if (data.savedAt && Date.now() - data.savedAt > 24 * 60 * 60 * 1000) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    // Consume: remove after loading so it's not re-applied on next open
+    localStorage.removeItem(key);
+    return data;
+  } catch { return null; }
+}
+
 function persistOpenTabs(tabs: Record<string, TabState>, tabOrder: string[]) {
   try {
     // Exclude draft tabs (null conversationId) from persistence
-    const tabsData = tabOrder
-      .filter((id) => tabs[id]?.conversationId !== null)
-      .map((id) => ({ id: tabs[id].id, title: tabs[id].title, conversationId: tabs[id].conversationId }));
+    const activeTabs = tabOrder.filter((id) => tabs[id]?.conversationId !== null);
+    // Minimal data for backend API
+    const tabsData = activeTabs.map((id) => ({ id: tabs[id].id, title: tabs[id].title, conversationId: tabs[id].conversationId }));
+    // Extended data for localStorage — includes ephemeral UI state (artifacts, ask_user, plan mode)
+    const tabsExtended = activeTabs.map((id) => {
+      const t = tabs[id];
+      return {
+        id: t.id, title: t.title, conversationId: t.conversationId,
+        artifacts: t.artifacts, activeArtifactId: t.activeArtifactId, artifactsPanelOpen: t.artifactsPanelOpen,
+        userInputRequest: t.userInputRequest,
+        planMode: t.planMode, showPlanCompletePrompt: t.showPlanCompletePrompt, planFilePath: t.planFilePath,
+      };
+    });
     const activeTabId = useAppStore.getState().activeTabId;
-    const payload = { tabs: tabsData, activeTabId };
+    const payload = { tabs: tabsExtended, activeTabId };
     localStorage.setItem('codeforge:openTabs', JSON.stringify(payload));
     settingsApi.patch({ openTabs: tabsData, activeTabId }).catch(() => {});
   } catch { /* noop */ }

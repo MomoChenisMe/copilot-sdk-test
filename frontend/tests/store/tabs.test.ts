@@ -388,6 +388,51 @@ describe('Tab localStorage restore', () => {
     expect(useAppStore.getState().activeTabId).toBeNull();
   });
 
+  it('should restore ephemeral state (artifacts, userInputRequest, planMode) from localStorage', () => {
+    const saved = {
+      tabs: [
+        {
+          id: 'tab-a', title: 'Chat A', conversationId: 'conv-a',
+          artifacts: [{ id: 'art-1', type: 'plan', title: 'Plan', content: '# Plan' }],
+          activeArtifactId: 'art-1',
+          artifactsPanelOpen: true,
+          userInputRequest: { requestId: 'req-1', question: 'Continue?', choices: ['Yes', 'No'] },
+          planMode: true,
+          showPlanCompletePrompt: true,
+          planFilePath: '/tmp/plan.md',
+        },
+      ],
+      activeTabId: 'tab-a',
+    };
+    localStorage.setItem('codeforge:openTabs', JSON.stringify(saved));
+    useAppStore.getState().restoreOpenTabs();
+    const tab = useAppStore.getState().tabs['tab-a'];
+    expect(tab.artifacts).toEqual([{ id: 'art-1', type: 'plan', title: 'Plan', content: '# Plan' }]);
+    expect(tab.activeArtifactId).toBe('art-1');
+    expect(tab.artifactsPanelOpen).toBe(true);
+    expect(tab.userInputRequest).toEqual({ requestId: 'req-1', question: 'Continue?', choices: ['Yes', 'No'] });
+    expect(tab.planMode).toBe(true);
+    expect(tab.showPlanCompletePrompt).toBe(true);
+    expect(tab.planFilePath).toBe('/tmp/plan.md');
+  });
+
+  it('should fallback ephemeral state to defaults when missing from persisted data', () => {
+    const saved = {
+      tabs: [{ id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' }],
+      activeTabId: 'tab-a',
+    };
+    localStorage.setItem('codeforge:openTabs', JSON.stringify(saved));
+    useAppStore.getState().restoreOpenTabs();
+    const tab = useAppStore.getState().tabs['tab-a'];
+    expect(tab.artifacts).toEqual([]);
+    expect(tab.activeArtifactId).toBeNull();
+    expect(tab.artifactsPanelOpen).toBe(false);
+    expect(tab.userInputRequest).toBeNull();
+    expect(tab.planMode).toBe(false);
+    expect(tab.showPlanCompletePrompt).toBe(false);
+    expect(tab.planFilePath).toBeNull();
+  });
+
   it('should migrate old format (no conversationId field) to new format', () => {
     // Old format: { id: conversationId, title } — id was used as both tabId and conversationId
     const oldFormat = [
@@ -408,6 +453,49 @@ describe('Tab localStorage restore', () => {
     // Tab IDs should be newly generated UUIDs (different from old ids)
     expect(tab1Id).not.toBe('conv-old-1');
     expect(tab2Id).not.toBe('conv-old-2');
+  });
+});
+
+describe('upsertTabArtifact', () => {
+  it('should add a new artifact when none exists with that ID', () => {
+    const tabId = openTabAndGetId('conv-1', 'Test');
+    useAppStore.getState().upsertTabArtifact(tabId, {
+      id: 'plan-conv-1', type: 'plan', title: 'Plan A', content: '# Plan A',
+    });
+    const tab = useAppStore.getState().tabs[tabId];
+    expect(tab.artifacts).toHaveLength(1);
+    expect(tab.artifacts[0].title).toBe('Plan A');
+  });
+
+  it('should replace an existing artifact with the same ID', () => {
+    const tabId = openTabAndGetId('conv-1', 'Test');
+    useAppStore.getState().upsertTabArtifact(tabId, {
+      id: 'plan-conv-1', type: 'plan', title: 'Old Plan', content: '# Old',
+    });
+    useAppStore.getState().upsertTabArtifact(tabId, {
+      id: 'plan-conv-1', type: 'plan', title: 'New Plan', content: '# New',
+    });
+    const tab = useAppStore.getState().tabs[tabId];
+    expect(tab.artifacts).toHaveLength(1);
+    expect(tab.artifacts[0].title).toBe('New Plan');
+    expect(tab.artifacts[0].content).toBe('# New');
+  });
+
+  it('should not affect other artifacts when replacing', () => {
+    const tabId = openTabAndGetId('conv-1', 'Test');
+    useAppStore.getState().addTabArtifacts(tabId, [
+      { id: 'html-1', type: 'html', title: 'Page', content: '<h1>Hello</h1>' },
+    ]);
+    useAppStore.getState().upsertTabArtifact(tabId, {
+      id: 'plan-conv-1', type: 'plan', title: 'Plan', content: '# Plan',
+    });
+    useAppStore.getState().upsertTabArtifact(tabId, {
+      id: 'plan-conv-1', type: 'plan', title: 'Updated Plan', content: '# Updated',
+    });
+    const tab = useAppStore.getState().tabs[tabId];
+    expect(tab.artifacts).toHaveLength(2);
+    expect(tab.artifacts.find((a) => a.id === 'html-1')?.title).toBe('Page');
+    expect(tab.artifacts.find((a) => a.id === 'plan-conv-1')?.title).toBe('Updated Plan');
   });
 });
 

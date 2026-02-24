@@ -4,6 +4,7 @@ import { Clock, X, ChevronDown } from 'lucide-react';
 import { conversationApi } from '../../lib/api';
 import type { Conversation } from '../../lib/api';
 import { useAppStore } from '../../store';
+import { useModelsQuery } from '../../hooks/queries/useModelsQuery';
 
 interface CronConfigPanelProps {
   conversationId: string;
@@ -24,7 +25,7 @@ function getMultiplierStyle(multiplier: number | null | undefined) {
 export function CronConfigPanel({ conversationId, tabId, onClose, onSaved }: CronConfigPanelProps) {
   const { t } = useTranslation();
   const addToast = useAppStore((s) => s.addToast);
-  const models = useAppStore((s) => s.models);
+  const { data: models = [] } = useModelsQuery();
 
   const [enabled, setEnabled] = useState(false);
   const [scheduleType, setScheduleType] = useState<'cron' | 'interval'>('cron');

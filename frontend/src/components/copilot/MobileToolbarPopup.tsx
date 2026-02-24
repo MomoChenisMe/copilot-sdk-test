@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { SlidersHorizontal, X, ChevronDown, FolderOpen, Sparkles, TerminalSquare, Lightbulb, Zap, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useAppStore } from '../../store';
+import { useModelsQuery } from '../../hooks/queries/useModelsQuery';
 import { DirectoryPicker } from './DirectoryPicker';
 
 interface MobileToolbarPopupProps {
@@ -49,7 +49,7 @@ export function MobileToolbarPopup({
   const [modelListOpen, setModelListOpen] = useState(false);
   const [cwdPickerOpen, setCwdPickerOpen] = useState(false);
   const cwdContainerRef = useRef<HTMLDivElement>(null);
-  const models = useAppStore((s) => s.models);
+  const { data: models = [] } = useModelsQuery();
 
   const currentModelObj = models.find((m) => m.id === currentModel);
   const currentModelName = currentModelObj?.name || currentModel;

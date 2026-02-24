@@ -166,6 +166,76 @@ export class ConversationRepository {
     return rows.map(mapMessage);
   }
 
+  /**
+   * Update a tool record's result/status in the last assistant message for a conversation.
+   * Used when a tool_end event arrives after the accumulation was already persisted
+   * (e.g., after ask_user caused persistAccumulated to reset the accumulation).
+   */
+  updateToolResult(
+    conversationId: string,
+    toolCallId: string,
+    update: { status: 'success' | 'error'; result?: unknown; error?: string },
+  ): boolean {
+    // Find the last assistant message for this conversation
+    const row = this.db
+      .prepare(
+        `SELECT * FROM messages WHERE conversation_id = ? AND role = 'assistant'
+         ORDER BY created_at DESC LIMIT 1`,
+      )
+      .get(conversationId) as RawMessage | undefined;
+
+    if (!row || !row.metadata) return false;
+
+    let metadata: Record<string, unknown>;
+    try {
+      metadata = JSON.parse(row.metadata);
+    } catch {
+      return false;
+    }
+
+    let updated = false;
+
+    // Update in toolRecords array
+    const toolRecords = metadata.toolRecords as Array<Record<string, unknown>> | undefined;
+    if (toolRecords) {
+      const record = toolRecords.find((r) => r.toolCallId === toolCallId);
+      if (record) {
+        record.status = update.status;
+        if (update.status === 'success' && update.result !== undefined) {
+          record.result = update.result;
+        } else if (update.status === 'error' && update.error !== undefined) {
+          record.error = update.error;
+        }
+        updated = true;
+      }
+    }
+
+    // Also update in turnSegments array
+    const turnSegments = metadata.turnSegments as Array<Record<string, unknown>> | undefined;
+    if (turnSegments) {
+      const segment = turnSegments.find(
+        (s) => s.type === 'tool' && s.toolCallId === toolCallId,
+      );
+      if (segment) {
+        segment.status = update.status;
+        if (update.status === 'success' && update.result !== undefined) {
+          segment.result = update.result;
+        } else if (update.status === 'error' && update.error !== undefined) {
+          segment.error = update.error;
+        }
+        updated = true;
+      }
+    }
+
+    if (updated) {
+      this.db
+        .prepare('UPDATE messages SET metadata = ? WHERE id = ?')
+        .run(JSON.stringify(metadata), row.id);
+    }
+
+    return updated;
+  }
+
   search(query: string): SearchResult[] {
     const rows = this.db
       .prepare(

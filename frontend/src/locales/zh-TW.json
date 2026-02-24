@@ -196,8 +196,16 @@
       "resetFailed": "重置失敗"
     },
     "systemPrompt": {
+      "title": "系統提示詞",
+      "desc": "無論模式為何，每次對話都會注入的基礎指令。",
       "resetToDefault": "重置為預設",
-      "resetConfirm": "確定要重置為預設系統提示詞嗎？您目前的變更將會遺失。"
+      "resetConfirm": "確定要重置為預設系統提示詞嗎？您目前的變更將會遺失。",
+      "actMode": "執行模式提示詞",
+      "actModeDesc": "執行模式啟用時附加的額外指令。",
+      "actResetConfirm": "確定要重置為預設執行模式提示詞嗎？您目前的變更將會遺失。",
+      "planMode": "計劃模式提示詞",
+      "planModeDesc": "計劃模式啟用時附加的額外指令。",
+      "planResetConfirm": "確定要重置為預設計劃模式提示詞嗎？您目前的變更將會遺失。"
     },
     "memory": {
       "preferences": "偏好設定",
@@ -298,7 +306,8 @@
     "copy": "複製",
     "download": "下載",
     "close": "關閉",
-    "empty": "目前沒有 Artifacts"
+    "empty": "目前沒有 Artifacts",
+    "plan": "計劃"
   },
   "directoryPicker": {
     "search": "搜尋目錄...",
@@ -470,15 +479,7 @@
     "mcpLabel": "MCP 伺服器"
   },
   "sdk": {
-    "analyzeChanges": "分析更新內容",
-    "changelogUnavailable": "更新日誌不可用",
-    "versionUnknown": "未知",
-    "updateAvailable": "有可用更新",
-    "upToDate": "已是最新",
-    "checkForUpdates": "檢查更新",
-    "updateSdk": "更新 SDK",
-    "updateSuccess": "SDK 更新成功",
-    "updateFailed": "SDK 更新失敗"
+    "versionUnknown": "未知"
   },
   "webSearch": {
     "toggleTitle": "強制網路搜尋",
