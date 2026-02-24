@@ -1,10 +1,12 @@
 import { Router, type Request } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
-import { OpenSpecService } from './openspec-service.js';
+import type Database from 'better-sqlite3';
+import { OpenSpecService, OpenSpecMetadataRepository } from './openspec-service.js';
 
-export function createOpenSpecRoutes(defaultBasePath: string): Router {
+export function createOpenSpecRoutes(defaultBasePath: string, db?: Database.Database): Router {
   const router = Router();
+  const metaRepo = db ? new OpenSpecMetadataRepository(db) : null;
 
   /** Walk up from dir to find an openspec/ directory. */
   function findOpenspecUp(startDir: string): string | null {
@@ -37,6 +39,12 @@ export function createOpenSpecRoutes(defaultBasePath: string): Router {
     return { service: new OpenSpecService(defaultBasePath), resolvedPath: defaultBasePath };
   }
 
+  /** Extract CWD from query for metadata lookups. */
+  function resolveCwd(req: Request): string {
+    const cwd = typeof req.query.cwd === 'string' ? req.query.cwd : undefined;
+    return cwd && path.isAbsolute(cwd) ? cwd : defaultBasePath;
+  }
+
   // GET /overview — project overview stats + resolvedPath
   router.get('/overview', (req, res) => {
     try {
@@ -52,7 +60,7 @@ export function createOpenSpecRoutes(defaultBasePath: string): Router {
     }
   });
 
-  // GET /changes — list all active changes
+  // GET /changes — list all active changes (with optional metadata)
   router.get('/changes', (req, res) => {
     try {
       const { service } = resolveService(req);
@@ -61,7 +69,16 @@ export function createOpenSpecRoutes(defaultBasePath: string): Router {
         return;
       }
       const changes = service.listChanges();
-      res.json({ changes });
+      if (metaRepo) {
+        const cwd = resolveCwd(req);
+        const enriched = changes.map((c) => {
+          const meta = metaRepo.queryOne(c.name, 'change', cwd);
+          return { ...c, metadata: meta ?? null };
+        });
+        res.json({ changes: enriched });
+      } else {
+        res.json({ changes });
+      }
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : 'Internal server error' });
     }
@@ -147,6 +164,13 @@ export function createOpenSpecRoutes(defaultBasePath: string): Router {
         res.status(404).json({ error: 'Change not found' });
         return;
       }
+      // Update metadata: mark as archived
+      if (metaRepo) {
+        const cwd = resolveCwd(req);
+        const today = new Date().toISOString().slice(0, 10);
+        const archivedName = `${today}-${name}`;
+        metaRepo.markArchived(name, cwd, archivedName);
+      }
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : 'Internal server error' });
@@ -166,6 +190,11 @@ export function createOpenSpecRoutes(defaultBasePath: string): Router {
       if (!ok) {
         res.status(404).json({ error: 'Change not found' });
         return;
+      }
+      // Clean up metadata
+      if (metaRepo) {
+        const cwd = resolveCwd(req);
+        metaRepo.delete(name, 'change', cwd);
       }
       res.json({ ok: true });
     } catch (err) {
@@ -208,7 +237,7 @@ export function createOpenSpecRoutes(defaultBasePath: string): Router {
     }
   });
 
-  // GET /archived — list all archived changes
+  // GET /archived — list all archived changes (with optional metadata)
   router.get('/archived', (req, res) => {
     try {
       const { service } = resolveService(req);
@@ -217,7 +246,16 @@ export function createOpenSpecRoutes(defaultBasePath: string): Router {
         return;
       }
       const archived = service.listArchived();
-      res.json({ archived });
+      if (metaRepo) {
+        const cwd = resolveCwd(req);
+        const enriched = archived.map((a) => {
+          const meta = metaRepo.queryOne(a.name, 'archived', cwd);
+          return { ...a, metadata: meta ?? null };
+        });
+        res.json({ archived: enriched });
+      } else {
+        res.json({ archived });
+      }
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : 'Internal server error' });
     }

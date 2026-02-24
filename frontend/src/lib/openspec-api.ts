@@ -10,11 +10,23 @@ export interface OverviewData {
   resolvedPath: string | null;
 }
 
+export interface OpenSpecMetadata {
+  id: number;
+  name: string;
+  type: 'change' | 'spec' | 'archived';
+  cwd: string;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string | null;
+  archivedAt: string | null;
+}
+
 export interface ChangeListItem {
   name: string;
   status: string;
   taskProgress: { total: number; completed: number };
   proposal: string;
+  metadata?: OpenSpecMetadata | null;
 }
 
 export interface DeltaSpecFile {
@@ -52,6 +64,7 @@ export interface SpecFileContent {
 export interface ArchivedItem {
   name: string;
   archivedAt: string;
+  metadata?: OpenSpecMetadata | null;
 }
 
 export interface TaskToggleResult {
@@ -115,4 +128,7 @@ export const openspecApi = {
 
   listArchived: (cwd?: string) =>
     apiGet<{ archived: ArchivedItem[] }>(withCwd('/api/openspec/archived', cwd)).then((r) => r.archived),
+
+  getArchivedChange: (name: string, cwd?: string) =>
+    apiGet<ChangeDetail>(withCwd(`/api/openspec/archived/${encodeURIComponent(name)}`, cwd)),
 };

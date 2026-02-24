@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Copy, Check, FileText, Code, Globe, Image, Download } from 'lucide-react';
+import { X, Copy, Check, FileText, Code, Globe, Image, Download, Package } from 'lucide-react';
 import { Markdown } from '../shared/Markdown';
 import type { ParsedArtifact } from '../../lib/artifact-parser';
 
@@ -106,7 +106,12 @@ export function ArtifactsPanel({ artifacts, activeArtifactId, onSelectArtifact, 
 
         {/* Content — scrollable */}
         <div data-testid="artifact-content" className="flex-1 overflow-auto min-h-0">
-          {active && (
+          {artifacts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full py-16 text-text-muted text-sm gap-2">
+              <Package size={28} className="opacity-40" />
+              <p>{t('artifacts.empty', 'No artifacts yet')}</p>
+            </div>
+          ) : active && (
             <div className="p-4 sm:p-5">
               <ArtifactRenderer artifact={active} />
             </div>

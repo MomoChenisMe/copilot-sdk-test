@@ -19,6 +19,7 @@ import { OpenSpecChanges } from './OpenSpecChanges';
 import { OpenSpecChangeDetail } from './OpenSpecChangeDetail';
 import { OpenSpecSpecs } from './OpenSpecSpecs';
 import { OpenSpecArchived } from './OpenSpecArchived';
+import { OpenSpecSettings } from './OpenSpecSettings';
 import { Markdown } from '../shared/Markdown';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 
@@ -46,6 +47,7 @@ export function OpenSpecPanel({ open, onClose }: OpenSpecPanelProps) {
   // Navigation
   const [activeTab, setActiveTab] = useState<OpenSpecTabId>('overview');
   const [selectedChangeName, setSelectedChangeName] = useState<string | null>(null);
+  const [selectedFromArchive, setSelectedFromArchive] = useState(false);
   const [selectedSpecName, setSelectedSpecName] = useState<string | null>(null);
 
   // Data
@@ -99,9 +101,11 @@ export function OpenSpecPanel({ open, onClose }: OpenSpecPanelProps) {
     }
   }, []);
 
-  const loadChangeDetail = useCallback(async (name: string, cwd?: string) => {
+  const loadChangeDetail = useCallback(async (name: string, cwd?: string, fromArchive = false) => {
     try {
-      const data = await openspecApi.getChange(name, cwd);
+      const data = fromArchive
+        ? await openspecApi.getArchivedChange(name, cwd)
+        : await openspecApi.getChange(name, cwd);
       setChangeDetail(data);
     } catch (err) {
       console.warn('Failed to load change detail:', err);
@@ -170,9 +174,9 @@ export function OpenSpecPanel({ open, onClose }: OpenSpecPanelProps) {
   useEffect(() => {
     if (selectedChangeName) {
       setChangeDetail(null);
-      loadChangeDetail(selectedChangeName, activeCwd);
+      loadChangeDetail(selectedChangeName, activeCwd, selectedFromArchive);
     }
-  }, [selectedChangeName, loadChangeDetail, activeCwd]);
+  }, [selectedChangeName, selectedFromArchive, loadChangeDetail, activeCwd]);
 
   // Load spec content when a spec is selected
   useEffect(() => {
@@ -263,6 +267,7 @@ export function OpenSpecPanel({ open, onClose }: OpenSpecPanelProps) {
   const handleTabChange = useCallback((tab: OpenSpecTabId) => {
     setActiveTab(tab);
     setSelectedChangeName(null);
+    setSelectedFromArchive(false);
     setSelectedSpecName(null);
   }, []);
 
@@ -320,7 +325,7 @@ export function OpenSpecPanel({ open, onClose }: OpenSpecPanelProps) {
         <OpenSpecChangeDetail
           change={changeDetail}
           cwd={activeCwd}
-          onBack={() => setSelectedChangeName(null)}
+          onBack={() => { setSelectedChangeName(null); setSelectedFromArchive(false); }}
           onTaskToggle={handleTaskToggle}
           onBatchToggle={handleBatchToggle}
           onArchive={handleArchive}
@@ -361,19 +366,21 @@ export function OpenSpecPanel({ open, onClose }: OpenSpecPanelProps) {
     // Tab views
     switch (activeTab) {
       case 'overview':
-        return <OpenSpecOverview overview={overview} onNavigate={(tab) => handleTabChange(tab as OpenSpecTabId)} onDeleteOpenspec={handleDeleteOpenspec} deleting={deleting} />;
+        return <OpenSpecOverview overview={overview} onNavigate={(tab) => handleTabChange(tab as OpenSpecTabId)} />;
       case 'changes':
         return (
           <OpenSpecChanges
             changes={changes}
-            onSelect={setSelectedChangeName}
+            onSelect={(name) => { setSelectedFromArchive(false); setSelectedChangeName(name); }}
             onRefresh={() => loadChanges(activeCwd)}
           />
         );
       case 'specs':
         return <OpenSpecSpecs specs={specs} onSelect={setSelectedSpecName} />;
       case 'archived':
-        return <OpenSpecArchived archived={archived} onSelect={setSelectedChangeName} />;
+        return <OpenSpecArchived archived={archived} onSelect={(name) => { setSelectedFromArchive(true); setSelectedChangeName(name); }} />;
+      case 'settings':
+        return <OpenSpecSettings onDeleteOpenspec={handleDeleteOpenspec} deleting={deleting} />;
       default:
         return null;
     }

@@ -363,12 +363,14 @@ function LlmLanguageSection() {
   const { t } = useTranslation();
   const llmLanguage = useAppStore((s) => s.llmLanguage);
   const setLlmLanguage = useAppStore((s) => s.setLlmLanguage);
-  const [customValue, setCustomValue] = useState('');
 
   const isCustom = llmLanguage !== null && !LLM_LANGUAGE_OPTIONS.some(
     (o) => o.value === llmLanguage && o.value !== '__custom' && o.value !== '',
   );
-  const selectValue = llmLanguage === null ? '' : isCustom ? '__custom' : llmLanguage;
+
+  const [customMode, setCustomMode] = useState(isCustom);
+
+  const selectValue = llmLanguage === null ? '' : customMode ? '__custom' : llmLanguage;
 
   return (
     <section>
@@ -390,19 +392,20 @@ function LlmLanguageSection() {
         onChange={(val) => {
           if (val === '') {
             setLlmLanguage(null);
+            setCustomMode(false);
           } else if (val === '__custom') {
-            setLlmLanguage(customValue || 'en');
+            setCustomMode(true);
           } else {
             setLlmLanguage(val);
+            setCustomMode(false);
           }
         }}
       />
-      {selectValue === '__custom' && (
+      {customMode && (
         <input
           type="text"
-          value={isCustom && llmLanguage ? llmLanguage : customValue}
+          value={isCustom && llmLanguage ? llmLanguage : ''}
           onChange={(e) => {
-            setCustomValue(e.target.value);
             if (e.target.value) setLlmLanguage(e.target.value);
           }}
           placeholder={t('settings.general.llmLangCustomPlaceholder', 'e.g. Bahasa Indonesia')}

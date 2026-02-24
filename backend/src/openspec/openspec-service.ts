@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execSync, spawn } from 'node:child_process';
 import yaml from 'js-yaml';
+import type Database from 'better-sqlite3';
 
 export interface OpenSpecOverview {
   changesCount: number;
@@ -335,5 +336,93 @@ export class OpenSpecService {
         resolve({ success: false, error: err.message });
       });
     });
+  }
+}
+
+// ── OpenSpec Metadata ───────────────────────────────────────────────────────
+
+export interface OpenSpecMetadata {
+  id: number;
+  name: string;
+  type: 'change' | 'spec' | 'archived';
+  cwd: string;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string | null;
+  archivedAt: string | null;
+}
+
+export class OpenSpecMetadataRepository {
+  constructor(private db: Database.Database) {}
+
+  /** Upsert a metadata record. */
+  upsert(data: { name: string; type: 'change' | 'spec' | 'archived'; cwd: string; createdBy?: string }): OpenSpecMetadata {
+    this.db.prepare(`
+      INSERT INTO openspec_metadata (name, type, cwd, created_by)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(name, type, cwd) DO UPDATE SET
+        updated_at = datetime('now')
+    `).run(data.name, data.type, data.cwd, data.createdBy ?? null);
+
+    return this.queryOne(data.name, data.type, data.cwd)!;
+  }
+
+  /** Query metadata records by cwd and optional type filter. */
+  queryByCwd(cwd: string, type?: 'change' | 'spec' | 'archived'): OpenSpecMetadata[] {
+    const sql = type
+      ? 'SELECT * FROM openspec_metadata WHERE cwd = ? AND type = ? ORDER BY created_at DESC'
+      : 'SELECT * FROM openspec_metadata WHERE cwd = ? ORDER BY created_at DESC';
+    const rows = type
+      ? this.db.prepare(sql).all(cwd, type) as any[]
+      : this.db.prepare(sql).all(cwd) as any[];
+    return rows.map(this.mapRow);
+  }
+
+  /** Get a single metadata record. */
+  queryOne(name: string, type: string, cwd: string): OpenSpecMetadata | null {
+    const row = this.db.prepare(
+      'SELECT * FROM openspec_metadata WHERE name = ? AND type = ? AND cwd = ?',
+    ).get(name, type, cwd) as any;
+    return row ? this.mapRow(row) : null;
+  }
+
+  /** Delete a metadata record. */
+  delete(name: string, type: string, cwd: string): boolean {
+    const result = this.db.prepare(
+      'DELETE FROM openspec_metadata WHERE name = ? AND type = ? AND cwd = ?',
+    ).run(name, type, cwd);
+    return result.changes > 0;
+  }
+
+  /** Update type and archived_at for archival. */
+  markArchived(name: string, cwd: string, archivedName: string): boolean {
+    const existing = this.queryOne(name, 'change', cwd);
+    if (!existing) {
+      // Create a new record if none exists
+      this.db.prepare(`
+        INSERT INTO openspec_metadata (name, type, cwd, archived_at)
+        VALUES (?, 'archived', ?, datetime('now'))
+      `).run(archivedName, cwd);
+      return true;
+    }
+    this.db.prepare(`
+      UPDATE openspec_metadata
+      SET type = 'archived', name = ?, archived_at = datetime('now'), updated_at = datetime('now')
+      WHERE id = ?
+    `).run(archivedName, existing.id);
+    return true;
+  }
+
+  private mapRow(row: any): OpenSpecMetadata {
+    return {
+      id: row.id,
+      name: row.name,
+      type: row.type,
+      cwd: row.cwd,
+      createdBy: row.created_by,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      archivedAt: row.archived_at,
+    };
   }
 }

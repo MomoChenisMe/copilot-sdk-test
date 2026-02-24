@@ -135,6 +135,8 @@
     "closeTab": "Close Tab",
     "closeOthers": "Close Others",
     "rename": "Rename",
+    "setColor": "Set color",
+    "clearColor": "Clear color",
     "tabLimit": "Tab limit reached. Consider closing unused tabs.",
     "history": "History",
     "deleteConversation": "Delete conversation",
@@ -295,7 +297,8 @@
     "title": "Artifacts",
     "copy": "Copy",
     "download": "Download",
-    "close": "Close"
+    "close": "Close",
+    "empty": "No artifacts yet"
   },
   "directoryPicker": {
     "search": "Search directories...",
@@ -528,7 +531,8 @@
       "overview": "Overview",
       "changes": "Changes",
       "specs": "Specs",
-      "archived": "Archived"
+      "archived": "Archived",
+      "settings": "Settings"
     },
     "overview": {
       "title": "Project Overview",
@@ -590,6 +594,8 @@
   "common": {
     "close": "Close",
     "delete": "Delete",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "processing": "Processing..."
   }
 }

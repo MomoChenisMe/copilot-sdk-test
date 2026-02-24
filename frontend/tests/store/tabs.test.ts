@@ -551,6 +551,39 @@ describe('Draft tabs (lazy conversation creation)', () => {
   });
 });
 
+describe('setTabCustomTitle and setTabColor', () => {
+  it('setTabCustomTitle should update the customTitle of a tab', () => {
+    const tabId = openTabAndGetId('conv-1', 'Chat 1');
+    useAppStore.getState().setTabCustomTitle(tabId, 'My Custom Name');
+    expect(useAppStore.getState().tabs[tabId].customTitle).toBe('My Custom Name');
+  });
+
+  it('setTabCustomTitle with undefined should clear the customTitle', () => {
+    const tabId = openTabAndGetId('conv-1', 'Chat 1');
+    useAppStore.getState().setTabCustomTitle(tabId, 'Custom');
+    useAppStore.getState().setTabCustomTitle(tabId, undefined);
+    expect(useAppStore.getState().tabs[tabId].customTitle).toBeUndefined();
+  });
+
+  it('setTabColor should update the color of a tab', () => {
+    const tabId = openTabAndGetId('conv-1', 'Chat 1');
+    useAppStore.getState().setTabColor(tabId, '#ef4444');
+    expect(useAppStore.getState().tabs[tabId].color).toBe('#ef4444');
+  });
+
+  it('setTabColor with undefined should clear the color', () => {
+    const tabId = openTabAndGetId('conv-1', 'Chat 1');
+    useAppStore.getState().setTabColor(tabId, '#3b82f6');
+    useAppStore.getState().setTabColor(tabId, undefined);
+    expect(useAppStore.getState().tabs[tabId].color).toBeUndefined();
+  });
+
+  it('should not throw for non-existent tab', () => {
+    expect(() => useAppStore.getState().setTabCustomTitle('nonexistent', 'x')).not.toThrow();
+    expect(() => useAppStore.getState().setTabColor('nonexistent', '#fff')).not.toThrow();
+  });
+});
+
 describe('Tab soft limit', () => {
   it('openTab should set tabLimitWarning when reaching 15 tabs', () => {
     for (let i = 0; i < 15; i++) {

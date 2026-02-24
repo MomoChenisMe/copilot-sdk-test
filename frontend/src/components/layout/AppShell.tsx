@@ -372,16 +372,15 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       }
       // Remove the conversation from the list and API
       removeConversation(conversationId);
-      // Update activeConversationId
+      // Trigger lazy-load for the newly activated tab
       const newActiveTabId = useAppStore.getState().activeTabId;
       if (newActiveTabId) {
-        const newTab = useAppStore.getState().tabs[newActiveTabId];
-        setActiveConversationId(newTab?.conversationId ?? null);
+        handleSelectTab(newActiveTabId);
       } else {
         setActiveConversationId(null);
       }
     },
-    [abortMessage, cleanupDedup, closeTab, removeConversation, setActiveConversationId],
+    [abortMessage, cleanupDedup, closeTab, removeConversation, setActiveConversationId, handleSelectTab],
   );
 
   // Switch conversation within an existing tab
@@ -904,7 +903,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
           </div>
 
           {/* Artifacts panel — full overlay on mobile, side panel on desktop */}
-          {activeTab?.artifactsPanelOpen && activeTab.artifacts.length > 0 && (
+          {activeTab?.artifactsPanelOpen && (
             <ArtifactsPanel
               artifacts={activeTab.artifacts}
               activeArtifactId={activeTab.activeArtifactId}

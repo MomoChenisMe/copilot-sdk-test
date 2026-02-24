@@ -173,4 +173,19 @@ function migrate(db: Database.Database) {
   for (const sql of cronHistoryMigrations) {
     try { db.exec(sql); } catch { /* column already exists */ }
   }
+
+  // Migration: openspec_metadata table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS openspec_metadata (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('change','spec','archived')),
+      cwd TEXT NOT NULL,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT,
+      archived_at TEXT,
+      UNIQUE(name, type, cwd)
+    );
+  `);
 }

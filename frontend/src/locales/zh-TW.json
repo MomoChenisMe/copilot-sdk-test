@@ -135,6 +135,8 @@
     "closeTab": "關閉頁籤",
     "closeOthers": "關閉其他",
     "rename": "重新命名",
+    "setColor": "設定顏色",
+    "clearColor": "清除顏色",
     "tabLimit": "已達頁籤上限，請先關閉不用的頁籤。",
     "history": "歷史紀錄",
     "deleteConversation": "刪除對話",
@@ -295,7 +297,8 @@
     "title": "Artifacts",
     "copy": "複製",
     "download": "下載",
-    "close": "關閉"
+    "close": "關閉",
+    "empty": "目前沒有 Artifacts"
   },
   "directoryPicker": {
     "search": "搜尋目錄...",
@@ -528,7 +531,8 @@
       "overview": "總覽",
       "changes": "變更",
       "specs": "規格",
-      "archived": "已封存"
+      "archived": "已封存",
+      "settings": "設定"
     },
     "overview": {
       "title": "專案概覽",
@@ -590,6 +594,8 @@
   "common": {
     "close": "關閉",
     "delete": "刪除",
-    "cancel": "取消"
+    "cancel": "取消",
+    "confirm": "確認",
+    "processing": "處理中..."
   }
 }

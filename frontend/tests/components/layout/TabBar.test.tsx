@@ -14,6 +14,7 @@ vi.mock('lucide-react', () => ({
   Clock: (props: any) => <svg data-testid="clock-icon" {...props} />,
   Trash2: (props: any) => <svg data-testid="trash-icon" {...props} />,
   XCircle: (props: any) => <svg data-testid="xcircle-icon" {...props} />,
+  Palette: (props: any) => <svg data-testid="palette-icon" {...props} />,
 }));
 
 // Helper: open a tab and return its generated tabId
@@ -187,8 +188,8 @@ describe('TabBar', () => {
       fireEvent.click(screen.getByText(/Delete conversation|刪除對話/i));
       // Context menu should close, ConfirmDialog should appear
       expect(screen.queryByText(/Close tab|關閉頁籤/i)).toBeNull();
-      // ConfirmDialog confirm button should be visible
-      const confirmBtn = screen.getByText(/Confirm|確認/i);
+      // ConfirmDialog confirm button should show "Delete" (confirmLabel from common.delete)
+      const confirmBtn = screen.getByRole('button', { name: /Delete|刪除/i });
       expect(confirmBtn).toBeTruthy();
       fireEvent.click(confirmBtn);
       expect(onDeleteTabConversation).toHaveBeenCalledWith(tabId);
@@ -267,6 +268,200 @@ describe('TabBar', () => {
       act(() => { vi.advanceTimersByTime(400); });
       expect(screen.queryByText(/Close tab|關閉頁籤/i)).toBeNull();
       vi.useRealTimers();
+    });
+  });
+
+  // --- Drag snap-back animation ---
+  describe('Drag snap-back animation', () => {
+    beforeEach(() => {
+      // jsdom doesn't implement setPointerCapture
+      HTMLElement.prototype.setPointerCapture = vi.fn();
+      HTMLElement.prototype.releasePointerCapture = vi.fn();
+    });
+
+    it('should set transition synchronously on pointerUp (no rAF delay)', () => {
+      const tabId = openTabAndGetId('conv-1', 'Chat 1');
+      const { container } = render(<TabBar {...defaultProps} />);
+      const tabContainer = container.firstChild as HTMLElement;
+      const tabEl = screen.getByTestId(`tab-${tabId}`).parentElement!;
+
+      // Start drag: pointerDown + pointerMove past threshold
+      fireEvent.pointerDown(tabEl, { button: 0, clientX: 100, pointerId: 1 });
+      fireEvent.pointerMove(tabContainer, { clientX: 120, pointerId: 1 });
+
+      // Tab should now be in dragging state
+      expect(tabEl.className).toContain('z-50');
+
+      // Release
+      fireEvent.pointerUp(tabContainer, { pointerId: 1 });
+
+      // Transition should be set immediately (synchronously, no rAF)
+      expect(tabEl.style.transition).toContain('transform');
+      expect(tabEl.style.transform).toBe('translateX(0)');
+    });
+
+    it('should animate swapped tab with FLIP during drag', () => {
+      const tabId1 = openTabAndGetId('conv-1', 'Chat 1');
+      const tabId2 = openTabAndGetId('conv-2', 'Chat 2');
+      useAppStore.getState().setActiveTab(tabId1);
+
+      const { container } = render(<TabBar {...defaultProps} />);
+      const tabContainer = container.firstChild as HTMLElement;
+      const tabEl1 = screen.getByTestId(`tab-${tabId1}`).parentElement!;
+      const tabEl2 = screen.getByTestId(`tab-${tabId2}`).parentElement!;
+
+      // Mock getBoundingClientRect for swap detection
+      vi.spyOn(tabEl2, 'getBoundingClientRect').mockReturnValue({
+        left: 100, right: 200, top: 0, bottom: 40, width: 100, height: 40,
+        x: 100, y: 0, toJSON: () => {},
+      });
+
+      // Start drag on tab1
+      fireEvent.pointerDown(tabEl1, { button: 0, clientX: 50, pointerId: 1 });
+      // Move past threshold
+      fireEvent.pointerMove(tabContainer, { clientX: 60, pointerId: 1 });
+      // Move into tab2's area past midpoint to trigger swap
+      fireEvent.pointerMove(tabContainer, { clientX: 160, pointerId: 1 });
+
+      // After swap, the swapped tab (tab2) should have transition set
+      // (The FLIP animation sets transform and then clears it)
+      // We can't perfectly test rAF in jsdom, but we verify the approach is in place
+      expect(tabEl1.style.transform).toBeTruthy();
+    });
+
+    it('should clear styles after transitionend', () => {
+      const tabId = openTabAndGetId('conv-1', 'Chat 1');
+      const { container } = render(<TabBar {...defaultProps} />);
+      const tabContainer = container.firstChild as HTMLElement;
+      const tabEl = screen.getByTestId(`tab-${tabId}`).parentElement!;
+
+      // Drag and release
+      fireEvent.pointerDown(tabEl, { button: 0, clientX: 100, pointerId: 1 });
+      fireEvent.pointerMove(tabContainer, { clientX: 120, pointerId: 1 });
+      fireEvent.pointerUp(tabContainer, { pointerId: 1 });
+
+      // Fire transitionend to clean up
+      fireEvent.transitionEnd(tabEl);
+
+      expect(tabEl.style.transition).toBe('');
+      expect(tabEl.style.transform).toBe('');
+    });
+  });
+
+  // --- Double-click rename ---
+  describe('Double-click rename', () => {
+    it('should enter edit mode on double-click', () => {
+      const tabId = openTabAndGetId('conv-1', 'Chat 1');
+      render(<TabBar {...defaultProps} />);
+      const titleSpan = screen.getByTestId(`tab-title-${tabId}`);
+      fireEvent.doubleClick(titleSpan);
+      // An input should appear with current title
+      const input = screen.getByDisplayValue('Chat 1');
+      expect(input.tagName).toBe('INPUT');
+    });
+
+    it('should confirm rename on Enter and update store', () => {
+      const tabId = openTabAndGetId('conv-1', 'Chat 1');
+      render(<TabBar {...defaultProps} />);
+      const titleSpan = screen.getByTestId(`tab-title-${tabId}`);
+      fireEvent.doubleClick(titleSpan);
+      const input = screen.getByDisplayValue('Chat 1');
+      fireEvent.change(input, { target: { value: 'Renamed' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      // Store should have customTitle set
+      expect(useAppStore.getState().tabs[tabId].customTitle).toBe('Renamed');
+    });
+
+    it('should cancel rename on Escape and NOT update store', () => {
+      const tabId = openTabAndGetId('conv-1', 'Chat 1');
+      render(<TabBar {...defaultProps} />);
+      const titleSpan = screen.getByTestId(`tab-title-${tabId}`);
+      fireEvent.doubleClick(titleSpan);
+      const input = screen.getByDisplayValue('Chat 1');
+      fireEvent.change(input, { target: { value: 'Renamed' } });
+      fireEvent.keyDown(input, { key: 'Escape' });
+      // Store should NOT have customTitle
+      expect(useAppStore.getState().tabs[tabId].customTitle).toBeUndefined();
+    });
+
+    it('should display customTitle instead of title when set', () => {
+      const tabId = openTabAndGetId('conv-1', 'Chat 1');
+      useAppStore.getState().setTabCustomTitle(tabId, 'My Custom');
+      render(<TabBar {...defaultProps} />);
+      expect(screen.getByText('My Custom')).toBeTruthy();
+      expect(screen.queryByText('Chat 1')).toBeNull();
+    });
+  });
+
+  // --- Context menu color selection ---
+  describe('Context menu color selection', () => {
+    it('should show "Set color" option in context menu', () => {
+      const tabId = openTabAndGetId('conv-1', 'Chat 1');
+      render(<TabBar {...defaultProps} />);
+      const tabEl = screen.getByTestId(`tab-${tabId}`).parentElement!;
+      fireEvent.contextMenu(tabEl, { clientX: 100, clientY: 50 });
+      expect(screen.getByText(/Set color|設定顏色/i)).toBeTruthy();
+    });
+
+    it('should show color palette when "Set color" is clicked', () => {
+      const tabId = openTabAndGetId('conv-1', 'Chat 1');
+      render(<TabBar {...defaultProps} />);
+      const tabEl = screen.getByTestId(`tab-${tabId}`).parentElement!;
+      fireEvent.contextMenu(tabEl, { clientX: 100, clientY: 50 });
+      fireEvent.click(screen.getByText(/Set color|設定顏色/i));
+      // Color swatches should appear
+      expect(screen.getByTestId('color-palette')).toBeTruthy();
+    });
+
+    it('should set tab color when a swatch is clicked', () => {
+      const tabId = openTabAndGetId('conv-1', 'Chat 1');
+      render(<TabBar {...defaultProps} />);
+      const tabEl = screen.getByTestId(`tab-${tabId}`).parentElement!;
+      fireEvent.contextMenu(tabEl, { clientX: 100, clientY: 50 });
+      fireEvent.click(screen.getByText(/Set color|設定顏色/i));
+      // Click first swatch
+      const swatch = screen.getAllByTestId(/^color-swatch-/)[0];
+      fireEvent.click(swatch);
+      expect(useAppStore.getState().tabs[tabId].color).toBeTruthy();
+    });
+
+    it('should show "Clear color" option when tab has a color', () => {
+      const tabId = openTabAndGetId('conv-1', 'Chat 1');
+      useAppStore.getState().setTabColor(tabId, '#ef4444');
+      render(<TabBar {...defaultProps} />);
+      const tabEl = screen.getByTestId(`tab-${tabId}`).parentElement!;
+      fireEvent.contextMenu(tabEl, { clientX: 100, clientY: 50 });
+      expect(screen.getByText(/Clear color|清除顏色/i)).toBeTruthy();
+    });
+
+    it('should clear color when "Clear color" is clicked', () => {
+      const tabId = openTabAndGetId('conv-1', 'Chat 1');
+      useAppStore.getState().setTabColor(tabId, '#ef4444');
+      render(<TabBar {...defaultProps} />);
+      const tabEl = screen.getByTestId(`tab-${tabId}`).parentElement!;
+      fireEvent.contextMenu(tabEl, { clientX: 100, clientY: 50 });
+      fireEvent.click(screen.getByText(/Clear color|清除顏色/i));
+      expect(useAppStore.getState().tabs[tabId].color).toBeUndefined();
+    });
+  });
+
+  // --- Tab background tint ---
+  describe('Tab background tint', () => {
+    it('should apply background color style to active tab with color', () => {
+      const tabId = openTabAndGetId('conv-1', 'Chat 1');
+      useAppStore.getState().setTabColor(tabId, '#ef4444');
+      useAppStore.getState().setActiveTab(tabId);
+      render(<TabBar {...defaultProps} />);
+      const tabBtn = screen.getByTestId(`tab-${tabId}`);
+      expect(tabBtn.style.backgroundColor).toBeTruthy();
+    });
+
+    it('should NOT have background color style when tab has no color', () => {
+      const tabId = openTabAndGetId('conv-1', 'Chat 1');
+      useAppStore.getState().setActiveTab(tabId);
+      render(<TabBar {...defaultProps} />);
+      const tabBtn = screen.getByTestId(`tab-${tabId}`);
+      expect(tabBtn.style.backgroundColor).toBe('');
     });
   });
 

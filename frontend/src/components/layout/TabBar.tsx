@@ -1,10 +1,17 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { flushSync } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { Plus, X, AlertTriangle, ChevronDown, History, Clock, Trash2, XCircle } from 'lucide-react';
+import { Plus, X, AlertTriangle, ChevronDown, History, Clock, Trash2, XCircle, Palette } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { ConversationPopover } from './ConversationPopover';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+
+// ── Color palette ─────────────────────────────────────────────────────────
+
+const TAB_COLORS = [
+  '#ef4444', '#f97316', '#eab308', '#22c55e',
+  '#3b82f6', '#8b5cf6', '#ec4899', '#6b7280',
+];
 
 // ── Tab Context Menu ──────────────────────────────────────────────────────
 
@@ -17,18 +24,25 @@ interface ContextMenuState {
 function TabContextMenu({
   state,
   hasConversation,
+  tabColor,
   onClose,
   onCloseTab,
   onRequestDelete,
+  onSetColor,
+  onClearColor,
 }: {
   state: ContextMenuState;
   hasConversation: boolean;
+  tabColor?: string;
   onClose: () => void;
   onCloseTab: () => void;
   onRequestDelete: () => void;
+  onSetColor: (color: string) => void;
+  onClearColor: () => void;
 }) {
   const { t } = useTranslation();
   const menuRef = useRef<HTMLDivElement>(null);
+  const [showPalette, setShowPalette] = useState(false);
 
   useEffect(() => {
     const handler = (e: MouseEvent | TouchEvent) => {
@@ -58,6 +72,35 @@ function TabContextMenu({
         <XCircle size={13} />
         {t('tabBar.closeTab', 'Close tab')}
       </button>
+      <button
+        onClick={() => setShowPalette(!showPalette)}
+        className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-text-secondary hover:bg-bg-tertiary transition-colors text-left"
+      >
+        <Palette size={13} />
+        {t('tabBar.setColor', 'Set color')}
+      </button>
+      {showPalette && (
+        <div data-testid="color-palette" className="flex flex-wrap gap-1.5 px-3 py-2">
+          {TAB_COLORS.map((c) => (
+            <button
+              key={c}
+              data-testid={`color-swatch-${c}`}
+              onClick={() => { onSetColor(c); onClose(); }}
+              className="w-5 h-5 rounded-full border border-border hover:scale-110 transition-transform"
+              style={{ backgroundColor: c }}
+            />
+          ))}
+        </div>
+      )}
+      {tabColor && (
+        <button
+          onClick={() => { onClearColor(); onClose(); }}
+          className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-text-secondary hover:bg-bg-tertiary transition-colors text-left"
+        >
+          <X size={13} />
+          {t('tabBar.clearColor', 'Clear color')}
+        </button>
+      )}
       {hasConversation && (
         <button
           onClick={() => {
@@ -94,10 +137,14 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
   const tabLimitWarning = useAppStore((s) => s.tabLimitWarning);
 
   const reorderTabs = useAppStore((s) => s.reorderTabs);
+  const setTabCustomTitle = useAppStore((s) => s.setTabCustomTitle);
+  const setTabColor = useAppStore((s) => s.setTabColor);
   const [popoverTabId, setPopoverTabId] = useState<string | null>(null);
   const [globalHistoryOpen, setGlobalHistoryOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [deleteDialogTabId, setDeleteDialogTabId] = useState<string | null>(null);
+  const [editingTabId, setEditingTabId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tabTitleRefs = useRef<Record<string, HTMLSpanElement | null>>({});
   const historyButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -108,6 +155,7 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
   const tabElsRef = useRef<Record<string, HTMLDivElement | null>>({});
   const dragInfoRef = useRef<{ tabId: string; startX: number; active: boolean } | null>(null);
   const wasDraggingRef = useRef(false);
+  const swapAnimatingRef = useRef<string | null>(null);
 
   const handlePointerDown = useCallback((e: React.PointerEvent, tabId: string) => {
     if (e.button !== 0) return;
@@ -138,16 +186,49 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
       const targetIdx = order.indexOf(id);
       if (dragIdx === -1 || targetIdx === -1) break;
       if ((dragIdx < targetIdx && e.clientX > mid) || (dragIdx > targetIdx && e.clientX < mid)) {
-        // Measure layout position before swap (offsetLeft ignores CSS transforms)
+        // FLIP: record positions before swap
         const dragEl = tabElsRef.current[info.tabId];
         const prevOffset = dragEl?.offsetLeft ?? 0;
+        const swappedEl = el;
+        const swappedPrevOffset = swappedEl.offsetLeft;
+
+        // Clear any ongoing swap animation on previous tab
+        if (swapAnimatingRef.current) {
+          const prevSwapEl = tabElsRef.current[swapAnimatingRef.current];
+          if (prevSwapEl) {
+            prevSwapEl.style.transition = '';
+            prevSwapEl.style.transform = '';
+          }
+          swapAnimatingRef.current = null;
+        }
+
         const next = [...order];
         next.splice(dragIdx, 1);
         next.splice(targetIdx, 0, info.tabId);
         flushSync(() => { reorderTabs(next); });
+
         // Adjust startX so translateX stays visually consistent
         const newOffset = dragEl?.offsetLeft ?? 0;
         info.startX += (newOffset - prevOffset);
+
+        // FLIP animate the swapped tab
+        const swappedNewOffset = swappedEl.offsetLeft;
+        const swapDiff = swappedPrevOffset - swappedNewOffset;
+        if (swapDiff !== 0) {
+          swapAnimatingRef.current = id;
+          swappedEl.style.transform = `translateX(${swapDiff}px)`;
+          requestAnimationFrame(() => {
+            swappedEl.style.transition = 'transform 120ms ease-out';
+            swappedEl.style.transform = 'translateX(0)';
+            const swapCleanup = () => {
+              swappedEl.style.transition = '';
+              swappedEl.style.transform = '';
+              if (swapAnimatingRef.current === id) swapAnimatingRef.current = null;
+            };
+            swappedEl.addEventListener('transitionend', swapCleanup, { once: true });
+            setTimeout(swapCleanup, 150);
+          });
+        }
       }
       break;
     }
@@ -165,21 +246,23 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
     dragInfoRef.current = null;
     if (info.active) {
       wasDraggingRef.current = true;
-      requestAnimationFrame(() => { wasDraggingRef.current = false; });
       const dragEl = tabElsRef.current[info.tabId];
       if (dragEl) {
-        // Animate back to 0, then clean up styles + React state together
+        // Animate back to 0 synchronously (no rAF wrapper)
         dragEl.style.transition = 'transform 120ms ease-out';
         dragEl.style.transform = 'translateX(0)';
         const cleanup = () => {
           dragEl.style.transition = '';
           dragEl.style.transform = '';
           setDragTabId(null);
+          wasDraggingRef.current = false;
         };
         dragEl.addEventListener('transitionend', cleanup, { once: true });
+        // Cleanup guard in case transitionend doesn't fire
         setTimeout(cleanup, 150);
       } else {
         setDragTabId(null);
+        wasDraggingRef.current = false;
       }
     } else {
       setDragTabId(null);
@@ -221,6 +304,10 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
         const isStreaming = tab.conversationId ? !!activeStreams[tab.conversationId] : false;
 
         const isDragging = dragTabId === tabId;
+        const displayTitle = tab.customTitle || tab.title;
+        const tabBgStyle: React.CSSProperties = tab.color
+          ? { backgroundColor: `${tab.color}${isActive ? '1a' : '0d'}` }
+          : {};
 
         return (
           <div
@@ -260,6 +347,7 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
                   ? 'text-accent bg-accent-soft'
                   : 'text-text-muted hover:text-text-secondary hover:bg-bg-tertiary'
               }`}
+              style={tabBgStyle}
             >
               {isStreaming && (
                 <span
@@ -270,12 +358,42 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
               {tab.conversationId && conversations.find((c) => c.id === tab.conversationId)?.cronEnabled && (
                 <Clock size={10} className="shrink-0 text-accent" />
               )}
-              <span
-                data-testid={`tab-title-${tabId}`}
-                className="max-w-32 truncate"
-              >
-                {tab.title}
-              </span>
+              {editingTabId === tabId ? (
+                <input
+                  data-testid={`tab-rename-input-${tabId}`}
+                  className="max-w-32 bg-transparent border-b border-accent outline-none text-sm"
+                  value={editValue}
+                  autoFocus
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const trimmed = editValue.trim();
+                      if (trimmed) setTabCustomTitle(tabId, trimmed);
+                      setEditingTabId(null);
+                    } else if (e.key === 'Escape') {
+                      setEditingTabId(null);
+                    }
+                  }}
+                  onBlur={() => {
+                    const trimmed = editValue.trim();
+                    if (trimmed) setTabCustomTitle(tabId, trimmed);
+                    setEditingTabId(null);
+                  }}
+                />
+              ) : (
+                <span
+                  data-testid={`tab-title-${tabId}`}
+                  className="max-w-32 truncate"
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    setEditingTabId(tabId);
+                    setEditValue(displayTitle);
+                  }}
+                >
+                  {displayTitle}
+                </span>
+              )}
               <span
                 ref={(el) => { tabTitleRefs.current[tabId] = el; }}
                 data-testid={`tab-chevron-${tabId}`}
@@ -381,9 +499,12 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
         <TabContextMenu
           state={contextMenu}
           hasConversation={!!tabs[contextMenu.tabId]?.conversationId}
+          tabColor={tabs[contextMenu.tabId]?.color}
           onClose={() => setContextMenu(null)}
           onCloseTab={() => onCloseTab(contextMenu.tabId)}
           onRequestDelete={() => setDeleteDialogTabId(contextMenu.tabId)}
+          onSetColor={(color) => setTabColor(contextMenu.tabId, color)}
+          onClearColor={() => setTabColor(contextMenu.tabId, undefined)}
         />
       )}
 
@@ -393,6 +514,7 @@ export function TabBar({ onNewTab, onSelectTab, onCloseTab, onSwitchConversation
         title={t('tabBar.deleteConversation', 'Delete conversation')}
         description={t('tabBar.deleteConfirm', 'Delete this conversation? This cannot be undone.')}
         destructive
+        confirmLabel={t('common.delete', 'Delete')}
         onConfirm={() => {
           if (deleteDialogTabId) onDeleteTabConversation?.(deleteDialogTabId);
           setDeleteDialogTabId(null);

@@ -44,9 +44,11 @@ export function OpenSpecArchived({ archived, onSelect }: OpenSpecArchivedProps) 
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-text-primary truncate">{item.name}</p>
           </div>
-          <span className="text-[10px] text-text-muted shrink-0 bg-bg-tertiary px-1.5 py-0.5 rounded">
-            {formatDate(item.archivedAt)}
-          </span>
+          {(item.metadata?.archivedAt || item.archivedAt) && (
+            <span className="text-[10px] text-text-muted shrink-0 bg-bg-tertiary px-1.5 py-0.5 rounded">
+              {formatDate(item.metadata?.archivedAt || item.archivedAt)}
+            </span>
+          )}
         </button>
       ))}
     </div>

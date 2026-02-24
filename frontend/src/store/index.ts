@@ -83,6 +83,8 @@ export interface TabState {
   tasks: TaskItem[];
   cronConfigOpen: boolean;
   webSearchForced: boolean;
+  customTitle?: string;
+  color?: string;
 }
 
 export interface AppState {
@@ -219,6 +221,8 @@ export interface AppState {
   setActiveTab: (tabId: string) => void;
   reorderTabs: (tabIds: string[]) => void;
   updateTabTitle: (tabId: string, title: string) => void;
+  setTabCustomTitle: (tabId: string, customTitle: string | undefined) => void;
+  setTabColor: (tabId: string, color: string | undefined) => void;
   switchTabConversation: (tabId: string, conversationId: string, title: string) => void;
   getTabIdByConversationId: (conversationId: string) => string | undefined;
   restoreOpenTabs: () => void;
@@ -612,6 +616,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       const tab = state.tabs[tabId];
       if (!tab) return state;
       return { tabs: { ...state.tabs, [tabId]: { ...tab, title } } };
+    }),
+
+  setTabCustomTitle: (tabId, customTitle) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return { tabs: { ...state.tabs, [tabId]: { ...tab, customTitle } } };
+    }),
+
+  setTabColor: (tabId, color) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return { tabs: { ...state.tabs, [tabId]: { ...tab, color } } };
     }),
 
   switchTabConversation: (tabId, conversationId, title) => {

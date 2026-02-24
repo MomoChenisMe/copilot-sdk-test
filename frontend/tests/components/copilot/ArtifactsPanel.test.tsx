@@ -128,6 +128,21 @@ describe('ArtifactsPanel', () => {
     expect(screen.getByTestId('mermaid-rendered').innerHTML).toContain('mocked diagram');
   });
 
+  it('should show empty state when artifacts array is empty', () => {
+    render(
+      <ArtifactsPanel
+        artifacts={[]}
+        activeArtifactId={null as any}
+        onSelectArtifact={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('artifacts-panel')).toBeInTheDocument();
+    expect(screen.getByText(/No artifacts yet|目前沒有 Artifacts/i)).toBeInTheDocument();
+    // Close button should still be rendered
+    expect(screen.getByTestId('artifacts-close')).toBeInTheDocument();
+  });
+
   it('should show mermaid error fallback on render failure', async () => {
     const mermaid = (await import('mermaid')).default;
     vi.mocked(mermaid.render).mockRejectedValueOnce(new Error('Invalid syntax'));

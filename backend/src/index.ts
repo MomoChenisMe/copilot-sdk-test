@@ -245,7 +245,7 @@ export function createApp() {
     return path.resolve(process.cwd(), 'openspec');
   };
   const openspecDefaultBasePath = findOpenspecDefault();
-  app.use('/api/openspec', authMiddleware, createOpenSpecRoutes(openspecDefaultBasePath));
+  app.use('/api/openspec', authMiddleware, createOpenSpecRoutes(openspecDefaultBasePath, db));
 
   // Protected routes
   app.use('/api/conversations', authMiddleware, createConversationRoutes(repo));

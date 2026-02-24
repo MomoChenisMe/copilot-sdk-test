@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 
-export type OpenSpecTabId = 'overview' | 'changes' | 'specs' | 'archived';
+export type OpenSpecTabId = 'overview' | 'changes' | 'specs' | 'archived' | 'settings';
 
 interface OpenSpecNavTabsProps {
   activeTab: OpenSpecTabId;
@@ -12,6 +12,7 @@ const TABS: { id: OpenSpecTabId; labelKey: string }[] = [
   { id: 'changes', labelKey: 'openspecPanel.tabs.changes' },
   { id: 'specs', labelKey: 'openspecPanel.tabs.specs' },
   { id: 'archived', labelKey: 'openspecPanel.tabs.archived' },
+  { id: 'settings', labelKey: 'openspecPanel.tabs.settings' },
 ];
 
 export function OpenSpecNavTabs({ activeTab, onTabChange }: OpenSpecNavTabsProps) {

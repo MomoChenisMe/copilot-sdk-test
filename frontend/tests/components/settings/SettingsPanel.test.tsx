@@ -948,6 +948,87 @@ describe('SettingsPanel', () => {
     });
   });
 
+  // === LLM Language Section ===
+  describe('LLM Language Section (General tab)', () => {
+    it('should render LLM language dropdown in General tab', () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
+      expect(screen.getByText(/LLM Response Language|LLM 回應語言/i)).toBeTruthy();
+    });
+
+    it('should show custom input when "Custom..." is selected', async () => {
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
+
+      // Open the CustomSelect dropdown by clicking on it
+      const dropdownBtn = screen.getByText(/Same as UI language|與介面語言相同/i);
+      fireEvent.click(dropdownBtn);
+
+      // Now click the "Custom..." option in the dropdown
+      const customOption = screen.getByText(/Custom\.\.\.|自訂\.\.\./i);
+      fireEvent.click(customOption);
+
+      // After selecting custom, a text input should appear
+      await waitFor(() => {
+        const input = screen.getByPlaceholderText(/Bahasa Indonesia/i);
+        expect(input).toBeTruthy();
+      });
+    });
+
+    it('should update llmLanguage when typing in custom input', async () => {
+      // Pre-set a custom value so input shows (customMode initializes to true)
+      useAppStore.setState({ llmLanguage: 'Bahasa Indonesia' });
+
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
+
+      await waitFor(() => {
+        const input = screen.getByPlaceholderText(/Bahasa Indonesia/i);
+        expect(input).toBeTruthy();
+      });
+
+      const input = screen.getByPlaceholderText(/Bahasa Indonesia/i);
+      fireEvent.change(input, { target: { value: 'Tiếng Việt' } });
+
+      // llmLanguage should now be 'Tiếng Việt'
+      expect(useAppStore.getState().llmLanguage).toBe('Tiếng Việt');
+    });
+
+    it('should show custom input when llmLanguage is a non-predefined value', () => {
+      useAppStore.setState({ llmLanguage: 'Français custom' });
+
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
+
+      // Custom input should be visible because 'Français custom' is not a predefined option
+      const input = screen.getByPlaceholderText(/Bahasa Indonesia/i);
+      expect(input).toBeTruthy();
+      expect((input as HTMLInputElement).value).toBe('Français custom');
+    });
+
+    it('should hide custom input when switching from custom to predefined', async () => {
+      useAppStore.setState({ llmLanguage: 'Some custom lang' });
+
+      render(<SettingsPanel {...defaultProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /general/i }));
+
+      // Custom input should initially be visible
+      expect(screen.getByPlaceholderText(/Bahasa Indonesia/i)).toBeTruthy();
+
+      // Open dropdown and select a predefined language
+      const dropdownBtn = screen.getByText(/Custom\.\.\.|自訂\.\.\./i);
+      fireEvent.click(dropdownBtn);
+      // Use getAllByText and pick the one inside the dropdown options
+      const englishOptions = screen.getAllByText('English');
+      const dropdownOption = englishOptions.find((el) => el.closest('.absolute'));
+      fireEvent.click(dropdownOption || englishOptions[englishOptions.length - 1]);
+
+      // Custom input should disappear
+      expect(screen.queryByPlaceholderText(/Bahasa Indonesia/i)).toBeNull();
+      expect(useAppStore.getState().llmLanguage).toBe('en');
+    });
+  });
+
   describe('Auto Memory (Memory tab)', () => {
     it('should show auto-memory section in Memory tab', async () => {
       render(<SettingsPanel {...defaultProps} />);
