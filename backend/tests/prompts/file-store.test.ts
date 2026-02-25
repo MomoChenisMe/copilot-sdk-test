@@ -95,6 +95,74 @@ describe('PromptFileStore', () => {
       expect(fs.readFileSync(path.join(tmpDir, 'PLAN_PROMPT.md'), 'utf-8')).toBe('custom plan prompt');
     });
 
+    it('should create AUTOPILOT_PROMPT.md with default content when not exists', () => {
+      store.ensureDirectories();
+      const content = fs.readFileSync(path.join(tmpDir, 'AUTOPILOT_PROMPT.md'), 'utf-8');
+      expect(content.length).toBeGreaterThan(0);
+      expect(content).toContain('Autopilot Mode');
+    });
+
+    it('should not overwrite existing AUTOPILOT_PROMPT.md', () => {
+      store.ensureDirectories();
+      fs.writeFileSync(path.join(tmpDir, 'AUTOPILOT_PROMPT.md'), 'custom autopilot prompt');
+      store.ensureDirectories();
+      expect(fs.readFileSync(path.join(tmpDir, 'AUTOPILOT_PROMPT.md'), 'utf-8')).toBe('custom autopilot prompt');
+    });
+
+    it('should migrate ACT_PROMPT.md to AUTOPILOT_PROMPT.md if only ACT exists', () => {
+      fs.mkdirSync(tmpDir, { recursive: true });
+      fs.writeFileSync(path.join(tmpDir, 'ACT_PROMPT.md'), 'my custom act prompt');
+      store.ensureDirectories();
+      // ACT_PROMPT.md should be gone, AUTOPILOT_PROMPT.md should have the old content
+      expect(fs.existsSync(path.join(tmpDir, 'ACT_PROMPT.md'))).toBe(false);
+      expect(fs.readFileSync(path.join(tmpDir, 'AUTOPILOT_PROMPT.md'), 'utf-8')).toBe('my custom act prompt');
+    });
+
+    it('should not migrate if AUTOPILOT_PROMPT.md already exists', () => {
+      fs.mkdirSync(tmpDir, { recursive: true });
+      fs.writeFileSync(path.join(tmpDir, 'ACT_PROMPT.md'), 'old act prompt');
+      fs.writeFileSync(path.join(tmpDir, 'AUTOPILOT_PROMPT.md'), 'existing autopilot prompt');
+      store.ensureDirectories();
+      // AUTOPILOT_PROMPT.md unchanged, ACT_PROMPT.md left as-is
+      expect(fs.readFileSync(path.join(tmpDir, 'AUTOPILOT_PROMPT.md'), 'utf-8')).toBe('existing autopilot prompt');
+    });
+
+    it('should migrate "Act Mode" text to "Autopilot Mode" in SYSTEM_PROMPT.md content', () => {
+      fs.mkdirSync(tmpDir, { recursive: true });
+      fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), '# System Prompt\n**Act Mode (Default)** — Full tool execution.\n**Plan Mode** — Read-only.');
+      store.ensureDirectories();
+      const content = fs.readFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), 'utf-8');
+      expect(content).toContain('Autopilot Mode (Default)');
+      expect(content).not.toContain('Act Mode');
+    });
+
+    it('should migrate "Act Mode" text to "Autopilot Mode" in AUTOPILOT_PROMPT.md content', () => {
+      fs.mkdirSync(tmpDir, { recursive: true });
+      fs.writeFileSync(path.join(tmpDir, 'AUTOPILOT_PROMPT.md'), '# Act Mode — Execution Guidelines\nYou are in Act Mode.');
+      store.ensureDirectories();
+      const content = fs.readFileSync(path.join(tmpDir, 'AUTOPILOT_PROMPT.md'), 'utf-8');
+      expect(content).toContain('Autopilot Mode — Execution Guidelines');
+      expect(content).toContain('You are in Autopilot Mode.');
+      expect(content).not.toContain('Act Mode');
+    });
+
+    it('should not modify files that already use "Autopilot Mode"', () => {
+      fs.mkdirSync(tmpDir, { recursive: true });
+      const original = '# Autopilot Mode — Execution Guidelines\nYou are in Autopilot Mode.';
+      fs.writeFileSync(path.join(tmpDir, 'AUTOPILOT_PROMPT.md'), original);
+      store.ensureDirectories();
+      const content = fs.readFileSync(path.join(tmpDir, 'AUTOPILOT_PROMPT.md'), 'utf-8');
+      expect(content).toBe(original);
+    });
+
+    it('should handle case-insensitive "act mode" replacement', () => {
+      fs.mkdirSync(tmpDir, { recursive: true });
+      fs.writeFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), 'act mode is the default. Act Mode is great.');
+      store.ensureDirectories();
+      const content = fs.readFileSync(path.join(tmpDir, 'SYSTEM_PROMPT.md'), 'utf-8');
+      expect(content).toBe('autopilot mode is the default. Autopilot Mode is great.');
+    });
+
     it('should be idempotent (no error when called twice)', () => {
       store.ensureDirectories();
       expect(() => store.ensureDirectories()).not.toThrow();

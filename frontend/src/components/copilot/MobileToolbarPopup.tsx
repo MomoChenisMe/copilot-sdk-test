@@ -195,11 +195,11 @@ export function MobileToolbarPopup({
             </div>
           </div>
 
-          {/* Plan/Act toggle */}
+          {/* Plan/Autopilot toggle */}
           {tabId && (
             <div>
               <label className="text-[10px] uppercase tracking-wider text-text-muted font-semibold mb-1.5 block">
-                {t('planMode.tooltip', 'Plan / Act')}
+                {t('planMode.tooltip', 'Plan / Autopilot')}
               </label>
               <div className="inline-flex rounded-xl border border-border overflow-hidden">
                 <button
@@ -220,7 +220,7 @@ export function MobileToolbarPopup({
                   } disabled:opacity-50`}
                 >
                   <Zap size={12} />
-                  {t('planMode.act')}
+                  {t('planMode.autopilot')}
                 </button>
               </div>
             </div>

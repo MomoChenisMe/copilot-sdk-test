@@ -516,20 +516,15 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
   );
 
   const handleExecutePlan = useCallback(
-    (conversationId: string, planFilePath: string) => {
+    (conversationId: string, planContent: string) => {
       if (!activeTabId) return;
-      const state = useAppStore.getState();
-
-      // Hide plan complete prompt and clear streaming state
-      state.setTabShowPlanCompletePrompt(activeTabId, false);
-      state.clearTabStreaming(activeTabId);
-      state.setTabIsStreaming(activeTabId, true);
-      state.setTabPlanMode(activeTabId, false);
-
-      // Send execute_plan via WebSocket
+      // Send execute_plan via WebSocket — state changes handled by copilot:plan_execution_started event
+      useAppStore.getState().setTabIsStreaming(activeTabId, true);
+      const { llmLanguage, language } = useAppStore.getState();
+      const locale = llmLanguage || language;
       send({
         type: 'copilot:execute_plan',
-        data: { conversationId, planFilePath },
+        data: { conversationId, planContent, locale },
       });
     },
     [activeTabId, send],

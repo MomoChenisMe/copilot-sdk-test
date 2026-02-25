@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { DEFAULT_SYSTEM_PROMPT, DEFAULT_ACT_PROMPT, DEFAULT_PLAN_PROMPT } from './defaults.js';
+import { DEFAULT_SYSTEM_PROMPT, DEFAULT_AUTOPILOT_PROMPT, DEFAULT_PLAN_PROMPT } from './defaults.js';
 
 const UNSAFE_PATTERN = /[.]{2}|[/\\]|\0/;
 const SAFE_CHARS = /[^a-zA-Z0-9_-]/g;
@@ -28,10 +28,30 @@ export class PromptFileStore {
       fs.writeFileSync(systemPromptPath, DEFAULT_SYSTEM_PROMPT);
     }
 
-    // Create ACT_PROMPT.md with default content if it doesn't exist
+    // Migrate ACT_PROMPT.md → AUTOPILOT_PROMPT.md if only ACT exists
     const actPromptPath = path.join(this.basePath, 'ACT_PROMPT.md');
-    if (!fs.existsSync(actPromptPath)) {
-      fs.writeFileSync(actPromptPath, DEFAULT_ACT_PROMPT);
+    const autopilotPromptPath = path.join(this.basePath, 'AUTOPILOT_PROMPT.md');
+    if (fs.existsSync(actPromptPath) && !fs.existsSync(autopilotPromptPath)) {
+      fs.renameSync(actPromptPath, autopilotPromptPath);
+    }
+
+    // Create AUTOPILOT_PROMPT.md with default content if it doesn't exist
+    if (!fs.existsSync(autopilotPromptPath)) {
+      fs.writeFileSync(autopilotPromptPath, DEFAULT_AUTOPILOT_PROMPT);
+    }
+
+    // Content migration: replace "Act Mode" → "Autopilot Mode" in existing prompt files
+    for (const fileName of ['SYSTEM_PROMPT.md', 'AUTOPILOT_PROMPT.md']) {
+      const filePath = path.join(this.basePath, fileName);
+      if (fs.existsSync(filePath)) {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        if (/act mode/i.test(content)) {
+          const migrated = content
+            .replace(/Act Mode/g, 'Autopilot Mode')
+            .replace(/act mode/g, 'autopilot mode');
+          fs.writeFileSync(filePath, migrated, 'utf-8');
+        }
+      }
     }
 
     // Create PLAN_PROMPT.md with default content if it doesn't exist

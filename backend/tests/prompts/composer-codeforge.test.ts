@@ -51,7 +51,7 @@ describe('PromptComposer — .codeforge.md support', () => {
   });
 
   it('should ignore both when neither file exists', () => {
-    fs.writeFileSync(path.join(tmpDir, 'ACT_PROMPT.md'), '');
+    fs.writeFileSync(path.join(tmpDir, 'AUTOPILOT_PROMPT.md'), '');
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
 
     const result = composer.compose(cwdDir);
@@ -59,7 +59,7 @@ describe('PromptComposer — .codeforge.md support', () => {
   });
 
   it('should ignore both when cwd is not provided', () => {
-    fs.writeFileSync(path.join(tmpDir, 'ACT_PROMPT.md'), '');
+    fs.writeFileSync(path.join(tmpDir, 'AUTOPILOT_PROMPT.md'), '');
     fs.writeFileSync(path.join(tmpDir, 'PROFILE.md'), 'Profile');
 
     const result = composer.compose();

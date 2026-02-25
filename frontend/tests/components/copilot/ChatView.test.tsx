@@ -55,12 +55,12 @@ vi.mock('../../../src/components/copilot/TaskPanel', () => ({
   ),
 }));
 
-vi.mock('../../../src/components/copilot/PlanActToggle', () => ({
+vi.mock('../../../src/components/copilot/PlanAutopilotToggle', () => ({
   default: ({ planMode, onToggle }: { planMode: boolean; onToggle: (v: boolean) => void }) => (
-    <div data-testid="plan-act-toggle">
+    <div data-testid="plan-autopilot-toggle">
       <button data-testid="toggle-plan" onClick={() => onToggle(true)}>Plan</button>
-      <button data-testid="toggle-act" onClick={() => onToggle(false)}>Act</button>
-      <span data-testid="current-mode">{planMode ? 'plan' : 'act'}</span>
+      <button data-testid="toggle-autopilot" onClick={() => onToggle(false)}>Autopilot</button>
+      <span data-testid="current-mode">{planMode ? 'plan' : 'autopilot'}</span>
     </div>
   ),
 }));
@@ -459,7 +459,7 @@ describe('ChatView', () => {
       ...extra,
     });
 
-    it('renders PlanActToggle in input area', () => {
+    it('renders PlanAutopilotToggle in input area', () => {
       useAppStore.setState({
         activeConversationId: 'conv-1',
         tabs: { [tabId]: makePlanTab(false) },
@@ -467,7 +467,7 @@ describe('ChatView', () => {
         activeTabId: tabId,
       });
       render(<ChatView {...defaultProps} tabId={tabId} />);
-      expect(screen.getByTestId('plan-act-toggle')).toBeTruthy();
+      expect(screen.getByTestId('plan-autopilot-toggle')).toBeTruthy();
     });
 
     it('shows plan mode banner when planMode is true', () => {
@@ -503,7 +503,7 @@ describe('ChatView', () => {
       expect(screen.queryByTestId('plan-mode-banner')).toBeNull();
     });
 
-    it('calls setTabPlanMode when PlanActToggle is toggled', () => {
+    it('calls setTabPlanMode when PlanAutopilotToggle is toggled', () => {
       const setTabPlanMode = vi.fn();
       useAppStore.setState({
         activeConversationId: 'conv-1',
@@ -520,7 +520,7 @@ describe('ChatView', () => {
     it('shows plan complete prompt when showPlanCompletePrompt is true', () => {
       useAppStore.setState({
         activeConversationId: 'conv-1',
-        tabs: { [tabId]: makePlanTab(true, { showPlanCompletePrompt: true, planFilePath: '/tmp/plan.md' }) },
+        tabs: { [tabId]: makePlanTab(true, { showPlanCompletePrompt: true, planContent: '# Plan content' }) },
         tabOrder: [tabId],
         activeTabId: tabId,
       });
@@ -533,7 +533,7 @@ describe('ChatView', () => {
     it('shows "Execute Plan" button in plan complete prompt', () => {
       useAppStore.setState({
         activeConversationId: 'conv-1',
-        tabs: { [tabId]: makePlanTab(true, { showPlanCompletePrompt: true, planFilePath: '/tmp/plan.md' }) },
+        tabs: { [tabId]: makePlanTab(true, { showPlanCompletePrompt: true, planContent: '# Plan content' }) },
         tabOrder: [tabId],
         activeTabId: tabId,
       });
@@ -545,7 +545,7 @@ describe('ChatView', () => {
     it('shows "Continue Planning" button in plan complete prompt', () => {
       useAppStore.setState({
         activeConversationId: 'conv-1',
-        tabs: { [tabId]: makePlanTab(true, { showPlanCompletePrompt: true, planFilePath: '/tmp/plan.md' }) },
+        tabs: { [tabId]: makePlanTab(true, { showPlanCompletePrompt: true, planContent: '# Plan content' }) },
         tabOrder: [tabId],
         activeTabId: tabId,
       });
@@ -554,26 +554,26 @@ describe('ChatView', () => {
       expect(screen.getByText('Continue Planning')).toBeTruthy();
     });
 
-    it('execute plan button calls onExecutePlan with conversationId and planFilePath', () => {
+    it('execute plan button calls onExecutePlan with conversationId and planContent', () => {
       const onExecutePlan = vi.fn();
       const setTabShowPlanCompletePrompt = vi.fn();
       useAppStore.setState({
         activeConversationId: 'conv-1',
-        tabs: { [tabId]: makePlanTab(true, { showPlanCompletePrompt: true, planFilePath: '/tmp/plan.md' }) },
+        tabs: { [tabId]: makePlanTab(true, { showPlanCompletePrompt: true, planContent: '# Plan content' }) },
         tabOrder: [tabId],
         activeTabId: tabId,
         setTabShowPlanCompletePrompt,
       });
       render(<ChatView {...defaultProps} tabId={tabId} onExecutePlan={onExecutePlan} />);
       fireEvent.click(screen.getByTestId('execute-plan-btn'));
-      expect(onExecutePlan).toHaveBeenCalledWith('conv-1', '/tmp/plan.md');
+      expect(onExecutePlan).toHaveBeenCalledWith('conv-1', '# Plan content');
     });
 
     it('continue planning button dismisses the plan complete prompt', () => {
       const setTabShowPlanCompletePrompt = vi.fn();
       useAppStore.setState({
         activeConversationId: 'conv-1',
-        tabs: { [tabId]: makePlanTab(true, { showPlanCompletePrompt: true, planFilePath: '/tmp/plan.md' }) },
+        tabs: { [tabId]: makePlanTab(true, { showPlanCompletePrompt: true, planContent: '# Plan content' }) },
         tabOrder: [tabId],
         activeTabId: tabId,
         setTabShowPlanCompletePrompt,
@@ -583,10 +583,10 @@ describe('ChatView', () => {
       expect(setTabShowPlanCompletePrompt).toHaveBeenCalledWith(tabId, false);
     });
 
-    it('does not show execute plan button when planFilePath is null', () => {
+    it('does not show execute plan button when planContent is null', () => {
       useAppStore.setState({
         activeConversationId: 'conv-1',
-        tabs: { [tabId]: makePlanTab(true, { showPlanCompletePrompt: true, planFilePath: null }) },
+        tabs: { [tabId]: makePlanTab(true, { showPlanCompletePrompt: true, planContent: null }) },
         tabOrder: [tabId],
         activeTabId: tabId,
       });
@@ -598,29 +598,6 @@ describe('ChatView', () => {
       expect(screen.getByTestId('continue-planning-btn')).toBeTruthy();
     });
 
-    it('shows plan file path in plan complete prompt when planFilePath is available', () => {
-      useAppStore.setState({
-        activeConversationId: 'conv-1',
-        tabs: { [tabId]: makePlanTab(true, { showPlanCompletePrompt: true, planFilePath: '/tmp/.codeforge/plans/2026-02-19-refactor-db.md' }) },
-        tabOrder: [tabId],
-        activeTabId: tabId,
-      });
-      render(<ChatView {...defaultProps} tabId={tabId} />);
-      expect(screen.getByTestId('plan-file-path')).toBeTruthy();
-      expect(screen.getByTestId('plan-file-path').textContent).toContain('/tmp/.codeforge/plans/2026-02-19-refactor-db.md');
-    });
-
-    it('does not show plan file path when planFilePath is null', () => {
-      useAppStore.setState({
-        activeConversationId: 'conv-1',
-        tabs: { [tabId]: makePlanTab(true, { showPlanCompletePrompt: true, planFilePath: null }) },
-        tabOrder: [tabId],
-        activeTabId: tabId,
-      });
-      render(<ChatView {...defaultProps} tabId={tabId} />);
-      expect(screen.getByTestId('plan-complete-prompt')).toBeTruthy();
-      expect(screen.queryByTestId('plan-file-path')).toBeNull();
-    });
 
     it('does not show plan complete prompt when not streaming but prompt is false', () => {
       useAppStore.setState({

@@ -10,7 +10,7 @@ import { EventRelay } from './event-relay.js';
 import type { WsMessage, SendFn } from '../ws/types.js';
 import type { PromptComposer } from '../prompts/composer.js';
 import { createPermissionHandler } from './permission.js';
-import { writePlanFile, extractTopicFromContent } from './plan-writer.js';
+import { extractTopicFromContent } from './plan-utils.js';
 import { createTodoSyncHook } from './todo-sync.js';
 import { createLogger } from '../utils/logger.js';
 
@@ -118,7 +118,7 @@ interface ConversationStream {
   conversationId: string;
   session: CopilotSession;
   status: 'running' | 'idle' | 'error';
-  mode: 'plan' | 'act';
+  mode: 'plan' | 'autopilot';
   cwd: string;
   startedAt: string;
   accumulation: AccumulationState;
@@ -175,7 +175,7 @@ export interface StartStreamOptions {
   cwd: string;
   disabledSkills?: string[];
   files?: FileReference[];
-  mode?: 'plan' | 'act';
+  mode?: 'plan' | 'autopilot';
   locale?: string;
   /** Subscriber to add synchronously during stream creation, before any async work */
   initialSubscriber?: SendFn;
@@ -256,7 +256,7 @@ export class StreamManager extends EventEmitter {
       conversationId,
       session: null as any, // Set after session creation
       status: 'running',
-      mode: options.mode ?? 'act',
+      mode: options.mode ?? 'autopilot',
       cwd: options.cwd, // Updated to resolvedCwd below
       startedAt: new Date().toISOString(),
       accumulation: createEmptyAccumulation(),
@@ -430,6 +430,12 @@ export class StreamManager extends EventEmitter {
       let sessionRef: CopilotSession | null = null;
       const todoHook = createTodoSyncHook({
         getWorkspacePath: () => (sessionRef as any)?.workspacePath,
+        fallbackWorkspacePath: (sessionId: string) => {
+          // SDK stores session data in ~/.copilot-cli/sessions/{sessionId}/
+          const candidate = resolve(homedir(), '.copilot-cli', 'sessions', sessionId);
+          if (existsSync(candidate)) return candidate;
+          return undefined;
+        },
         getConversationId: (sid) => StreamManager.sessionConversationMap.get(sid),
         broadcast: (convId, msg) => {
           const s = this.streams.get(convId);
@@ -443,6 +449,7 @@ export class StreamManager extends EventEmitter {
 
       const session = await this.sessionManager.getOrCreateSession(sessionOpts);
       sessionRef = session;
+      log.debug({ conversationId, sessionId: session.sessionId, workspacePath: (session as any).workspacePath }, 'Session created/resumed — workspacePath info');
 
       // Persist the SDK session ID so future messages resume the same session
       if (!options.sdkSessionId && session.sessionId) {
@@ -453,14 +460,17 @@ export class StreamManager extends EventEmitter {
       StreamManager.sessionConversationMap.set(session.sessionId, conversationId);
       stream.relay.attach(session);
 
-      // Activate SDK plan mode via RPC and register plan_changed listener
+      // Activate SDK mode via RPC
+      try {
+        const sdkMode = stream.mode === 'plan' ? 'plan' : 'autopilot';
+        await this.sessionManager.setMode(session, sdkMode);
+        log.info({ conversationId, mode: stream.mode }, 'SDK mode activated');
+      } catch (err) {
+        log.warn({ err, conversationId, mode: stream.mode }, 'Failed to set SDK mode via RPC');
+      }
+
+      // Register plan_changed listener for plan mode
       if (stream.mode === 'plan') {
-        try {
-          await this.sessionManager.setMode(session, 'plan');
-          log.info({ conversationId }, 'SDK plan mode activated');
-        } catch (err) {
-          log.warn({ err, conversationId }, 'Failed to set SDK plan mode via RPC — falling back to prompt-only plan mode');
-        }
         stream.planChangedUnsub = this.registerPlanChangedListener(stream);
       }
 
@@ -574,38 +584,33 @@ export class StreamManager extends EventEmitter {
       stream.healthCheckInterval = null;
     }
 
-    // Plan mode: sync accumulated content to SDK plan.md via rpc.plan.update(),
-    // then write locally to .codeforge/plans/.
-    // This keeps the SDK's plan system in sync and triggers plan_changed for other consumers.
-    if (stream.mode === 'plan' && !(stream.pendingIdleExtra as any)?.planFilePath) {
+    // Plan mode: sync accumulated content to SDK plan.md via rpc.plan.update().
+    // SDK's plan.md is the single source of truth — no local file write.
+    if (stream.mode === 'plan' && !(stream.pendingIdleExtra as any)?.planContent) {
       // Capture any remaining content from the final accumulation
       const remaining = stream.accumulation.contentSegments.join('');
       if (remaining) stream.planContentAccumulator += remaining;
 
       const planContent = stream.planContentAccumulator.trim();
       if (planContent.length > 0) {
-        // 1. Sync to SDK's plan.md
+        // Sync to SDK's plan.md
         try {
           await this.sessionManager.updatePlan(stream.session, planContent);
           log.info({ conversationId }, 'Plan content synced to SDK plan.md via rpc.plan.update()');
         } catch (err) {
-          log.warn({ err, conversationId }, 'Failed to sync plan to SDK — continuing with local write');
+          log.warn({ err, conversationId }, 'Failed to sync plan to SDK');
         }
 
-        // 2. Write locally to .codeforge/plans/
         const topic = extractTopicFromContent(planContent);
-        const planFilePath = writePlanFile(stream.cwd, planContent, topic);
-        this.repo.update(stream.conversationId, { planFilePath });
         stream.pendingIdleExtra = {
           ...(stream.pendingIdleExtra ?? {}),
-          planFilePath,
+          planContent,
           planArtifact: {
             title: topic || 'Implementation Plan',
             content: planContent,
-            filePath: planFilePath,
           },
         };
-        log.info({ conversationId, planFilePath }, 'Plan written to local file');
+        log.info({ conversationId }, 'Plan content prepared for broadcast');
       }
     }
 
@@ -726,7 +731,7 @@ export class StreamManager extends EventEmitter {
     pending.resolve({ answer, wasFreeform });
   }
 
-  setMode(conversationId: string, mode: 'plan' | 'act'): void {
+  setMode(conversationId: string, mode: 'plan' | 'autopilot'): void {
     const stream = this.streams.get(conversationId);
     if (!stream) return;
 
@@ -734,7 +739,7 @@ export class StreamManager extends EventEmitter {
 
     // Sync mode with SDK via RPC (fire-and-forget)
     if (stream.session) {
-      const sdkMode = mode === 'plan' ? 'plan' : 'interactive';
+      const sdkMode = mode === 'plan' ? 'plan' : 'autopilot';
       this.sessionManager.setMode(stream.session, sdkMode).catch((err: unknown) => {
         log.warn({ err, conversationId }, 'Failed to set SDK mode via RPC');
       });
@@ -756,7 +761,7 @@ export class StreamManager extends EventEmitter {
   }
 
   /** Register a listener for SDK session.plan_changed events.
-   *  When the SDK creates/updates plan.md, we read it, write to .codeforge/plans/, and store in pendingIdleExtra. */
+   *  When the SDK creates/updates plan.md, we read it and store content in pendingIdleExtra. */
   private registerPlanChangedListener(stream: ConversationStream): () => void {
     return stream.session.on('session.plan_changed', (event: any) => {
       const d = event?.data ?? event;
@@ -764,20 +769,17 @@ export class StreamManager extends EventEmitter {
         this.sessionManager.readPlan(stream.session).then((planResult) => {
           if (planResult.exists && planResult.content) {
             const topic = extractTopicFromContent(planResult.content);
-            const planFilePath = writePlanFile(stream.cwd, planResult.content, topic);
-            this.repo.update(stream.conversationId, { planFilePath });
             stream.pendingIdleExtra = {
               ...(stream.pendingIdleExtra ?? {}),
-              planFilePath,
+              planContent: planResult.content,
               planArtifact: {
                 title: topic || 'Implementation Plan',
                 content: planResult.content,
-                filePath: planFilePath,
               },
             };
           }
         }).catch((err: unknown) => {
-          log.error({ err, conversationId: stream.conversationId }, 'Failed to read/write SDK plan');
+          log.error({ err, conversationId: stream.conversationId }, 'Failed to read SDK plan');
         });
       }
     });
@@ -1078,8 +1080,8 @@ export class StreamManager extends EventEmitter {
       }
       case 'copilot:idle': {
         // Plan mode fallback: accumulate content before it's persisted/reset.
-        // If SDK plan_changed never fires, finishStream will use this to create the plan file.
-        if (stream.mode === 'plan' && !(stream.pendingIdleExtra as any)?.planFilePath) {
+        // If SDK plan_changed never fires, finishStream will use this to prepare planContent.
+        if (stream.mode === 'plan' && !(stream.pendingIdleExtra as any)?.planContent) {
           const planSegment = stream.accumulation.contentSegments.join('');
           if (planSegment) stream.planContentAccumulator += planSegment;
         }

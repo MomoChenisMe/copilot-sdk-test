@@ -153,6 +153,87 @@ describe('prompts routes', () => {
     });
   });
 
+  // --- Autopilot Prompt ---
+
+  describe('GET /api/prompts/autopilot-prompt', () => {
+    it('should return autopilot prompt content', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'AUTOPILOT_PROMPT.md'), 'My autopilot prompt');
+      const res = await fetch(`${baseUrl}/api/prompts/autopilot-prompt`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.content).toBe('My autopilot prompt');
+    });
+
+    it('should return default content when autopilot prompt has not been customized', async () => {
+      const res = await fetch(`${baseUrl}/api/prompts/autopilot-prompt`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.content).toContain('Autopilot Mode');
+    });
+  });
+
+  describe('PUT /api/prompts/autopilot-prompt', () => {
+    it('should update autopilot prompt content', async () => {
+      const res = await fetch(`${baseUrl}/api/prompts/autopilot-prompt`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'Custom autopilot instructions' }),
+      });
+      expect(res.status).toBe(200);
+      expect(fs.readFileSync(path.join(tmpDir, 'AUTOPILOT_PROMPT.md'), 'utf-8')).toBe('Custom autopilot instructions');
+    });
+  });
+
+  describe('POST /api/prompts/autopilot-prompt/reset', () => {
+    it('should reset to default autopilot prompt', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'AUTOPILOT_PROMPT.md'), 'Custom autopilot');
+      const res = await fetch(`${baseUrl}/api/prompts/autopilot-prompt/reset`, {
+        method: 'POST',
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.content).toContain('Autopilot Mode');
+      const fileContent = fs.readFileSync(path.join(tmpDir, 'AUTOPILOT_PROMPT.md'), 'utf-8');
+      expect(fileContent).toContain('Autopilot Mode');
+    });
+  });
+
+  // --- Act Prompt (legacy alias for autopilot-prompt) ---
+
+  describe('GET /api/prompts/act-prompt (legacy alias)', () => {
+    it('should return AUTOPILOT_PROMPT.md content', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'AUTOPILOT_PROMPT.md'), 'My autopilot prompt');
+      const res = await fetch(`${baseUrl}/api/prompts/act-prompt`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.content).toBe('My autopilot prompt');
+    });
+  });
+
+  describe('PUT /api/prompts/act-prompt (legacy alias)', () => {
+    it('should update AUTOPILOT_PROMPT.md content', async () => {
+      const res = await fetch(`${baseUrl}/api/prompts/act-prompt`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'Updated via act alias' }),
+      });
+      expect(res.status).toBe(200);
+      expect(fs.readFileSync(path.join(tmpDir, 'AUTOPILOT_PROMPT.md'), 'utf-8')).toBe('Updated via act alias');
+    });
+  });
+
+  describe('POST /api/prompts/act-prompt/reset (legacy alias)', () => {
+    it('should reset AUTOPILOT_PROMPT.md to default', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'AUTOPILOT_PROMPT.md'), 'Custom content');
+      const res = await fetch(`${baseUrl}/api/prompts/act-prompt/reset`, {
+        method: 'POST',
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.content).toContain('Autopilot Mode');
+    });
+  });
+
   // --- Plan Prompt ---
 
   describe('GET /api/prompts/plan-prompt', () => {

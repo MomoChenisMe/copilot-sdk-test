@@ -46,7 +46,6 @@ export class ConversationRepository {
       sdkSessionId?: string;
       model?: string;
       cwd?: string;
-      planFilePath?: string;
       cronEnabled?: boolean;
       cronScheduleType?: string | null;
       cronScheduleValue?: string | null;
@@ -79,10 +78,6 @@ export class ConversationRepository {
     if (updates.cwd !== undefined) {
       setClauses.push('cwd = ?');
       params.push(updates.cwd);
-    }
-    if (updates.planFilePath !== undefined) {
-      setClauses.push('plan_file_path = ?');
-      params.push(updates.planFilePath);
     }
     if (updates.cronEnabled !== undefined) {
       setClauses.push('cron_enabled = ?');
@@ -133,8 +128,9 @@ export class ConversationRepository {
   addMessage(
     conversationId: string,
     input: { role: string; content: string; metadata?: unknown },
+    clientId?: string,
   ): Message {
-    const id = randomUUID();
+    const id = clientId || randomUUID();
 
     this.db
       .prepare(

@@ -46,6 +46,15 @@ export interface TaskItem {
   updated_at: string;
 }
 
+export interface SubagentItem {
+  toolCallId: string;
+  agentName: string;
+  displayName: string;
+  status: 'running' | 'completed' | 'failed';
+  description?: string;
+  error?: string;
+}
+
 export interface ToastItem {
   id: string;
   type: 'success' | 'error' | 'info';
@@ -72,13 +81,14 @@ export interface TabState {
   usage: UsageInfo;
   planMode: boolean;
   showPlanCompletePrompt: boolean;
-  planFilePath: string | null;
+  planContent: string | null;
   userInputRequest: UserInputRequest | null;
   artifacts: ParsedArtifact[];
   activeArtifactId: string | null;
   artifactsPanelOpen: boolean;
   openspecPanelOpen: boolean;
   tasks: TaskItem[];
+  subagents: SubagentItem[];
   cronConfigOpen: boolean;
   webSearchForced: boolean;
   customTitle?: string;
@@ -219,13 +229,18 @@ export interface AppState {
   incrementTabPremiumLocal: (tabId: string) => void;
   setTabPlanMode: (tabId: string, planMode: boolean) => void;
   setTabShowPlanCompletePrompt: (tabId: string, show: boolean) => void;
-  setTabPlanFilePath: (tabId: string, path: string | null) => void;
+  setTabPlanContent: (tabId: string, content: string | null) => void;
   setTabUserInputRequest: (tabId: string, request: UserInputRequest | null) => void;
   setTabCronConfigOpen: (tabId: string, open: boolean) => void;
   setTabWebSearchForced: (tabId: string, forced: boolean) => void;
 
   // Actions — Per-tab tasks
   setTabTasks: (tabId: string, tasks: TaskItem[]) => void;
+
+  // Actions — Per-tab subagents (Fleet Mode)
+  addTabSubagent: (tabId: string, subagent: SubagentItem) => void;
+  updateTabSubagent: (tabId: string, toolCallId: string, updates: Partial<SubagentItem>) => void;
+  clearTabSubagents: (tabId: string) => void;
 
   // Actions — Per-tab artifacts
   addTabArtifacts: (tabId: string, artifacts: ParsedArtifact[]) => void;
@@ -484,13 +499,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, contextWindowUsed: 0, contextWindowMax: 0, premiumRequestsUsed: 0, premiumRequestsLocal: 0, premiumRequestsTotal: 0, premiumResetDate: null, premiumUnlimited: false, model: null },
       planMode: ephemeral?.planMode ?? false,
       showPlanCompletePrompt: ephemeral?.showPlanCompletePrompt ?? false,
-      planFilePath: ephemeral?.planFilePath ?? null,
+      planContent: ephemeral?.planContent ?? null,
       userInputRequest: ephemeral?.userInputRequest ?? null,
       artifacts: ephemeral?.artifacts ?? [],
       activeArtifactId: ephemeral?.activeArtifactId ?? null,
       artifactsPanelOpen: ephemeral?.artifactsPanelOpen ?? false,
       openspecPanelOpen: false,
       tasks: [],
+      subagents: [],
       cronConfigOpen: false,
       webSearchForced: false,
     };
@@ -586,13 +602,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, contextWindowUsed: 0, contextWindowMax: 0, premiumRequestsUsed: 0, premiumRequestsLocal: 0, premiumRequestsTotal: 0, premiumResetDate: null, premiumUnlimited: false, model: null },
       planMode: ephemeral?.planMode ?? false,
       showPlanCompletePrompt: ephemeral?.showPlanCompletePrompt ?? false,
-      planFilePath: ephemeral?.planFilePath ?? null,
+      planContent: ephemeral?.planContent ?? null,
       userInputRequest: ephemeral?.userInputRequest ?? null,
       artifacts: ephemeral?.artifacts ?? [],
       activeArtifactId: ephemeral?.activeArtifactId ?? null,
       artifactsPanelOpen: ephemeral?.artifactsPanelOpen ?? false,
       openspecPanelOpen: false,
       tasks: [],
+      subagents: [],
       cronConfigOpen: false,
       webSearchForced: false,
     };
@@ -654,7 +671,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, contextWindowUsed: 0, contextWindowMax: 0, premiumRequestsUsed: 0, premiumRequestsLocal: 0, premiumRequestsTotal: 0, premiumResetDate: null, premiumUnlimited: false, model: null },
           planMode: (ext.planMode as boolean) ?? false,
           showPlanCompletePrompt: (ext.showPlanCompletePrompt as boolean) ?? false,
-          planFilePath: (ext.planFilePath as string | null) ?? null,
+          planContent: (ext.planContent as string | null) ?? null,
           userInputRequest: (ext.userInputRequest as UserInputRequest | null) ?? null,
           artifacts: (Array.isArray(ext.artifacts) ? ext.artifacts : []) as ParsedArtifact[],
           activeArtifactId: (ext.activeArtifactId as string | null) ?? null,
@@ -663,6 +680,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           cronConfigOpen: false,
           webSearchForced: false,
           tasks: [],
+          subagents: [],
         };
         tabOrder.push(tabId);
       }
@@ -1005,14 +1023,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     persistOpenTabs(s.tabs, s.tabOrder);
   },
 
-  setTabPlanFilePath: (tabId: string, path: string | null) => {
+  setTabPlanContent: (tabId: string, content: string | null) => {
     set((state) => {
       const tab = state.tabs[tabId];
       if (!tab) return state;
       return {
         tabs: {
           ...state.tabs,
-          [tabId]: { ...tab, planFilePath: path },
+          [tabId]: { ...tab, planContent: content },
         },
       };
     });
@@ -1139,6 +1157,36 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { tabs: { ...state.tabs, [tabId]: { ...tab, tasks } } };
     }),
 
+  // Subagent actions (Fleet Mode)
+  addTabSubagent: (tabId, subagent) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return { tabs: { ...state.tabs, [tabId]: { ...tab, subagents: [...tab.subagents, subagent] } } };
+    }),
+  updateTabSubagent: (tabId, toolCallId, updates) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return {
+        tabs: {
+          ...state.tabs,
+          [tabId]: {
+            ...tab,
+            subagents: tab.subagents.map((s) =>
+              s.toolCallId === toolCallId ? { ...s, ...updates } : s,
+            ),
+          },
+        },
+      };
+    }),
+  clearTabSubagents: (tabId) =>
+    set((state) => {
+      const tab = state.tabs[tabId];
+      if (!tab) return state;
+      return { tabs: { ...state.tabs, [tabId]: { ...tab, subagents: [] } } };
+    }),
+
   // Toast notifications
   toasts: [],
   addToast: (toast) =>
@@ -1186,7 +1234,7 @@ function saveConversationEphemeral(conversationId: string, tab: TabState) {
       artifactsPanelOpen: tab.artifactsPanelOpen,
       planMode: tab.planMode,
       showPlanCompletePrompt: tab.showPlanCompletePrompt,
-      planFilePath: tab.planFilePath,
+      planContent: tab.planContent,
       savedAt: Date.now(),
     };
     localStorage.setItem(`codeforge:ephemeral:${conversationId}`, JSON.stringify(data));
@@ -1204,7 +1252,7 @@ function loadConversationEphemeral(conversationId: string): {
   artifactsPanelOpen: boolean;
   planMode: boolean;
   showPlanCompletePrompt: boolean;
-  planFilePath: string | null;
+  planContent: string | null;
 } | null {
   try {
     const key = `codeforge:ephemeral:${conversationId}`;
@@ -1235,7 +1283,7 @@ function persistOpenTabs(tabs: Record<string, TabState>, tabOrder: string[]) {
         id: t.id, title: t.title, conversationId: t.conversationId,
         artifacts: t.artifacts, activeArtifactId: t.activeArtifactId, artifactsPanelOpen: t.artifactsPanelOpen,
         userInputRequest: t.userInputRequest,
-        planMode: t.planMode, showPlanCompletePrompt: t.showPlanCompletePrompt, planFilePath: t.planFilePath,
+        planMode: t.planMode, showPlanCompletePrompt: t.showPlanCompletePrompt, planContent: t.planContent,
       };
     });
     const activeTabId = useAppStore.getState().activeTabId;

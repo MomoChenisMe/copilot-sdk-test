@@ -107,12 +107,12 @@ describe('ConversationRepository', () => {
       expect(updated!.model).toBe('claude-sonnet-4-5');
     });
 
-    it('should update planFilePath', () => {
+    it('should keep planFilePath as null (no longer updated via update())', () => {
       const conv = repo.create({ model: 'gpt-5', cwd: '/tmp' });
-      const updated = repo.update(conv.id, { planFilePath: '/tmp/.codeforge/plans/2026-02-19-plan.md' });
+      const updated = repo.update(conv.id, { title: 'test' });
 
       expect(updated).toBeTruthy();
-      expect(updated!.planFilePath).toBe('/tmp/.codeforge/plans/2026-02-19-plan.md');
+      expect(updated!.planFilePath).toBeNull();
     });
 
     it('should return null for nonexistent id', () => {
@@ -151,6 +151,24 @@ describe('ConversationRepository', () => {
       expect(messages[0].content).toBe('hello');
       expect(messages[1].role).toBe('assistant');
       expect(messages[1].metadata).toEqual({ usage: { tokens: 10 } });
+    });
+
+    it('should use clientId when provided', () => {
+      const conv = repo.create({ model: 'gpt-5', cwd: '/tmp' });
+      const clientId = 'client-generated-uuid-123';
+      const msg = repo.addMessage(conv.id, { role: 'user', content: 'hello' }, clientId);
+      expect(msg.id).toBe(clientId);
+
+      const messages = repo.getMessages(conv.id);
+      expect(messages).toHaveLength(1);
+      expect(messages[0].id).toBe(clientId);
+    });
+
+    it('should auto-generate id when clientId is not provided', () => {
+      const conv = repo.create({ model: 'gpt-5', cwd: '/tmp' });
+      const msg = repo.addMessage(conv.id, { role: 'user', content: 'hello' });
+      expect(msg.id).toBeTruthy();
+      expect(msg.id.length).toBeGreaterThan(0);
     });
   });
 

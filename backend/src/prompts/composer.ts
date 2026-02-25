@@ -16,20 +16,36 @@ export class PromptComposer {
     private memoryStore?: MemoryStore,
   ) {}
 
-  compose(cwd?: string, locale?: string, mode?: 'plan' | 'act'): string {
+  compose(cwd?: string, locale?: string, mode?: 'plan' | 'autopilot'): string {
     const sections: string[] = [];
+
+    // 0. Locale / language instruction (placed FIRST for highest priority)
+    if (locale && locale !== 'en') {
+      const LOCALE_NAMES: Record<string, string> = {
+        'zh-TW': '繁體中文（台灣）',
+        'zh-CN': '简体中文',
+        'ja': '日本語',
+        'ko': '한국어',
+        'es': 'Español',
+        'fr': 'Français',
+        'de': 'Deutsch',
+        'pt': 'Português',
+      };
+      const langName = LOCALE_NAMES[locale] || locale;
+      sections.push(`# Language\nIMPORTANT: Always respond in ${langName}. Use ${langName} for all explanations, comments, and communications with the user. Technical terms and code identifiers should remain in their original form.`);
+    }
 
     // 1. SYSTEM_PROMPT.md
     const systemPrompt = this.store.readFile('SYSTEM_PROMPT.md');
     if (systemPrompt.trim()) sections.push(systemPrompt);
 
-    // 1b. Mode-specific prompt: ACT_PROMPT.md or PLAN_PROMPT.md
+    // 1b. Mode-specific prompt injection
     if (mode === 'plan') {
       const planPrompt = this.store.readFile('PLAN_PROMPT.md');
       if (planPrompt.trim()) sections.push(planPrompt);
     } else {
-      const actPrompt = this.store.readFile('ACT_PROMPT.md');
-      if (actPrompt.trim()) sections.push(actPrompt);
+      const autopilotPrompt = this.store.readFile('AUTOPILOT_PROMPT.md');
+      if (autopilotPrompt.trim()) sections.push(autopilotPrompt);
     }
 
     // 2. PROFILE.md (includes merged agent rules + preferences)
@@ -70,22 +86,6 @@ export class PromptComposer {
           // Neither file exists — skip silently
         }
       }
-    }
-
-    // 6. Locale / language instruction
-    if (locale && locale !== 'en') {
-      const LOCALE_NAMES: Record<string, string> = {
-        'zh-TW': '繁體中文（台灣）',
-        'zh-CN': '简体中文',
-        'ja': '日本語',
-        'ko': '한국어',
-        'es': 'Español',
-        'fr': 'Français',
-        'de': 'Deutsch',
-        'pt': 'Português',
-      };
-      const langName = LOCALE_NAMES[locale] || locale;
-      sections.push(`# Language\nAlways respond in ${langName}. Use ${langName} for all explanations, comments, and communications. Technical terms and code identifiers should remain in their original form.`);
     }
 
     let result = sections.join(SEPARATOR);

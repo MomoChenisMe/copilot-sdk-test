@@ -35,6 +35,16 @@ const { mockStreamManager, mockRepo } = vi.hoisted(() => {
       createdAt: '2024-01-01',
       updatedAt: '2024-01-01',
     }),
+    create: vi.fn().mockReturnValue({
+      id: 'new-conv-1',
+      title: null,
+      sdkSessionId: null,
+      model: 'gpt-5',
+      cwd: '/tmp',
+      pinned: false,
+      createdAt: '2024-01-01',
+      updatedAt: '2024-01-01',
+    }),
     update: vi.fn().mockReturnValue(null),
     addMessage: vi.fn(),
     getMessages: vi.fn().mockReturnValue([]),
@@ -68,6 +78,16 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
       id: 'conv-1',
       title: 'Test',
       sdkSessionId: 'sdk-1',
+      model: 'gpt-5',
+      cwd: '/tmp',
+      pinned: false,
+      createdAt: '2024-01-01',
+      updatedAt: '2024-01-01',
+    });
+    mockRepo.create.mockClear().mockReturnValue({
+      id: 'new-conv-1',
+      title: null,
+      sdkSessionId: null,
       model: 'gpt-5',
       cwd: '/tmp',
       pinned: false,
@@ -131,7 +151,19 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
       expect(mockRepo.addMessage).toHaveBeenCalledWith('conv-1', {
         role: 'user',
         content: 'Hello',
+      }, undefined);
+    });
+
+    it('should pass clientMessageId to repo.addMessage when provided', () => {
+      handle({
+        type: 'copilot:send',
+        data: { conversationId: 'conv-1', prompt: 'Hello', messageId: 'client-uuid-123' },
       });
+
+      expect(mockRepo.addMessage).toHaveBeenCalledWith('conv-1', {
+        role: 'user',
+        content: 'Hello',
+      }, 'client-uuid-123');
     });
 
     it('should save user message with attachment metadata when files are provided', () => {
@@ -154,7 +186,7 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
             { id: 'f1', originalName: 'photo.png', mimeType: 'image/png', size: 1024 },
           ],
         },
-      });
+      }, undefined);
     });
 
     it('should NOT include metadata when no files are provided', () => {
@@ -166,7 +198,7 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
       expect(mockRepo.addMessage).toHaveBeenCalledWith('conv-1', {
         role: 'user',
         content: 'Hello',
-      });
+      }, undefined);
     });
 
     it('should pass disabledSkills to streamManager.startStream', async () => {
@@ -406,16 +438,16 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
       });
     });
 
-    it('should forward act mode from copilot:send', async () => {
+    it('should forward autopilot mode from copilot:send', async () => {
       handle({
         type: 'copilot:send',
-        data: { conversationId: 'conv-1', prompt: 'Hello', mode: 'act' },
+        data: { conversationId: 'conv-1', prompt: 'Hello', mode: 'autopilot' },
       });
 
       await vi.waitFor(() => {
         expect(mockStreamManager.startStream).toHaveBeenCalledWith(
           'conv-1',
-          expect.objectContaining({ mode: 'act' }),
+          expect.objectContaining({ mode: 'autopilot' }),
         );
       });
     });
@@ -828,7 +860,7 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
       expect(mockRepo.addMessage).toHaveBeenCalledWith('conv-1', {
         role: 'user',
         content: 'User message',
-      });
+      }, undefined);
     });
   });
 
@@ -896,17 +928,12 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
   });
 
   describe('copilot:execute_plan abort-before-start', () => {
-    beforeEach(() => {
-      vi.mocked(readFileSync).mockReturnValue('# Plan Content\n\n- Step 1\n- Step 2');
-      vi.mocked(existsSync).mockReturnValue(true);
-    });
-
-    it('should abort existing stream before executing plan', async () => {
+    it('should abort existing stream on old conversation before executing plan', async () => {
       mockStreamManager.hasStream.mockReturnValue(true);
 
       handle({
         type: 'copilot:execute_plan',
-        data: { conversationId: 'conv-1', planFilePath: '/tmp/plan.md' },
+        data: { conversationId: 'conv-1', planContent: '# Plan Content\n\n- Step 1\n- Step 2' },
       });
 
       await vi.waitFor(() => {
@@ -916,90 +943,86 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
       });
     });
 
-    it('should pass initialSubscriber to startStream for execute_plan', async () => {
+    it('should start stream on new conversation (not old)', async () => {
       handle({
         type: 'copilot:execute_plan',
-        data: { conversationId: 'conv-1', planFilePath: '/tmp/plan.md' },
+        data: { conversationId: 'conv-1', planContent: '# Plan Content' },
       });
 
       await vi.waitFor(() => {
         expect(mockStreamManager.startStream).toHaveBeenCalledWith(
-          'conv-1',
+          'new-conv-1',
           expect.objectContaining({ initialSubscriber: send }),
         );
       });
     });
   });
 
-  // === 9.1 Execute plan ===
-  describe('copilot:execute_plan', () => {
-    beforeEach(() => {
-      vi.mocked(readFileSync).mockReturnValue('# Plan Content\n\n- Step 1\n- Step 2');
-      vi.mocked(existsSync).mockReturnValue(true);
-    });
-
-    it('should read plan file and start stream with plan content in act mode', async () => {
+  // === 9.1 Execute plan (content-based) — creates new conversation ===
+  describe('copilot:execute_plan (new conversation flow)', () => {
+    it('should create a new conversation and start autopilot stream on it', async () => {
       handle({
         type: 'copilot:execute_plan',
-        data: { conversationId: 'conv-1', planFilePath: '/tmp/plan.md' },
+        data: { conversationId: 'conv-1', planContent: '# Plan Content\n\n- Step 1\n- Step 2' },
       });
 
       await vi.waitFor(() => {
-        expect(readFileSync).toHaveBeenCalledWith('/tmp/plan.md', 'utf-8');
-        expect(mockStreamManager.startStream).toHaveBeenCalledWith('conv-1', expect.objectContaining({
+        expect(mockRepo.create).toHaveBeenCalledWith({ model: 'gpt-5', cwd: '/tmp' });
+        expect(mockStreamManager.startStream).toHaveBeenCalledWith('new-conv-1', expect.objectContaining({
           prompt: expect.stringContaining('# Plan Content'),
-          mode: 'act',
+          mode: 'autopilot',
+          sdkSessionId: null,
         }));
       });
     });
 
-    it('should clear SDK session before starting stream', async () => {
+    it('should set title on new conversation with "Execute: {topic}"', async () => {
       handle({
         type: 'copilot:execute_plan',
-        data: { conversationId: 'conv-1', planFilePath: '/tmp/plan.md' },
+        data: { conversationId: 'conv-1', planContent: '# My Plan Topic\n\n- Step 1' },
       });
 
       await vi.waitFor(() => {
-        expect(mockRepo.update).toHaveBeenCalledWith('conv-1', { sdkSessionId: null });
-        expect(mockStreamManager.startStream).toHaveBeenCalled();
+        expect(mockRepo.update).toHaveBeenCalledWith('new-conv-1', { title: 'Execute: My Plan Topic' });
       });
     });
 
-    it('should use initialSubscriber instead of subscribe for execute_plan', async () => {
+    it('should broadcast copilot:plan_execution_started event', async () => {
       handle({
         type: 'copilot:execute_plan',
-        data: { conversationId: 'conv-1', planFilePath: '/tmp/plan.md' },
+        data: { conversationId: 'conv-1', planContent: '# My Plan\n\nSteps' },
+      });
+
+      await vi.waitFor(() => {
+        expect(send).toHaveBeenCalledWith({
+          type: 'copilot:plan_execution_started',
+          data: {
+            oldConversationId: 'conv-1',
+            newConversationId: 'new-conv-1',
+            title: 'Execute: My Plan',
+          },
+        });
+      });
+    });
+
+    it('should use initialSubscriber on new conversation', async () => {
+      handle({
+        type: 'copilot:execute_plan',
+        data: { conversationId: 'conv-1', planContent: '# Plan Content' },
       });
 
       await vi.waitFor(() => {
         expect(mockStreamManager.startStream).toHaveBeenCalledWith(
-          'conv-1',
+          'new-conv-1',
           expect.objectContaining({ initialSubscriber: send }),
         );
-        // subscribe() should NOT be called separately
-        expect(mockStreamManager.subscribe).not.toHaveBeenCalled();
-      });
-    });
-
-    it('should pass conversation model and cwd to startStream', async () => {
-      handle({
-        type: 'copilot:execute_plan',
-        data: { conversationId: 'conv-1', planFilePath: '/tmp/plan.md' },
-      });
-
-      await vi.waitFor(() => {
-        expect(mockStreamManager.startStream).toHaveBeenCalledWith('conv-1', expect.objectContaining({
-          model: 'gpt-5',
-          cwd: '/tmp',
-          sdkSessionId: null,
-        }));
       });
     });
 
     it('should send error when conversationId is missing', () => {
       handle({
         type: 'copilot:execute_plan',
-        data: { planFilePath: '/tmp/plan.md' },
+        data: { planContent: '# Plan Content' },
       });
 
       expect(send).toHaveBeenCalledWith({
@@ -1009,7 +1032,7 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
       expect(mockStreamManager.startStream).not.toHaveBeenCalled();
     });
 
-    it('should send error when planFilePath is missing', () => {
+    it('should send error when planContent is missing', () => {
       handle({
         type: 'copilot:execute_plan',
         data: { conversationId: 'conv-1' },
@@ -1017,7 +1040,7 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
 
       expect(send).toHaveBeenCalledWith({
         type: 'copilot:error',
-        data: { message: 'planFilePath is required' },
+        data: { message: 'planContent is required' },
       });
       expect(mockStreamManager.startStream).not.toHaveBeenCalled();
     });
@@ -1027,7 +1050,7 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
 
       handle({
         type: 'copilot:execute_plan',
-        data: { conversationId: 'nonexistent', planFilePath: '/tmp/plan.md' },
+        data: { conversationId: 'nonexistent', planContent: '# Plan Content' },
       });
 
       expect(send).toHaveBeenCalledWith({
@@ -1037,27 +1060,12 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
       expect(mockStreamManager.startStream).not.toHaveBeenCalled();
     });
 
-    it('should send error when plan file does not exist', () => {
-      vi.mocked(existsSync).mockReturnValue(false);
-
-      handle({
-        type: 'copilot:execute_plan',
-        data: { conversationId: 'conv-1', planFilePath: '/tmp/missing.md' },
-      });
-
-      expect(send).toHaveBeenCalledWith({
-        type: 'copilot:error',
-        data: { message: 'Plan file not found: /tmp/missing.md' },
-      });
-      expect(mockStreamManager.startStream).not.toHaveBeenCalled();
-    });
-
     it('should send error when startStream fails', async () => {
       mockStreamManager.startStream.mockRejectedValue(new Error('Stream error'));
 
       handle({
         type: 'copilot:execute_plan',
-        data: { conversationId: 'conv-1', planFilePath: '/tmp/plan.md' },
+        data: { conversationId: 'conv-1', planContent: '# Plan Content' },
       });
 
       await vi.waitFor(() => {
@@ -1065,6 +1073,34 @@ describe('copilot WS handler (v2 — StreamManager delegation)', () => {
           type: 'copilot:error',
           data: { message: 'Stream error' },
         });
+      });
+    });
+
+    it('should pass locale to startStream when provided', async () => {
+      handle({
+        type: 'copilot:execute_plan',
+        data: { conversationId: 'conv-1', planContent: '# Plan Content', locale: 'zh-TW' },
+      });
+
+      await vi.waitFor(() => {
+        expect(mockStreamManager.startStream).toHaveBeenCalledWith(
+          'new-conv-1',
+          expect.objectContaining({ locale: 'zh-TW' }),
+        );
+      });
+    });
+
+    it('should not include locale in startStream when not provided', async () => {
+      handle({
+        type: 'copilot:execute_plan',
+        data: { conversationId: 'conv-1', planContent: '# Plan Content' },
+      });
+
+      await vi.waitFor(() => {
+        expect(mockStreamManager.startStream).toHaveBeenCalledWith(
+          'new-conv-1',
+          expect.not.objectContaining({ locale: expect.anything() }),
+        );
       });
     });
   });

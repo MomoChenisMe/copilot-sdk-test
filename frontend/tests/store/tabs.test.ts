@@ -395,7 +395,7 @@ describe('Tab localStorage restore', () => {
           userInputRequest: { requestId: 'req-1', question: 'Continue?', choices: ['Yes', 'No'] },
           planMode: true,
           showPlanCompletePrompt: true,
-          planFilePath: '/tmp/plan.md',
+          planContent: '# Plan content',
         },
       ],
       activeTabId: 'tab-a',
@@ -409,7 +409,7 @@ describe('Tab localStorage restore', () => {
     expect(tab.userInputRequest).toEqual({ requestId: 'req-1', question: 'Continue?', choices: ['Yes', 'No'] });
     expect(tab.planMode).toBe(true);
     expect(tab.showPlanCompletePrompt).toBe(true);
-    expect(tab.planFilePath).toBe('/tmp/plan.md');
+    expect(tab.planContent).toBe('# Plan content');
   });
 
   it('should fallback ephemeral state to defaults when missing from persisted data', () => {
@@ -426,7 +426,7 @@ describe('Tab localStorage restore', () => {
     expect(tab.userInputRequest).toBeNull();
     expect(tab.planMode).toBe(false);
     expect(tab.showPlanCompletePrompt).toBe(false);
-    expect(tab.planFilePath).toBeNull();
+    expect(tab.planContent).toBeNull();
   });
 
   it('should migrate old format (no conversationId field) to new format', () => {
@@ -632,6 +632,97 @@ describe('setTabCustomTitle and setTabColor', () => {
   it('should not throw for non-existent tab', () => {
     expect(() => useAppStore.getState().setTabCustomTitle('nonexistent', 'x')).not.toThrow();
     expect(() => useAppStore.getState().setTabColor('nonexistent', '#fff')).not.toThrow();
+  });
+});
+
+describe('Subagent state (Fleet Mode)', () => {
+  let tabId: string;
+
+  beforeEach(() => {
+    useAppStore.setState({ tabs: {}, tabOrder: [], activeTabId: null });
+    tabId = openTabAndGetId('conv-1', 'Chat 1');
+  });
+
+  it('tab should initialize with empty subagents array', () => {
+    expect(useAppStore.getState().tabs[tabId].subagents).toEqual([]);
+  });
+
+  it('addTabSubagent should add a new subagent', () => {
+    useAppStore.getState().addTabSubagent(tabId, {
+      toolCallId: 'sa-1',
+      agentName: 'researcher',
+      displayName: 'Researcher',
+      status: 'running',
+      description: 'Researches topics',
+    });
+    const subagents = useAppStore.getState().tabs[tabId].subagents;
+    expect(subagents).toHaveLength(1);
+    expect(subagents[0].toolCallId).toBe('sa-1');
+    expect(subagents[0].agentName).toBe('researcher');
+    expect(subagents[0].displayName).toBe('Researcher');
+    expect(subagents[0].status).toBe('running');
+    expect(subagents[0].description).toBe('Researches topics');
+  });
+
+  it('addTabSubagent should append multiple subagents', () => {
+    useAppStore.getState().addTabSubagent(tabId, {
+      toolCallId: 'sa-1', agentName: 'researcher', displayName: 'Researcher', status: 'running',
+    });
+    useAppStore.getState().addTabSubagent(tabId, {
+      toolCallId: 'sa-2', agentName: 'coder', displayName: 'Coder', status: 'running',
+    });
+    expect(useAppStore.getState().tabs[tabId].subagents).toHaveLength(2);
+  });
+
+  it('updateTabSubagent should update an existing subagent by toolCallId', () => {
+    useAppStore.getState().addTabSubagent(tabId, {
+      toolCallId: 'sa-1', agentName: 'researcher', displayName: 'Researcher', status: 'running',
+    });
+    useAppStore.getState().updateTabSubagent(tabId, 'sa-1', { status: 'completed' });
+    const subagent = useAppStore.getState().tabs[tabId].subagents[0];
+    expect(subagent.status).toBe('completed');
+  });
+
+  it('updateTabSubagent should add error field on failure', () => {
+    useAppStore.getState().addTabSubagent(tabId, {
+      toolCallId: 'sa-1', agentName: 'researcher', displayName: 'Researcher', status: 'running',
+    });
+    useAppStore.getState().updateTabSubagent(tabId, 'sa-1', { status: 'failed', error: 'Timed out' });
+    const subagent = useAppStore.getState().tabs[tabId].subagents[0];
+    expect(subagent.status).toBe('failed');
+    expect(subagent.error).toBe('Timed out');
+  });
+
+  it('updateTabSubagent should not affect other subagents', () => {
+    useAppStore.getState().addTabSubagent(tabId, {
+      toolCallId: 'sa-1', agentName: 'researcher', displayName: 'Researcher', status: 'running',
+    });
+    useAppStore.getState().addTabSubagent(tabId, {
+      toolCallId: 'sa-2', agentName: 'coder', displayName: 'Coder', status: 'running',
+    });
+    useAppStore.getState().updateTabSubagent(tabId, 'sa-1', { status: 'completed' });
+    const subagents = useAppStore.getState().tabs[tabId].subagents;
+    expect(subagents[0].status).toBe('completed');
+    expect(subagents[1].status).toBe('running');
+  });
+
+  it('clearTabSubagents should remove all subagents', () => {
+    useAppStore.getState().addTabSubagent(tabId, {
+      toolCallId: 'sa-1', agentName: 'researcher', displayName: 'Researcher', status: 'running',
+    });
+    useAppStore.getState().addTabSubagent(tabId, {
+      toolCallId: 'sa-2', agentName: 'coder', displayName: 'Coder', status: 'completed',
+    });
+    useAppStore.getState().clearTabSubagents(tabId);
+    expect(useAppStore.getState().tabs[tabId].subagents).toEqual([]);
+  });
+
+  it('should not throw for operations on non-existent tab', () => {
+    expect(() => useAppStore.getState().addTabSubagent('nonexistent', {
+      toolCallId: 'sa-1', agentName: 'x', displayName: 'X', status: 'running',
+    })).not.toThrow();
+    expect(() => useAppStore.getState().updateTabSubagent('nonexistent', 'sa-1', { status: 'completed' })).not.toThrow();
+    expect(() => useAppStore.getState().clearTabSubagents('nonexistent')).not.toThrow();
   });
 });
 

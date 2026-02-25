@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { PromptFileStore } from './file-store.js';
-import { DEFAULT_SYSTEM_PROMPT, DEFAULT_ACT_PROMPT, DEFAULT_PLAN_PROMPT } from './defaults.js';
+import { DEFAULT_SYSTEM_PROMPT, DEFAULT_AUTOPILOT_PROMPT, DEFAULT_PLAN_PROMPT } from './defaults.js';
 
 export function createPromptsRoutes(store: PromptFileStore): Router {
   const router = Router();
@@ -23,22 +23,40 @@ export function createPromptsRoutes(store: PromptFileStore): Router {
     res.json({ content: DEFAULT_SYSTEM_PROMPT });
   });
 
-  // --- Act Prompt ---
+  // --- Autopilot Prompt ---
+
+  router.get('/autopilot-prompt', (_req, res) => {
+    const content = store.readFile('AUTOPILOT_PROMPT.md');
+    res.json({ content });
+  });
+
+  router.put('/autopilot-prompt', (req, res) => {
+    const { content } = req.body;
+    store.writeFile('AUTOPILOT_PROMPT.md', content ?? '');
+    res.json({ ok: true });
+  });
+
+  router.post('/autopilot-prompt/reset', (_req, res) => {
+    store.writeFile('AUTOPILOT_PROMPT.md', DEFAULT_AUTOPILOT_PROMPT);
+    res.json({ content: DEFAULT_AUTOPILOT_PROMPT });
+  });
+
+  // --- Act Prompt (legacy alias → AUTOPILOT_PROMPT.md) ---
 
   router.get('/act-prompt', (_req, res) => {
-    const content = store.readFile('ACT_PROMPT.md');
+    const content = store.readFile('AUTOPILOT_PROMPT.md');
     res.json({ content });
   });
 
   router.put('/act-prompt', (req, res) => {
     const { content } = req.body;
-    store.writeFile('ACT_PROMPT.md', content ?? '');
+    store.writeFile('AUTOPILOT_PROMPT.md', content ?? '');
     res.json({ ok: true });
   });
 
   router.post('/act-prompt/reset', (_req, res) => {
-    store.writeFile('ACT_PROMPT.md', DEFAULT_ACT_PROMPT);
-    res.json({ content: DEFAULT_ACT_PROMPT });
+    store.writeFile('AUTOPILOT_PROMPT.md', DEFAULT_AUTOPILOT_PROMPT);
+    res.json({ content: DEFAULT_AUTOPILOT_PROMPT });
   });
 
   // --- Plan Prompt ---

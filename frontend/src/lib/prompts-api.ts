@@ -17,6 +17,11 @@ export const promptsApi = {
   /** @deprecated Agent rules merged into PROFILE.md */
   putAgent: (content: string) => apiPut<{ ok: true }>('/api/prompts/agent', { content }),
 
+  getAutopilotPrompt: () => apiGet<PromptContent>('/api/prompts/autopilot-prompt'),
+  putAutopilotPrompt: (content: string) => apiPut<{ ok: true }>('/api/prompts/autopilot-prompt', { content }),
+  resetAutopilotPrompt: () => apiPost<PromptContent>('/api/prompts/autopilot-prompt/reset'),
+
+  /** @deprecated Use getAutopilotPrompt/putAutopilotPrompt/resetAutopilotPrompt */
   getActPrompt: () => apiGet<PromptContent>('/api/prompts/act-prompt'),
   putActPrompt: (content: string) => apiPut<{ ok: true }>('/api/prompts/act-prompt', { content }),
   resetActPrompt: () => apiPost<PromptContent>('/api/prompts/act-prompt/reset'),

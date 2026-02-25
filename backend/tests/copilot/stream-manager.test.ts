@@ -1,12 +1,8 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import type { WsMessage, SendFn } from '../../src/ws/types.js';
 
-// Mock plan-writer
-const { mockWritePlanFile } = vi.hoisted(() => ({
-  mockWritePlanFile: vi.fn().mockReturnValue('/tmp/.codeforge/plans/2026-02-19-plan.md'),
-}));
-vi.mock('../../src/copilot/plan-writer.js', () => ({
-  writePlanFile: mockWritePlanFile,
+// Mock plan-utils
+vi.mock('../../src/copilot/plan-utils.js', () => ({
   extractTopicFromContent: vi.fn().mockReturnValue('test-topic'),
 }));
 
@@ -91,7 +87,6 @@ function clearMocks() {
   mockRepo.update.mockClear();
   mockRepo.addMessage.mockClear();
   mockRepo.updateToolResult.mockClear();
-  mockWritePlanFile.mockClear().mockReturnValue('/tmp/.codeforge/plans/2026-02-19-plan.md');
 }
 
 /** Simulate an SDK event by firing the captured handler */
@@ -1007,13 +1002,13 @@ describe('StreamManager', () => {
       expect(result).toEqual({ kind: 'denied-by-rules' });
     });
 
-    it('should pass a permission handler that approves in act mode', async () => {
+    it('should pass a permission handler that approves in autopilot mode', async () => {
       await sm.startStream('conv-1', {
         prompt: 'hello',
         sdkSessionId: null,
         model: 'gpt-5',
         cwd: '/tmp',
-        mode: 'act',
+        mode: 'autopilot',
       });
 
       const sessionOpts = mockSessionManager.getOrCreateSession.mock.calls[0][0];
@@ -1021,7 +1016,7 @@ describe('StreamManager', () => {
       expect(result).toEqual({ kind: 'approved' });
     });
 
-    it('should default to act mode when mode is not specified', async () => {
+    it('should default to autopilot mode when mode is not specified', async () => {
       await sm.startStream('conv-1', {
         prompt: 'hello',
         sdkSessionId: null,
@@ -1040,7 +1035,7 @@ describe('StreamManager', () => {
         sdkSessionId: null,
         model: 'gpt-5',
         cwd: '/tmp',
-        mode: 'act',
+        mode: 'autopilot',
       });
       await tick();
 
@@ -1059,7 +1054,7 @@ describe('StreamManager', () => {
       expect(result).toEqual({ kind: 'denied-by-rules' });
     });
 
-    it('setMode should switch back to act and permission handler approves again', async () => {
+    it('setMode should switch back to autopilot and permission handler approves again', async () => {
       await sm.startStream('conv-1', {
         prompt: 'hello',
         sdkSessionId: null,
@@ -1069,7 +1064,7 @@ describe('StreamManager', () => {
       });
       await tick();
 
-      sm.setMode('conv-1', 'act');
+      sm.setMode('conv-1', 'autopilot');
 
       const sessionOpts = mockSessionManager.getOrCreateSession.mock.calls[0][0];
       const result = sessionOpts.onPermissionRequest({ kind: 'shell' }, { sessionId: 's-1' });
@@ -2049,7 +2044,7 @@ describe('StreamManager', () => {
     });
   });
 
-  // === Plan mode: SDK plan_changed → writePlanFile ===
+  // === Plan mode: SDK plan_changed → content-based plan delivery ===
   describe('plan mode SDK integration', () => {
     it('should call sessionManager.setMode with plan when mode is plan', async () => {
       await sm.startStream('conv-1', {
@@ -2064,17 +2059,17 @@ describe('StreamManager', () => {
       expect(mockSessionManager.setMode).toHaveBeenCalledWith(mockSession, 'plan');
     });
 
-    it('should NOT call sessionManager.setMode when mode is act', async () => {
+    it('should call sessionManager.setMode with autopilot when mode is autopilot', async () => {
       await sm.startStream('conv-1', {
         prompt: 'do something',
         sdkSessionId: null,
         model: 'gpt-5',
         cwd: '/tmp',
-        mode: 'act',
+        mode: 'autopilot',
       });
       await tick();
 
-      expect(mockSessionManager.setMode).not.toHaveBeenCalled();
+      expect(mockSessionManager.setMode).toHaveBeenCalledWith(mockSession, 'autopilot');
     });
 
     it('should register session.plan_changed listener when mode is plan', async () => {
@@ -2090,7 +2085,7 @@ describe('StreamManager', () => {
       expect(mockSession._eventHandlers.has('session.plan_changed')).toBe(true);
     });
 
-    it('should call writePlanFile when session.plan_changed fires with create', async () => {
+    it('should store planContent in pendingIdleExtra when session.plan_changed fires with create', async () => {
       mockSessionManager.readPlan.mockResolvedValue({
         exists: true,
         content: '# Plan\n\nStep 1: Do the thing',
@@ -2109,14 +2104,9 @@ describe('StreamManager', () => {
       await tick();
 
       expect(mockSessionManager.readPlan).toHaveBeenCalledWith(mockSession);
-      expect(mockWritePlanFile).toHaveBeenCalledWith(
-        '/tmp',
-        '# Plan\n\nStep 1: Do the thing',
-        'test-topic',
-      );
     });
 
-    it('should save planFilePath to conversation via repo.update on plan_changed', async () => {
+    it('should NOT call repo.update with planFilePath on plan_changed', async () => {
       mockSessionManager.readPlan.mockResolvedValue({
         exists: true,
         content: '# Plan',
@@ -2134,12 +2124,13 @@ describe('StreamManager', () => {
       fireEvent('session.plan_changed', { data: { operation: 'create' } });
       await tick();
 
-      expect(mockRepo.update).toHaveBeenCalledWith('conv-1', {
-        planFilePath: '/tmp/.codeforge/plans/2026-02-19-plan.md',
-      });
+      // Should NOT update planFilePath in DB
+      expect(mockRepo.update).not.toHaveBeenCalledWith('conv-1', expect.objectContaining({
+        planFilePath: expect.any(String),
+      }));
     });
 
-    it('should include planArtifact in idle event data after plan_changed', async () => {
+    it('should include planArtifact with planContent in idle event data after plan_changed', async () => {
       mockSessionManager.readPlan.mockResolvedValue({
         exists: true,
         content: '# Plan\n\nStep 1: Do things',
@@ -2165,19 +2156,22 @@ describe('StreamManager', () => {
       const idleMsg = received.find((m) => m.type === 'copilot:idle');
       expect(idleMsg).toBeDefined();
       const idleData = idleMsg!.data as any;
+      expect(idleData.planContent).toBe('# Plan\n\nStep 1: Do things');
       expect(idleData.planArtifact).toBeDefined();
       expect(idleData.planArtifact.title).toBe('test-topic');
       expect(idleData.planArtifact.content).toBe('# Plan\n\nStep 1: Do things');
-      expect(idleData.planArtifact.filePath).toBe('/tmp/.codeforge/plans/2026-02-19-plan.md');
+      // Should NOT have filePath or planFilePath
+      expect(idleData.planFilePath).toBeUndefined();
+      expect(idleData.planArtifact.filePath).toBeUndefined();
     });
 
-    it('should NOT include planArtifact when mode is act', async () => {
+    it('should NOT include planArtifact when mode is autopilot', async () => {
       await sm.startStream('conv-1', {
         prompt: 'do something',
         sdkSessionId: null,
         model: 'gpt-5',
         cwd: '/tmp',
-        mode: 'act',
+        mode: 'autopilot',
       });
       await tick();
 
@@ -2194,29 +2188,10 @@ describe('StreamManager', () => {
       const idleMsg = received.find((m) => m.type === 'copilot:idle');
       expect(idleMsg).toBeDefined();
       expect((idleMsg!.data as any).planArtifact).toBeUndefined();
+      expect((idleMsg!.data as any).planContent).toBeUndefined();
     });
 
-    it('should NOT call writePlanFile when mode is act', async () => {
-      await sm.startStream('conv-1', {
-        prompt: 'do something',
-        sdkSessionId: null,
-        model: 'gpt-5',
-        cwd: '/tmp',
-        mode: 'act',
-      });
-      await tick();
-
-      fireEvent('assistant.message', {
-        messageId: 'msg-1',
-        content: 'Done',
-      });
-
-      fireEvent('session.idle', {});
-
-      expect(mockWritePlanFile).not.toHaveBeenCalled();
-    });
-
-    it('should NOT call writePlanFile when plan_changed fires with delete', async () => {
+    it('should NOT read plan when plan_changed fires with delete', async () => {
       await sm.startStream('conv-1', {
         prompt: 'plan something',
         sdkSessionId: null,
@@ -2230,10 +2205,9 @@ describe('StreamManager', () => {
       await tick();
 
       expect(mockSessionManager.readPlan).not.toHaveBeenCalled();
-      expect(mockWritePlanFile).not.toHaveBeenCalled();
     });
 
-    it('should NOT call writePlanFile when readPlan returns no content', async () => {
+    it('should NOT store planContent when readPlan returns no content', async () => {
       mockSessionManager.readPlan.mockResolvedValue({
         exists: false,
         content: null,
@@ -2251,10 +2225,11 @@ describe('StreamManager', () => {
       fireEvent('session.plan_changed', { data: { operation: 'create' } });
       await tick();
 
-      expect(mockWritePlanFile).not.toHaveBeenCalled();
+      // readPlan was called but returned no content — no planContent stored
+      expect(mockSessionManager.readPlan).toHaveBeenCalled();
     });
 
-    it('should sync accumulated content to SDK via updatePlan and write locally (plan mode)', async () => {
+    it('should sync accumulated content to SDK via updatePlan and include planContent in idle (plan mode)', async () => {
       await sm.startStream('conv-1', {
         prompt: 'plan something',
         sdkSessionId: null,
@@ -2283,23 +2258,17 @@ describe('StreamManager', () => {
         '# Refactor Plan\n\n## Context\nNeed to refactor the auth module.',
       );
 
-      // Should also write locally via writePlanFile
-      expect(mockWritePlanFile).toHaveBeenCalledWith(
-        '/tmp',
-        '# Refactor Plan\n\n## Context\nNeed to refactor the auth module.',
-        'test-topic',
-      );
-
-      // The idle event should include planArtifact
+      // The idle event should include planContent and planArtifact (no planFilePath)
       const idleMsg = received.find((m) => m.type === 'copilot:idle');
       expect(idleMsg).toBeDefined();
       const idleData = idleMsg!.data as any;
-      expect(idleData.planFilePath).toBe('/tmp/.codeforge/plans/2026-02-19-plan.md');
+      expect(idleData.planContent).toBe('# Refactor Plan\n\n## Context\nNeed to refactor the auth module.');
+      expect(idleData.planFilePath).toBeUndefined();
       expect(idleData.planArtifact).toBeDefined();
       expect(idleData.planArtifact.content).toBe('# Refactor Plan\n\n## Context\nNeed to refactor the auth module.');
     });
 
-    it('should still write locally even when updatePlan fails', async () => {
+    it('should still include planArtifact even when updatePlan fails', async () => {
       mockSessionManager.updatePlan.mockRejectedValue(new Error('RPC error'));
 
       await sm.startStream('conv-1', {
@@ -2325,12 +2294,11 @@ describe('StreamManager', () => {
       // updatePlan was attempted
       expect(mockSessionManager.updatePlan).toHaveBeenCalled();
 
-      // Local write still happens despite RPC failure
-      expect(mockWritePlanFile).toHaveBeenCalledWith('/tmp', '# Plan content', 'test-topic');
-
+      // planArtifact still included despite RPC failure
       const idleMsg = received.find((m) => m.type === 'copilot:idle');
       expect(idleMsg).toBeDefined();
       expect((idleMsg!.data as any).planArtifact).toBeDefined();
+      expect((idleMsg!.data as any).planContent).toBe('# Plan content');
     });
 
     it('should NOT sync/write when plan_changed already provided plan data', async () => {
@@ -2366,14 +2334,6 @@ describe('StreamManager', () => {
 
       // updatePlan should NOT be called (plan_changed already handled it)
       expect(mockSessionManager.updatePlan).not.toHaveBeenCalled();
-
-      // writePlanFile called only ONCE (from plan_changed listener), not from finishStream
-      expect(mockWritePlanFile).toHaveBeenCalledTimes(1);
-      expect(mockWritePlanFile).toHaveBeenCalledWith(
-        '/tmp',
-        '# SDK Plan\nFrom SDK',
-        'test-topic',
-      );
     });
 
     it('should NOT sync/write when accumulated content is empty', async () => {
@@ -2394,20 +2354,20 @@ describe('StreamManager', () => {
       await tick();
 
       expect(mockSessionManager.updatePlan).not.toHaveBeenCalled();
-      expect(mockWritePlanFile).not.toHaveBeenCalled();
 
       const idleMsg = received.find((m) => m.type === 'copilot:idle');
       expect(idleMsg).toBeDefined();
       expect((idleMsg!.data as any).planArtifact).toBeUndefined();
+      expect((idleMsg!.data as any).planContent).toBeUndefined();
     });
 
-    it('should NOT sync/write in act mode even with accumulated content', async () => {
+    it('should NOT sync/write in autopilot mode even with accumulated content', async () => {
       await sm.startStream('conv-1', {
         prompt: 'do something',
         sdkSessionId: null,
         model: 'gpt-5',
         cwd: '/tmp',
-        mode: 'act',
+        mode: 'autopilot',
       });
       await tick();
 
@@ -2420,7 +2380,6 @@ describe('StreamManager', () => {
       await tick();
 
       expect(mockSessionManager.updatePlan).not.toHaveBeenCalled();
-      expect(mockWritePlanFile).not.toHaveBeenCalled();
     });
   });
 

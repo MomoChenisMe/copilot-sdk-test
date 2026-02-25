@@ -204,6 +204,74 @@ export class EventRelay {
       })),
     );
 
+    // --- Subagent events (Fleet Mode) ---
+
+    this.unsubscribes.push(
+      session.on('subagent.started', this.safeHandler('subagent.started', (event) => {
+        const e = event as any;
+        const d = e.data ?? e;
+        log.debug({ event: e }, 'subagent.started');
+        this.send({
+          type: 'copilot:subagent_started',
+          data: {
+            toolCallId: d.toolCallId,
+            agentName: d.agentName,
+            agentDisplayName: d.agentDisplayName,
+            agentDescription: d.agentDescription,
+          },
+        });
+      })),
+    );
+
+    this.unsubscribes.push(
+      session.on('subagent.completed', this.safeHandler('subagent.completed', (event) => {
+        const e = event as any;
+        const d = e.data ?? e;
+        log.debug({ event: e }, 'subagent.completed');
+        this.send({
+          type: 'copilot:subagent_completed',
+          data: {
+            toolCallId: d.toolCallId,
+            agentName: d.agentName,
+            agentDisplayName: d.agentDisplayName,
+          },
+        });
+      })),
+    );
+
+    this.unsubscribes.push(
+      session.on('subagent.failed', this.safeHandler('subagent.failed', (event) => {
+        const e = event as any;
+        const d = e.data ?? e;
+        log.debug({ event: e }, 'subagent.failed');
+        this.send({
+          type: 'copilot:subagent_failed',
+          data: {
+            toolCallId: d.toolCallId,
+            agentName: d.agentName,
+            agentDisplayName: d.agentDisplayName,
+            error: d.error,
+          },
+        });
+      })),
+    );
+
+    this.unsubscribes.push(
+      session.on('subagent.selected', this.safeHandler('subagent.selected', (event) => {
+        const e = event as any;
+        const d = e.data ?? e;
+        log.debug({ event: e }, 'subagent.selected');
+        this.send({
+          type: 'copilot:subagent_selected',
+          data: {
+            agentName: d.agentName,
+            agentDisplayName: d.agentDisplayName,
+            tools: d.tools,
+          },
+        });
+      })),
+    );
+
     this.unsubscribes.push(
       session.on('session.plan_changed', this.safeHandler('session.plan_changed', (event) => {
         const e = event as any;

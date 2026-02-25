@@ -19,6 +19,8 @@ export interface TodoItem {
 
 export interface TodoSyncOptions {
   getWorkspacePath: (sessionId: string) => string | undefined;
+  /** Fallback workspace path resolver when primary returns undefined */
+  fallbackWorkspacePath?: (sessionId: string) => string | undefined;
   getConversationId: (sessionId: string) => string | undefined;
   broadcast: (conversationId: string, msg: WsMessage) => void;
 }
@@ -42,7 +44,13 @@ export function createTodoSyncHook(options: TodoSyncOptions) {
     const args = input.toolArgs as { query?: string } | undefined;
     if (!args?.query || !TODOS_PATTERN.test(args.query)) return;
 
-    const workspacePath = options.getWorkspacePath(invocation.sessionId);
+    let workspacePath = options.getWorkspacePath(invocation.sessionId);
+    if (!workspacePath && options.fallbackWorkspacePath) {
+      workspacePath = options.fallbackWorkspacePath(invocation.sessionId);
+      if (workspacePath) {
+        log.debug({ sessionId: invocation.sessionId, workspacePath }, 'Using fallback workspacePath');
+      }
+    }
     if (!workspacePath) {
       log.debug({ sessionId: invocation.sessionId }, 'No workspacePath — skipping todo sync');
       return;

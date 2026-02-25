@@ -88,7 +88,7 @@ describe('createTodoSyncHook', () => {
     expect(broadcast).not.toHaveBeenCalled();
   });
 
-  it('should skip when workspacePath is undefined', async () => {
+  it('should skip when workspacePath is undefined and no fallback found', async () => {
     getWorkspacePath.mockReturnValue(undefined);
 
     await hook(
@@ -97,6 +97,30 @@ describe('createTodoSyncHook', () => {
     );
 
     expect(broadcast).not.toHaveBeenCalled();
+  });
+
+  it('should use fallbackWorkspacePath when primary returns undefined', async () => {
+    // Setup: primary returns undefined, but fallback points to our tempDir
+    getWorkspacePath.mockReturnValue(undefined);
+    const db = createTestDb(tempDir);
+    db.prepare("INSERT INTO todos (id, title, status) VALUES ('fb1', 'Fallback todo', 'pending')").run();
+    db.close();
+
+    const hookWithFallback = createTodoSyncHook({
+      ...options,
+      getWorkspacePath: () => undefined,
+      fallbackWorkspacePath: () => tempDir,
+    });
+
+    await hookWithFallback(
+      { toolName: 'sql', toolArgs: { query: 'SELECT * FROM todos' }, toolResult: { textResultForLlm: '', resultType: 'success' as const }, timestamp: Date.now(), cwd: '/tmp' },
+      { sessionId: 'sess-1' },
+    );
+
+    expect(broadcast).toHaveBeenCalledTimes(1);
+    const data = (broadcast.mock.calls[0] as [string, WsMessage])[1].data as { todos: TodoItem[] };
+    expect(data.todos).toHaveLength(1);
+    expect(data.todos[0].id).toBe('fb1');
   });
 
   it('should skip when session.db does not exist', async () => {

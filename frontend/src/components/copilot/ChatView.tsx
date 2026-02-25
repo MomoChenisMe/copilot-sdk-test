@@ -24,10 +24,11 @@ import { Input } from '../shared/Input';
 import type { InputHandle } from '../shared/Input';
 import { UsageBar } from './UsageBar';
 import { ScrollToBottom } from './ScrollToBottom';
-import PlanActToggle from './PlanActToggle';
+import PlanAutopilotToggle from './PlanAutopilotToggle';
 import WebSearchToggle from './WebSearchToggle';
 import { InlineUserInput } from './InlineUserInput';
 import { TaskPanel } from './TaskPanel';
+import { SubagentPanel } from './SubagentPanel';
 import { ThinkingIndicator } from './ThinkingIndicator';
 import { CronConfigPanel } from './CronConfigPanel';
 import { MobileToolbarPopup } from './MobileToolbarPopup';
@@ -115,8 +116,9 @@ export function ChatView({
   const isTerminalMode = tabMode === 'terminal';
   const planMode = tab?.planMode ?? false;
   const showPlanCompletePrompt = tab?.showPlanCompletePrompt ?? false;
-  const planFilePath = tab?.planFilePath ?? null;
+  const planContent = tab?.planContent ?? null;
   const tasks = tab?.tasks ?? [];
+  const subagents = tab?.subagents ?? [];
   const { data: premiumQuota } = useQuotaQuery();
   const setTabShowPlanCompletePrompt = useAppStore((s) => s.setTabShowPlanCompletePrompt);
 
@@ -135,9 +137,9 @@ export function ChatView({
   );
 
   const handleExecutePlan = useCallback(() => {
-    if (!tabId || !tab?.conversationId || !planFilePath) return;
-    onExecutePlan?.(tab.conversationId, planFilePath);
-  }, [tabId, tab?.conversationId, planFilePath, onExecutePlan]);
+    if (!tabId || !tab?.conversationId || !planContent) return;
+    onExecutePlan?.(tab.conversationId, planContent);
+  }, [tabId, tab?.conversationId, planContent, onExecutePlan]);
 
   const handleContinuePlanning = useCallback(() => {
     if (tabId) {
@@ -426,7 +428,7 @@ export function ChatView({
               {currentCwd && onCwdChange && (
                 <CwdSelector currentCwd={currentCwd} onCwdChange={onCwdChange} mode={tabMode} onModeChange={handleModeChange} />
               )}
-              {tabId && <PlanActToggle planMode={planMode} onToggle={handlePlanModeToggle} disabled={isStreaming || isTerminalMode} />}
+              {tabId && <PlanAutopilotToggle planMode={planMode} onToggle={handlePlanModeToggle} disabled={isStreaming || isTerminalMode} />}
             </div>
             <div className="relative">
               {cronConfigOpen && tabId && activeConversationId && (
@@ -516,6 +518,9 @@ export function ChatView({
         <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
           {/* Task panel */}
           {tasks.length > 0 && <TaskPanel tasks={tasks} />}
+
+          {/* Sub-agent panel (Fleet Mode) */}
+          {subagents.length > 0 && <SubagentPanel subagents={subagents} />}
 
           {/* Historical messages */}
           {messages.map((msg) => (
@@ -650,16 +655,11 @@ export function ChatView({
                   <p className="text-sm text-text-primary leading-relaxed">
                     {t('planMode.planComplete')}
                   </p>
-                  {planFilePath && (
-                    <p data-testid="plan-file-path" className="text-xs text-text-muted mt-1 truncate">
-                      {t('planMode.planSaved', { path: planFilePath })}
-                    </p>
-                  )}
                 </div>
               </div>
               {/* Choices — radio style like InlineUserInput */}
               <div className="flex flex-col gap-1.5 ml-9">
-                {planFilePath && (
+                {planContent && (
                   <label
                     data-testid="execute-plan-btn"
                     className="flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg border border-border bg-bg-primary hover:bg-bg-tertiary text-text-primary cursor-pointer transition-colors"
@@ -694,7 +694,7 @@ export function ChatView({
                 {currentCwd && onCwdChange && (
                   <CwdSelector currentCwd={currentCwd} onCwdChange={onCwdChange} mode={tabMode} onModeChange={handleModeChange} />
                 )}
-                {tabId && <PlanActToggle planMode={planMode} onToggle={handlePlanModeToggle} disabled={isStreaming || isTerminalMode} />}
+                {tabId && <PlanAutopilotToggle planMode={planMode} onToggle={handlePlanModeToggle} disabled={isStreaming || isTerminalMode} />}
               </div>
               <div className="relative">
                 {cronConfigOpen && tabId && activeConversationId && (

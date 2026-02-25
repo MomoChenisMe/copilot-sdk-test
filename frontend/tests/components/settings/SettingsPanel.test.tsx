@@ -19,6 +19,9 @@ vi.mock('../../../src/lib/prompts-api', () => ({
     getSystemPrompt: vi.fn(),
     putSystemPrompt: vi.fn(),
     resetSystemPrompt: vi.fn(),
+    getAutopilotPrompt: vi.fn(),
+    putAutopilotPrompt: vi.fn(),
+    resetAutopilotPrompt: vi.fn(),
     getActPrompt: vi.fn(),
     putActPrompt: vi.fn(),
     resetActPrompt: vi.fn(),
@@ -91,9 +94,9 @@ function setupMockDefaults() {
   (promptsApi.getSystemPrompt as ReturnType<typeof vi.fn>).mockResolvedValue({ content: '# System Prompt' });
   (promptsApi.putSystemPrompt as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
   (promptsApi.resetSystemPrompt as ReturnType<typeof vi.fn>).mockResolvedValue({ content: '# Default System Prompt' });
-  (promptsApi.getActPrompt as ReturnType<typeof vi.fn>).mockResolvedValue({ content: '# Act Prompt' });
-  (promptsApi.putActPrompt as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
-  (promptsApi.resetActPrompt as ReturnType<typeof vi.fn>).mockResolvedValue({ content: '# Default Act Prompt' });
+  (promptsApi.getAutopilotPrompt as ReturnType<typeof vi.fn>).mockResolvedValue({ content: '# Autopilot Prompt' });
+  (promptsApi.putAutopilotPrompt as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
+  (promptsApi.resetAutopilotPrompt as ReturnType<typeof vi.fn>).mockResolvedValue({ content: '# Default Autopilot Prompt' });
   (promptsApi.getPlanPrompt as ReturnType<typeof vi.fn>).mockResolvedValue({ content: '# Plan Prompt' });
   (promptsApi.putPlanPrompt as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
   (promptsApi.resetPlanPrompt as ReturnType<typeof vi.fn>).mockResolvedValue({ content: '# Default Plan Prompt' });
@@ -459,57 +462,57 @@ describe('SettingsPanel', () => {
       vi.restoreAllMocks();
     });
 
-    // --- Act Mode Prompt section ---
-    it('should display Act Mode Prompt section with heading and textarea', async () => {
+    // --- Autopilot Mode Prompt section ---
+    it('should display Autopilot Mode Prompt section with heading and textarea', async () => {
       render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       await waitFor(() => {
-        expect(screen.getByTestId('act-mode-heading')).toBeTruthy();
-        expect(screen.getByTestId('act-prompt-textarea')).toBeTruthy();
+        expect(screen.getByTestId('autopilot-mode-heading')).toBeTruthy();
+        expect(screen.getByTestId('autopilot-prompt-textarea')).toBeTruthy();
       });
-      expect(screen.getByTestId('act-mode-heading').textContent).toBe('Act Mode Prompt');
+      expect(screen.getByTestId('autopilot-mode-heading').textContent).toBe('Autopilot Mode Prompt');
     });
 
-    it('should load act prompt content', async () => {
+    it('should load autopilot prompt content', async () => {
       render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
       await waitFor(() => {
-        expect(screen.getByDisplayValue('# Act Prompt')).toBeTruthy();
+        expect(screen.getByDisplayValue('# Autopilot Prompt')).toBeTruthy();
       });
     });
 
-    it('should save act prompt on save button click', async () => {
+    it('should save autopilot prompt on save button click', async () => {
       const { promptsApi } = await import('../../../src/lib/prompts-api');
       render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
 
       await waitFor(() => {
-        expect(screen.getByDisplayValue('# Act Prompt')).toBeTruthy();
+        expect(screen.getByDisplayValue('# Autopilot Prompt')).toBeTruthy();
       });
 
-      const textarea = screen.getByDisplayValue('# Act Prompt');
-      fireEvent.change(textarea, { target: { value: 'Updated act prompt' } });
+      const textarea = screen.getByDisplayValue('# Autopilot Prompt');
+      fireEvent.change(textarea, { target: { value: 'Updated autopilot prompt' } });
 
-      fireEvent.click(screen.getByTestId('save-act-prompt'));
+      fireEvent.click(screen.getByTestId('save-autopilot-prompt'));
 
       await waitFor(() => {
-        expect(promptsApi.putActPrompt).toHaveBeenCalledWith('Updated act prompt');
+        expect(promptsApi.putAutopilotPrompt).toHaveBeenCalledWith('Updated autopilot prompt');
       });
     });
 
-    it('should reset act prompt when confirmed', async () => {
+    it('should reset autopilot prompt when confirmed', async () => {
       const { promptsApi } = await import('../../../src/lib/prompts-api');
       render(<QueryWrapper><SettingsPanel {...defaultProps} /></QueryWrapper>);
 
       await waitFor(() => {
-        expect(screen.getByTestId('reset-act-prompt')).toBeTruthy();
+        expect(screen.getByTestId('reset-autopilot-prompt')).toBeTruthy();
       });
 
-      fireEvent.click(screen.getByTestId('reset-act-prompt'));
+      fireEvent.click(screen.getByTestId('reset-autopilot-prompt'));
 
       // ConfirmDialog should appear
       const confirmBtn = screen.getAllByText(/Confirm|確認/i);
       fireEvent.click(confirmBtn[confirmBtn.length - 1]);
 
       await waitFor(() => {
-        expect(promptsApi.resetActPrompt).toHaveBeenCalled();
+        expect(promptsApi.resetAutopilotPrompt).toHaveBeenCalled();
       });
     });
 

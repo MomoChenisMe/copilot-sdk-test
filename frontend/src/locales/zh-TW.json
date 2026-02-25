@@ -200,9 +200,9 @@
       "desc": "無論模式為何，每次對話都會注入的基礎指令。",
       "resetToDefault": "重置為預設",
       "resetConfirm": "確定要重置為預設系統提示詞嗎？您目前的變更將會遺失。",
-      "actMode": "執行模式提示詞",
-      "actModeDesc": "執行模式啟用時附加的額外指令。",
-      "actResetConfirm": "確定要重置為預設執行模式提示詞嗎？您目前的變更將會遺失。",
+      "autopilotMode": "自動駕駛模式提示詞",
+      "autopilotModeDesc": "自動駕駛模式啟用時附加的額外指令。",
+      "autopilotResetConfirm": "確定要重置為預設自動駕駛模式提示詞嗎？您目前的變更將會遺失。",
       "planMode": "計劃模式提示詞",
       "planModeDesc": "計劃模式啟用時附加的額外指令。",
       "planResetConfirm": "確定要重置為預設計劃模式提示詞嗎？您目前的變更將會遺失。"
@@ -278,12 +278,11 @@
   },
   "planMode": {
     "plan": "計畫",
-    "act": "執行",
+    "autopilot": "自動駕駛",
     "active": "計畫模式已啟用 — AI 只會規劃但不會執行工具",
-    "tooltip": "切換計畫與執行模式",
+    "tooltip": "切換計畫與自動駕駛模式",
     "planComplete": "規劃完成！是否開始執行計畫？",
-    "planSaved": "計畫已儲存至 {{path}}",
-    "switchToAct": "切換到執行模式",
+    "switchToAutopilot": "切換到自動駕駛模式",
     "stayInPlan": "繼續規劃",
     "executePlan": "開始執行",
     "continuePlanning": "繼續規劃"
@@ -343,6 +342,13 @@
     "inProgress": "進行中",
     "done": "已完成",
     "blocked": "已封鎖"
+  },
+  "fleet": {
+    "title": "子代理",
+    "running": "執行中",
+    "completed": "已完成",
+    "failed": "失敗",
+    "agentWorking": "代理正在工作..."
   },
   "sidebar": {
     "conversations": "對話紀錄",
@@ -519,7 +525,7 @@
     "upload": "上傳檔案",
     "modelSelector": "模型選擇器",
     "showShortcuts": "顯示快捷鍵",
-    "togglePlanMode": "切換計劃/執行模式",
+    "togglePlanMode": "切換計劃/自動駕駛模式",
     "toggleOpenSpec": "切換 OpenSpec 面板"
   },
   "openspecPanel": {

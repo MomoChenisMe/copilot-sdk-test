@@ -227,6 +227,20 @@ describe('useTabCopilot', () => {
       expect(useAppStore.getState().tabs[tabIdA].isStreaming).toBe(true);
     });
 
+    it('should include messageId in copilot:send payload matching the optimistic user message id', () => {
+      const { result } = renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        result.current.sendMessage(tabIdA, 'hello');
+      });
+      const tabA = useAppStore.getState().tabs[tabIdA];
+      const optimisticMsgId = tabA.messages[0].id;
+      expect(optimisticMsgId).toBeTruthy();
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'copilot:send',
+        data: expect.objectContaining({ messageId: optimisticMsgId }),
+      }));
+    });
+
     it('should not throw when called with non-existent tabId', () => {
       const { result } = renderHook(() => useTabCopilot({ subscribe, send }));
       send.mockClear();
@@ -389,7 +403,7 @@ describe('useTabCopilot', () => {
       expect(useAppStore.getState().tabs[tabIdA].planMode).toBe(true);
 
       act(() => {
-        emit({ type: 'copilot:mode_changed', data: { mode: 'act', conversationId: 'conv-A' } });
+        emit({ type: 'copilot:mode_changed', data: { mode: 'autopilot', conversationId: 'conv-A' } });
       });
       expect(useAppStore.getState().tabs[tabIdA].planMode).toBe(false);
     });
@@ -405,25 +419,25 @@ describe('useTabCopilot', () => {
       expect(useAppStore.getState().tabs[tabIdA].showPlanCompletePrompt).toBe(true);
     });
 
-    it('should extract planFilePath from copilot:idle event data', async () => {
+    it('should extract planContent from copilot:idle event data', async () => {
       useAppStore.getState().setTabPlanMode(tabIdA, true);
       useAppStore.getState().setTabIsStreaming(tabIdA, true);
       useAppStore.getState().updateStreamStatus('conv-A', 'running');
       renderHook(() => useTabCopilot({ subscribe, send }));
       await act(async () => {
-        emit({ type: 'copilot:idle', data: { conversationId: 'conv-A', planFilePath: '/tmp/.codeforge/plans/2026-02-19-plan.md' } });
+        emit({ type: 'copilot:idle', data: { conversationId: 'conv-A', planContent: '# Plan content\nStep 1: Refactor DB' } });
       });
-      expect(useAppStore.getState().tabs[tabIdA].planFilePath).toBe('/tmp/.codeforge/plans/2026-02-19-plan.md');
+      expect(useAppStore.getState().tabs[tabIdA].planContent).toBe('# Plan content\nStep 1: Refactor DB');
     });
 
-    it('should not set planFilePath when idle event has no planFilePath', async () => {
+    it('should not set planContent when idle event has no planContent', async () => {
       useAppStore.getState().setTabIsStreaming(tabIdA, true);
       useAppStore.getState().updateStreamStatus('conv-A', 'running');
       renderHook(() => useTabCopilot({ subscribe, send }));
       await act(async () => {
         emit({ type: 'copilot:idle', data: { conversationId: 'conv-A' } });
       });
-      expect(useAppStore.getState().tabs[tabIdA].planFilePath).toBeNull();
+      expect(useAppStore.getState().tabs[tabIdA].planContent).toBeNull();
     });
 
     it('should create plan artifact and open panel when planArtifact is present in idle event', async () => {
@@ -436,7 +450,7 @@ describe('useTabCopilot', () => {
           type: 'copilot:idle',
           data: {
             conversationId: 'conv-A',
-            planFilePath: '/tmp/plan.md',
+            planContent: '# Plan content',
             planArtifact: {
               title: 'My Plan',
               content: '# Plan\n\nStep 1',
@@ -466,7 +480,7 @@ describe('useTabCopilot', () => {
           type: 'copilot:idle',
           data: {
             conversationId: 'conv-A',
-            planFilePath: '/tmp/plan.md',
+            planContent: '# Plan content',
             planArtifact: { title: 'Old Plan', content: '# Old\n\nContent', filePath: '/tmp/plan.md' },
           },
         });
@@ -483,7 +497,7 @@ describe('useTabCopilot', () => {
           type: 'copilot:idle',
           data: {
             conversationId: 'conv-A',
-            planFilePath: '/tmp/plan2.md',
+            planContent: '# Updated plan content',
             planArtifact: { title: 'New Plan', content: '# New\n\nBetter content', filePath: '/tmp/plan2.md' },
           },
         });
@@ -506,7 +520,7 @@ describe('useTabCopilot', () => {
       expect(tab.artifactsPanelOpen).toBe(false);
     });
 
-    it('should not show plan complete prompt when idle fires in act mode', async () => {
+    it('should not show plan complete prompt when idle fires in autopilot mode', async () => {
       // planMode defaults to false
       useAppStore.getState().setTabIsStreaming(tabIdA, true);
       useAppStore.getState().updateStreamStatus('conv-A', 'running');
@@ -515,6 +529,30 @@ describe('useTabCopilot', () => {
         emit({ type: 'copilot:idle', data: { conversationId: 'conv-A' } });
       });
       expect(useAppStore.getState().tabs[tabIdA].showPlanCompletePrompt).toBe(false);
+    });
+
+    it('should handle copilot:plan_execution_started by switching tab conversation', () => {
+      useAppStore.getState().setTabPlanMode(tabIdA, true);
+      useAppStore.getState().setTabShowPlanCompletePrompt(tabIdA, true);
+      useAppStore.getState().setTabPlanContent(tabIdA, 'some plan');
+
+      renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        emit({
+          type: 'copilot:plan_execution_started',
+          data: {
+            oldConversationId: 'conv-A',
+            newConversationId: 'conv-new',
+            title: 'Execute: My Plan',
+          },
+        });
+      });
+
+      const tab = useAppStore.getState().tabs[tabIdA];
+      expect(tab.conversationId).toBe('conv-new');
+      expect(tab.planMode).toBe(false);
+      expect(tab.showPlanCompletePrompt).toBe(false);
+      expect(tab.planContent).toBe('');
     });
   });
 
@@ -872,6 +910,97 @@ describe('useTabCopilot', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+  });
+
+  // --- Subagent events (Fleet Mode) ---
+  describe('subagent events (Fleet Mode)', () => {
+    it('should add subagent on copilot:subagent_started', () => {
+      renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        emit({
+          type: 'copilot:subagent_started',
+          data: {
+            conversationId: 'conv-A',
+            toolCallId: 'sa-1',
+            agentName: 'researcher',
+            agentDisplayName: 'Researcher',
+            agentDescription: 'Researches topics',
+          },
+        });
+      });
+      const subagents = useAppStore.getState().tabs[tabIdA].subagents;
+      expect(subagents).toHaveLength(1);
+      expect(subagents[0]).toEqual({
+        toolCallId: 'sa-1',
+        agentName: 'researcher',
+        displayName: 'Researcher',
+        status: 'running',
+        description: 'Researches topics',
+      });
+    });
+
+    it('should update subagent status on copilot:subagent_completed', () => {
+      renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        emit({
+          type: 'copilot:subagent_started',
+          data: { conversationId: 'conv-A', toolCallId: 'sa-1', agentName: 'researcher', agentDisplayName: 'Researcher' },
+        });
+        emit({
+          type: 'copilot:subagent_completed',
+          data: { conversationId: 'conv-A', toolCallId: 'sa-1', agentName: 'researcher', agentDisplayName: 'Researcher' },
+        });
+      });
+      const subagents = useAppStore.getState().tabs[tabIdA].subagents;
+      expect(subagents[0].status).toBe('completed');
+    });
+
+    it('should update subagent status and error on copilot:subagent_failed', () => {
+      renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        emit({
+          type: 'copilot:subagent_started',
+          data: { conversationId: 'conv-A', toolCallId: 'sa-1', agentName: 'researcher', agentDisplayName: 'Researcher' },
+        });
+        emit({
+          type: 'copilot:subagent_failed',
+          data: { conversationId: 'conv-A', toolCallId: 'sa-1', agentName: 'researcher', agentDisplayName: 'Researcher', error: 'Timed out' },
+        });
+      });
+      const subagents = useAppStore.getState().tabs[tabIdA].subagents;
+      expect(subagents[0].status).toBe('failed');
+      expect(subagents[0].error).toBe('Timed out');
+    });
+
+    it('should clear subagents on copilot:idle', async () => {
+      renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        emit({
+          type: 'copilot:subagent_started',
+          data: { conversationId: 'conv-A', toolCallId: 'sa-1', agentName: 'researcher', agentDisplayName: 'Researcher' },
+        });
+      });
+      expect(useAppStore.getState().tabs[tabIdA].subagents).toHaveLength(1);
+
+      useAppStore.getState().setTabIsStreaming(tabIdA, true);
+      useAppStore.getState().updateStreamStatus('conv-A', 'running');
+      await act(async () => {
+        emit({ type: 'copilot:idle', data: { conversationId: 'conv-A' } });
+      });
+      expect(useAppStore.getState().tabs[tabIdA].subagents).toEqual([]);
+    });
+
+    it('should route subagent events to correct tab by conversationId', () => {
+      renderHook(() => useTabCopilot({ subscribe, send }));
+      act(() => {
+        emit({
+          type: 'copilot:subagent_started',
+          data: { conversationId: 'conv-B', toolCallId: 'sa-2', agentName: 'coder', agentDisplayName: 'Coder' },
+        });
+      });
+      expect(useAppStore.getState().tabs[tabIdA].subagents).toHaveLength(0);
+      expect(useAppStore.getState().tabs[tabIdB].subagents).toHaveLength(1);
     });
   });
 

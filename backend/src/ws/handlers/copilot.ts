@@ -2,6 +2,7 @@ import { readFileSync, existsSync, statSync } from 'node:fs';
 import type { StreamManager } from '../../copilot/stream-manager.js';
 import type { ConversationRepository } from '../../conversation/repository.js';
 import type { WsMessage, WsHandlerObject, SendFn } from '../types.js';
+import { extractTopicFromContent } from '../../copilot/plan-utils.js';
 import { createLogger } from '../../utils/logger.js';
 
 const log = createLogger('ws-copilot');
@@ -70,7 +71,8 @@ export function createCopilotHandler(
               userMsg.metadata.contextFiles = contextFiles;
             }
           }
-          repo.addMessage(conversationId, userMsg);
+          const clientMessageId = payload.messageId as string | undefined;
+          repo.addMessage(conversationId, userMsg, clientMessageId);
           _lastConversationId = conversationId;
 
           // Prepend any pending bash context to the prompt
@@ -119,7 +121,7 @@ export function createCopilotHandler(
               }
 
               const disabledSkills = (payload.disabledSkills as string[]) ?? [];
-              const mode = payload.mode as 'plan' | 'act' | undefined;
+              const mode = payload.mode as 'plan' | 'autopilot' | undefined;
               const locale = payload.locale as string | undefined;
               await streamManager.startStream(conversationId, {
                 prompt: finalPrompt,
@@ -284,20 +286,21 @@ export function createCopilotHandler(
             return;
           }
 
-          streamManager.setMode(conversationId, mode as 'plan' | 'act');
+          streamManager.setMode(conversationId, mode as 'plan' | 'autopilot');
           break;
         }
 
         case 'copilot:execute_plan': {
           const conversationId = payload.conversationId as string | undefined;
-          const planFilePath = payload.planFilePath as string | undefined;
+          const planContent = payload.planContent as string | undefined;
+          const executePlanLocale = payload.locale as string | undefined;
 
           if (!conversationId) {
             send({ type: 'copilot:error', data: { message: 'conversationId is required' } });
             return;
           }
-          if (!planFilePath) {
-            send({ type: 'copilot:error', data: { message: 'planFilePath is required' } });
+          if (!planContent) {
+            send({ type: 'copilot:error', data: { message: 'planContent is required' } });
             return;
           }
 
@@ -307,38 +310,39 @@ export function createCopilotHandler(
             return;
           }
 
-          if (!existsSync(planFilePath)) {
-            send({ type: 'copilot:error', data: { message: `Plan file not found: ${planFilePath}` } });
-            return;
-          }
-
-          // Read the plan file content
-          const planContent = readFileSync(planFilePath, 'utf-8');
-
-          // Clear SDK session to force a fresh session
-          repo.update(conversationId, { sdkSessionId: null });
-
-          // Start a new stream with plan content as prompt in act mode
+          // Create a NEW conversation for autopilot execution
           void (async () => {
             try {
-              // Clean up any existing stream first
+              // Clean up any existing stream on the old conversation first
               if (streamManager.hasStream(conversationId)) {
                 await streamManager.abortStream(conversationId);
               }
 
-              await streamManager.startStream(conversationId, {
+              const newConv = repo.create({ model: conversation.model, cwd: conversation.cwd });
+              const topic = extractTopicFromContent(planContent);
+              const title = `Execute: ${topic}`;
+              repo.update(newConv.id, { title });
+
+              // Broadcast plan_execution_started so frontend can switch tab
+              send({
+                type: 'copilot:plan_execution_started',
+                data: { oldConversationId: conversationId, newConversationId: newConv.id, title },
+              });
+
+              await streamManager.startStream(newConv.id, {
                 prompt: `以下是先前完成的實作計畫，請開始執行：\n\n${planContent}`,
                 sdkSessionId: null,
                 model: conversation.model,
                 cwd: conversation.cwd,
-                mode: 'act',
+                mode: 'autopilot',
                 initialSubscriber: send,
+                ...(executePlanLocale && { locale: executePlanLocale }),
               });
 
-              // Manage cleanup
-              activeSubscriptions.get(conversationId)?.unsub();
-              activeSubscriptions.set(conversationId, {
-                unsub: () => streamManager.removeSubscriber(conversationId, send),
+              // Manage cleanup for the new conversation
+              activeSubscriptions.get(newConv.id)?.unsub();
+              activeSubscriptions.set(newConv.id, {
+                unsub: () => streamManager.removeSubscriber(newConv.id, send),
                 owner: send,
               });
             } catch (err) {

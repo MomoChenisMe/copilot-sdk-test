@@ -1,13 +1,13 @@
 import { useTranslation } from 'react-i18next';
 import { Lightbulb, Zap } from 'lucide-react';
 
-interface PlanActToggleProps {
+interface PlanAutopilotToggleProps {
   planMode: boolean;
   onToggle: (planMode: boolean) => void;
   disabled?: boolean;
 }
 
-export default function PlanActToggle({ planMode, onToggle, disabled }: PlanActToggleProps) {
+export default function PlanAutopilotToggle({ planMode, onToggle, disabled }: PlanAutopilotToggleProps) {
   const { t } = useTranslation();
   return (
     <div className="inline-flex rounded-lg border border-border overflow-hidden">
@@ -35,7 +35,7 @@ export default function PlanActToggle({ planMode, onToggle, disabled }: PlanActT
         } disabled:opacity-50 disabled:cursor-not-allowed`}
       >
         <Zap size={12} />
-        {t('planMode.act')}
+        {t('planMode.autopilot')}
       </button>
     </div>
   );

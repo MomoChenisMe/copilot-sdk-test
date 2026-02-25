@@ -424,22 +424,22 @@ function NotificationsSection() {
 function SystemPromptTab() {
   const { t } = useTranslation();
   const [content, setContent] = useState('');
-  const [actContent, setActContent] = useState('');
+  const [autopilotContent, setAutopilotContent] = useState('');
   const [planContent, setPlanContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
-  const [actResetDialogOpen, setActResetDialogOpen] = useState(false);
+  const [autopilotResetDialogOpen, setAutopilotResetDialogOpen] = useState(false);
   const [planResetDialogOpen, setPlanResetDialogOpen] = useState(false);
 
   useEffect(() => {
     Promise.all([
       promptsApi.getSystemPrompt(),
-      promptsApi.getActPrompt(),
+      promptsApi.getAutopilotPrompt(),
       promptsApi.getPlanPrompt(),
-    ]).then(([sys, act, plan]) => {
+    ]).then(([sys, autopilot, plan]) => {
       setContent(sys.content);
-      setActContent(act.content);
+      setAutopilotContent(autopilot.content);
       setPlanContent(plan.content);
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -469,22 +469,22 @@ function SystemPromptTab() {
     }
   }, [t]);
 
-  const handleActSave = useCallback(async () => {
+  const handleAutopilotSave = useCallback(async () => {
     try {
-      await promptsApi.putActPrompt(actContent);
+      await promptsApi.putAutopilotPrompt(autopilotContent);
       setToast(t('settings.toast.saved'));
       setTimeout(() => setToast(null), 2000);
     } catch {
       setToast(t('settings.toast.saveFailed'));
       setTimeout(() => setToast(null), 2000);
     }
-  }, [actContent, t]);
+  }, [autopilotContent, t]);
 
-  const handleActResetConfirm = useCallback(async () => {
-    setActResetDialogOpen(false);
+  const handleAutopilotResetConfirm = useCallback(async () => {
+    setAutopilotResetDialogOpen(false);
     try {
-      const result = await promptsApi.resetActPrompt();
-      setActContent(result.content);
+      const result = await promptsApi.resetAutopilotPrompt();
+      setAutopilotContent(result.content);
       setToast(t('settings.toast.reset'));
       setTimeout(() => setToast(null), 2000);
     } catch {
@@ -560,41 +560,41 @@ function SystemPromptTab() {
         />
       </div>
 
-      {/* Act Mode Prompt */}
+      {/* Autopilot Mode Prompt */}
       <div className="flex flex-col gap-3">
         <div>
-          <h3 data-testid="act-mode-heading" className="text-sm font-medium text-text-primary">{t('settings.systemPrompt.actMode')}</h3>
-          <p className="text-xs text-text-secondary mt-0.5">{t('settings.systemPrompt.actModeDesc')}</p>
+          <h3 data-testid="autopilot-mode-heading" className="text-sm font-medium text-text-primary">{t('settings.systemPrompt.autopilotMode')}</h3>
+          <p className="text-xs text-text-secondary mt-0.5">{t('settings.systemPrompt.autopilotModeDesc')}</p>
         </div>
         <textarea
-          data-testid="act-prompt-textarea"
-          value={actContent}
-          onChange={(e) => setActContent(e.target.value)}
+          data-testid="autopilot-prompt-textarea"
+          value={autopilotContent}
+          onChange={(e) => setAutopilotContent(e.target.value)}
           className="w-full h-48 p-2 text-sm bg-bg-secondary border border-border rounded-lg resize-y font-mono text-text-primary"
         />
         <div className="flex items-center gap-2">
           <button
-            data-testid="save-act-prompt"
-            onClick={handleActSave}
+            data-testid="save-autopilot-prompt"
+            onClick={handleAutopilotSave}
             className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90"
           >
             {t('settings.save')}
           </button>
           <button
-            data-testid="reset-act-prompt"
-            onClick={() => setActResetDialogOpen(true)}
+            data-testid="reset-autopilot-prompt"
+            onClick={() => setAutopilotResetDialogOpen(true)}
             className="px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-bg-tertiary text-text-secondary"
           >
             {t('settings.systemPrompt.resetToDefault')}
           </button>
         </div>
         <ConfirmDialog
-          open={actResetDialogOpen}
+          open={autopilotResetDialogOpen}
           title={t('settings.systemPrompt.resetToDefault', 'Reset to default')}
-          description={t('settings.systemPrompt.actResetConfirm', 'Are you sure you want to reset the act mode prompt to default? Current content will be lost.')}
+          description={t('settings.systemPrompt.autopilotResetConfirm', 'Are you sure you want to reset the autopilot mode prompt to default? Current content will be lost.')}
           destructive
-          onConfirm={handleActResetConfirm}
-          onCancel={() => setActResetDialogOpen(false)}
+          onConfirm={handleAutopilotResetConfirm}
+          onCancel={() => setAutopilotResetDialogOpen(false)}
         />
       </div>
 

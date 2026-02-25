@@ -629,6 +629,64 @@ describe('EventRelay', () => {
     });
   });
 
+  // --- Subagent events (Fleet Mode) ---
+
+  it('should relay subagent.started as copilot:subagent_started', () => {
+    const { send, handlers } = setup();
+
+    handlers.get('subagent.started')!({
+      type: 'subagent.started',
+      data: { toolCallId: 'sa-1', agentName: 'researcher', agentDisplayName: 'Researcher', agentDescription: 'Researches topics' },
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      type: 'copilot:subagent_started',
+      data: { toolCallId: 'sa-1', agentName: 'researcher', agentDisplayName: 'Researcher', agentDescription: 'Researches topics' },
+    });
+  });
+
+  it('should relay subagent.completed as copilot:subagent_completed', () => {
+    const { send, handlers } = setup();
+
+    handlers.get('subagent.completed')!({
+      type: 'subagent.completed',
+      data: { toolCallId: 'sa-1', agentName: 'researcher', agentDisplayName: 'Researcher' },
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      type: 'copilot:subagent_completed',
+      data: { toolCallId: 'sa-1', agentName: 'researcher', agentDisplayName: 'Researcher' },
+    });
+  });
+
+  it('should relay subagent.failed as copilot:subagent_failed', () => {
+    const { send, handlers } = setup();
+
+    handlers.get('subagent.failed')!({
+      type: 'subagent.failed',
+      data: { toolCallId: 'sa-1', agentName: 'researcher', agentDisplayName: 'Researcher', error: 'Agent timed out' },
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      type: 'copilot:subagent_failed',
+      data: { toolCallId: 'sa-1', agentName: 'researcher', agentDisplayName: 'Researcher', error: 'Agent timed out' },
+    });
+  });
+
+  it('should relay subagent.selected as copilot:subagent_selected', () => {
+    const { send, handlers } = setup();
+
+    handlers.get('subagent.selected')!({
+      type: 'subagent.selected',
+      data: { agentName: 'coder', agentDisplayName: 'Coder', tools: ['read_file', 'write_file'] },
+    });
+
+    expect(send).toHaveBeenCalledWith({
+      type: 'copilot:subagent_selected',
+      data: { agentName: 'coder', agentDisplayName: 'Coder', tools: ['read_file', 'write_file'] },
+    });
+  });
+
   // --- Plan changed event ---
 
   it('should relay session.plan_changed as copilot:plan_changed', () => {

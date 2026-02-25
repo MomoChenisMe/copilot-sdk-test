@@ -1,6 +1,6 @@
 export { approveAll } from '@github/copilot-sdk';
 
-export function createPermissionHandler(getMode: () => 'plan' | 'act') {
+export function createPermissionHandler(getMode: () => 'plan' | 'autopilot') {
   return (
     _request: { kind: string; [key: string]: unknown },
     _invocation: { sessionId: string },

@@ -199,6 +199,22 @@ export function useTabCopilot({ subscribe, send, status }: UseTabCopilotOptions)
         }
       }
 
+      // Plan execution started — switch tab to new conversation
+      if (msg.type === 'copilot:plan_execution_started') {
+        const oldConversationId = data.oldConversationId as string;
+        const newConversationId = data.newConversationId as string;
+        const title = data.title as string;
+        const tid = findTabIdByConversationId(oldConversationId);
+        if (tid) {
+          const s = useAppStore.getState();
+          s.switchTabConversation(tid, newConversationId, title);
+          s.setTabPlanMode(tid, false);
+          s.setTabShowPlanCompletePrompt(tid, false);
+          s.setTabPlanContent(tid, '');
+        }
+        return;
+      }
+
       // Scoped events — need conversationId + matching tab (scan by conversationId)
       if (!conversationId) return;
 
@@ -306,6 +322,31 @@ export function useTabCopilot({ subscribe, send, status }: UseTabCopilotOptions)
           break;
         }
 
+        case 'copilot:subagent_started':
+          state.addTabSubagent(tabId, {
+            toolCallId: data.toolCallId as string,
+            agentName: data.agentName as string,
+            displayName: data.agentDisplayName as string,
+            status: 'running',
+            description: data.agentDescription as string | undefined,
+          });
+          break;
+
+        case 'copilot:subagent_completed':
+          state.updateTabSubagent(tabId, data.toolCallId as string, { status: 'completed' });
+          break;
+
+        case 'copilot:subagent_failed':
+          state.updateTabSubagent(tabId, data.toolCallId as string, {
+            status: 'failed',
+            error: data.error as string,
+          });
+          break;
+
+        case 'copilot:subagent_selected':
+          // Currently just log — could be used for UI highlighting later
+          break;
+
         case 'copilot:todos_updated': {
           const todos = data.todos as Array<Record<string, unknown>> | undefined;
           if (Array.isArray(todos)) {
@@ -373,10 +414,10 @@ export function useTabCopilot({ subscribe, send, status }: UseTabCopilotOptions)
             break;
           }
 
-          // 1. Handle plan artifact (synchronous, from idle event data)
-          const planFilePath = data.planFilePath as string | undefined;
-          if (planFilePath) {
-            state.setTabPlanFilePath(tabId, planFilePath);
+          // 1. Handle plan content (synchronous, from idle event data)
+          const planContent = data.planContent as string | undefined;
+          if (planContent) {
+            state.setTabPlanContent(tabId, planContent);
           }
 
           const planArtifact = data.planArtifact as { title: string; content: string; filePath: string } | undefined;
@@ -393,10 +434,11 @@ export function useTabCopilot({ subscribe, send, status }: UseTabCopilotOptions)
             state.setTabArtifactsPanelOpen(tabId, true);
           }
 
-          // 2. Stop streaming indicators
+          // 2. Stop streaming indicators + clear subagents
           state.incrementTabPremiumLocal(tabId);
           state.removeStream(conversationId);
           state.setTabIsStreaming(tabId, false);
+          state.clearTabSubagents(tabId);
 
           // 3. DB-as-Source-of-Truth: fetch authoritative message list from the database
           // Update both TanStack Query cache and tab store.
@@ -618,7 +660,7 @@ export function useTabCopilot({ subscribe, send, status }: UseTabCopilotOptions)
       state.addTabMessage(tabId, userMsg);
 
       const { disabledSkills, language, llmLanguage } = state;
-      const data: Record<string, unknown> = { conversationId, prompt, disabledSkills, locale: llmLanguage || language };
+      const data: Record<string, unknown> = { conversationId, prompt, disabledSkills, locale: llmLanguage || language, messageId: userMsg.id };
       if (files && files.length > 0) {
         data.files = files;
       }
